@@ -1,0 +1,4 @@
+# Backend Global Exchange — dependencias (solo lo necesario para Keycloak).
+Django>=5.2,<5.3
+mozilla-django-oidc>=4.0,<5.0
+python-dotenv>=1.0
