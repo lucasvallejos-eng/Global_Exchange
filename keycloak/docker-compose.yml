@@ -1,0 +1,76 @@
+# Infraestructura de identidad para Global Exchange.
+# Levanta Keycloak + PostgreSQL (para Keycloak) + Mailpit (SMTP de pruebas).
+#
+# Uso:
+#   cd keycloak
+#   cp .env.example .env      # completá las variables
+#   docker compose up -d
+#
+# Keycloak importa el realm desde ./realm-export al arrancar (--import-realm).
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ge-keycloak-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-keycloak}
+      POSTGRES_USER: ${POSTGRES_USER:-keycloak}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+    # 5433 en el host para no chocar con un PostgreSQL del sistema (5432).
+    # Dentro de la red de compose, Keycloak sigue hablando por el 5432.
+    ports:
+      - "5433:5432"
+    volumes:
+      - ge-keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-keycloak} -d ${POSTGRES_DB:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ge-keycloak
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    container_name: ge-keycloak
+    command: start-dev --import-realm
+    environment:
+      # Usuario admin inicial de la consola (http://localhost:8080).
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?falta KC_BOOTSTRAP_ADMIN_PASSWORD en .env}
+      # Base de datos: PostgreSQL en vez del H2 embebido, para que la config
+      # sobreviva y sea la misma para todo el equipo.
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-keycloak}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      # --import-realm lee de /opt/keycloak/data/import al arrancar.
+      # Poné acá el realm-export/realm.json exportado.
+      - ./realm-export:/opt/keycloak/data/import
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ge-keycloak
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ge-mailpit
+    # SMTP de pruebas: Keycloak (realm → Email) apunta a host "mailpit", puerto 1025.
+    # Los correos NO salen a internet; se ven en la UI web.
+    ports:
+      - "1025:1025"   # SMTP (lo usa Keycloak)
+      - "8025:8025"   # UI web  → http://localhost:8025
+    networks:
+      - ge-keycloak
+
+volumes:
+  ge-keycloak-db-data:
+
+networks:
+  ge-keycloak:
+    driver: bridge
