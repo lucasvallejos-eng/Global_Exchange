@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Global Exchange</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f0f4f8; margin: 0;
+           min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .tarjeta { background: #fff; padding: 40px; border-radius: 16px;
+               box-shadow: 0 10px 30px rgba(0,0,0,.08); text-align: center; max-width: 380px; }
+    h1 { color: #1a7eff; margin: 0 0 8px; }
+    p { color: #718096; }
+    a.boton { display: inline-block; margin-top: 16px; background: #1a7eff; color: #fff;
+              text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="tarjeta">
+    <h1>Global Exchange</h1>
+    <p>Casa de cambio digital</p>
+    {% if user.is_authenticated %}
+      <p>Sesión iniciada como <strong>{{ user.username }}</strong>.</p>
+      <a class="boton" href="{% url 'inicio' %}">Ir al inicio</a>
+    {% else %}
+      <!-- Redirige a Keycloak (Authorization Code). El form de login lo dibuja
+           Keycloak, no nosotros (RN05). -->
+      <a class="boton" href="{% url 'oidc_authentication_init' %}">Iniciar sesión</a>
+    {% endif %}
+  </div>
+</body>
+</html>
