@@ -31,13 +31,14 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
     { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5"/> },
   ],
-  analista: [
+  analista_cambiario: [
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
   ],
-  admin: [
+  administrador: [
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
     { id: "clientes", label: "Clientes", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/> },
   ],
+  cliente_general: [],
 };
 
 const PLACEHOLDER_TEXT: Record<string, string> = {
@@ -59,7 +60,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
   const [clientDropdown, setClientDropdown] = useState(false);
 
   const renderContent = () => {
-    if (activeSection === "clientes" && user.role === "admin") {
+    if (activeSection === "clientes" && user.role === "administrador") {
       return <ClientesModule />;
     }
     const text = PLACEHOLDER_TEXT[activeSection];

@@ -1,8 +1,10 @@
+.idea/
 node_modules/
 dist/
 build/
 .cache/
 .env*
+!.env.example
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo
@@ -11,6 +13,10 @@ logs/
 *.log
 .claude-replay.*
 .tmp-*
+
+# Override local de Docker Compose para Keycloak (puertos especificos de esta
+# maquina). No es parte de la infra compartida del equipo.
+/keycloak/docker-compose.override.yml
 
 # Platform-managed agentplat state, not project source. In the
 # client-initiated single-repo workspace layout (make's `Path: "."` spec) the
