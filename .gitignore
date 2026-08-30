@@ -5,6 +5,14 @@ build/
 .cache/
 .env*
 !.env.example
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.sqlite3
+**/*.sqlite3
+backend/db.sqlite3
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo
@@ -13,6 +21,8 @@ logs/
 *.log
 .claude-replay.*
 .tmp-*
+package-lock.json
+**/package-lock.json
 
 # Override local de Docker Compose para Keycloak (puertos especificos de esta
 # maquina). No es parte de la infra compartida del equipo.
