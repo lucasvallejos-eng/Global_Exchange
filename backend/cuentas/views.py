@@ -1,9 +1,13 @@
 """Vistas de autenticación de Global Exchange."""
+from urllib.parse import urlencode
+
 from django.conf import settings
 from django.contrib.auth import logout as cerrar_sesion_django
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
+from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
+from django.urls import reverse
 
 
 def portada(request):
@@ -28,6 +32,11 @@ def api_me(request):
     if not request.user.is_authenticated:
         return JsonResponse({"authenticated": False}, status=401)
 
+    # Garantiza que la cookie csrftoken quede seteada desde el primer chequeo
+    # de sesión, para que la maqueta la pueda leer y mandarla en las
+    # mutaciones (POST/PATCH/DELETE) de /api/clientes/.
+    get_token(request)
+
     roles = list(request.user.groups.values_list("name", flat=True))
     return JsonResponse(
         {
@@ -42,14 +51,29 @@ def api_me(request):
 
 def cerrar_sesion(request):
     """
-    Cierra la sesión de Django y manda a la página de "sesión cerrada".
+    Cierra la sesión de Django y, además, la sesión SSO de Keycloak
+    (RP-Initiated Logout) para que un login posterior vuelva a pedir
+    usuario/contraseña en vez de reautenticar en silencio.
 
     Usamos una vista propia (acepta GET) en vez de la de mozilla-django-oidc,
-    que solo acepta POST. Nota: cierra la sesión del backend; la sesión SSO de
-    Keycloak sigue viva (para cerrarla también haría falta el logout OIDC).
+    que solo acepta POST.
     """
+    id_token = request.session.get("oidc_id_token")
     cerrar_sesion_django(request)
-    return redirect("sesion_cerrada")
+
+    if not id_token:
+        # No había id_token guardado (p.ej. login vía ModelBackend) -> solo
+        # queda cerrar la sesión de Django.
+        return redirect("sesion_cerrada")
+
+    post_logout_redirect_uri = request.build_absolute_uri(reverse("sesion_cerrada"))
+    query = urlencode(
+        {
+            "id_token_hint": id_token,
+            "post_logout_redirect_uri": post_logout_redirect_uri,
+        }
+    )
+    return redirect(f"{settings.OIDC_OP_LOGOUT_ENDPOINT}?{query}")
 
 
 def sesion_cerrada(request):

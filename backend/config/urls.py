@@ -15,6 +15,8 @@ urlpatterns = [
     path("", views.portada, name="portada"),
     # API que consume la maqueta para saber quién está logueado.
     path("api/me/", views.api_me, name="api_me"),
+    # API de Clientes (empresas) y usuarios asociables.
+    path("api/", include("clientes.urls")),
     # Cerrar sesión (acepta GET) y página tras cerrar sesión.
     path("logout/", views.cerrar_sesion, name="cerrar_sesion"),
     path("sesion-cerrada/", views.sesion_cerrada, name="sesion_cerrada"),

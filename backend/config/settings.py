@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     "mozilla_django_oidc",
     # App propia de autenticación / roles
     "cuentas",
+    # Gestión de Clientes (empresas) y su relación con usuarios
+    "clientes",
 ]
 
 MIDDLEWARE = [
@@ -113,6 +115,12 @@ OIDC_OP_AUTHORIZATION_ENDPOINT = f"{KEYCLOAK_ISSUER}/protocol/openid-connect/aut
 OIDC_OP_TOKEN_ENDPOINT = f"{KEYCLOAK_ISSUER}/protocol/openid-connect/token"
 OIDC_OP_USER_ENDPOINT = f"{KEYCLOAK_ISSUER}/protocol/openid-connect/userinfo"
 OIDC_OP_JWKS_ENDPOINT = f"{KEYCLOAK_ISSUER}/protocol/openid-connect/certs"
+OIDC_OP_LOGOUT_ENDPOINT = f"{KEYCLOAK_ISSUER}/protocol/openid-connect/logout"
+
+# Guarda el id_token en la sesión para poder mandarlo como id_token_hint al
+# cerrar sesión en Keycloak (RP-Initiated Logout) y que no quede la sesión SSO
+# viva (ver cuentas.views.cerrar_sesion).
+OIDC_STORE_ID_TOKEN = True
 
 # URL de la maqueta (frontend React). Tras el login, el usuario aterriza ahí.
 MAQUETA_URL = os.environ.get("MAQUETA_URL", "http://localhost:8443/")
@@ -121,6 +129,19 @@ MAQUETA_URL = os.environ.get("MAQUETA_URL", "http://localhost:8443/")
 LOGIN_REDIRECT_URL = MAQUETA_URL          # tras loguear -> maqueta
 LOGOUT_REDIRECT_URL = "sesion_cerrada"    # tras salir -> página de "sesión cerrada"
 LOGIN_URL = "oidc_authentication_init"
+
+# --- CORS / CSRF para la maqueta (React en otro puerto) ----------------------
+# La maqueta necesita poder hacer POST/PATCH/DELETE a /api/clientes/ con la
+# cookie de sesión, y Django exige CSRF en esas mutaciones aunque la sesión
+# venga de OIDC. Maqueta y backend comparten host (localhost), solo cambia el
+# puerto, así que son "same site" y SameSite=Lax alcanza.
+CSRF_TRUSTED_ORIGINS = [
+    origen.strip()
+    for origen in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", MAQUETA_URL).split(",")
+    if origen.strip()
+]
+CSRF_COOKIE_HTTPONLY = False  # la maqueta necesita leer la cookie csrftoken por JS
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # --- Internacionalización ----------------------------------------------------
 LANGUAGE_CODE = "es"

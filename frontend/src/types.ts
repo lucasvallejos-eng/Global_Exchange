@@ -1,7 +1,5 @@
 export type Role = "cliente" | "cliente_general" | "cajero" | "analista_cambiario" | "administrador";
 
-export type View = "login" | "register" | "dashboard";
-
 export interface User {
   name: string;
   email: string;
@@ -9,22 +7,22 @@ export interface User {
   avatar?: string;
 }
 
+export interface UsuarioAsociable {
+  id: number;
+  username: string;
+  nombre: string;
+  email: string;
+}
+
 export interface Client {
-  id: string;
+  id: number;
   nombre: string;
   tipo: "Jurídica" | "Física";
   direccion: string;
   cuentaAcreditar: string;
   correo: string;
-  usuarioAsociado?: string;
+  usuarios: number[];
 }
-
-export const DEMO_USERS: Record<string, User> = {
-  "cliente@global.com": { name: "María González", email: "cliente@global.com", role: "cliente" },
-  "cajero@global.com": { name: "Luis Ramírez", email: "cajero@global.com", role: "cajero" },
-  "analista@global.com": { name: "Ana Fernández", email: "analista@global.com", role: "analista_cambiario" },
-  "admin@global.com": { name: "Carlos Benítez", email: "admin@global.com", role: "administrador" },
-};
 
 export const ROLE_LABELS: Record<Role, string> = {
   cliente: "Usuario Cliente",

@@ -1,25 +1,38 @@
-import { useState } from "react";
-import { Client } from "../types";
+import { useEffect, useState } from "react";
+import { Client, UsuarioAsociable } from "../types";
+import { createClient, deleteClient, listClients, listUsuariosAsociables, updateClient } from "../lib/clientesApi";
+import MultiSelect from "./MultiSelect";
 
-const INITIAL_CLIENTS: Client[] = [
-  { id: "1", nombre: "Empresa ABC S.A.", tipo: "Jurídica", direccion: "Av. Mcal. López 1234, Asunción", cuentaAcreditar: "PY38-0001-0000-0001-2345-6789-0", correo: "abc@empresa.com.py", usuarioAsociado: "juan.perez" },
-  { id: "2", nombre: "Carlos Rodríguez", tipo: "Física", direccion: "Calle Palmas 567, San Lorenzo", cuentaAcreditar: "PY38-0002-0000-0002-3456-7890-1", correo: "carlos.rod@gmail.com" },
-  { id: "3", nombre: "Importadora Delta", tipo: "Jurídica", direccion: "Ruta 2 Km 12, Luque", cuentaAcreditar: "PY38-0003-0000-0003-4567-8901-2", correo: "delta@import.com.py", usuarioAsociado: "ana.garcia" },
-];
-
-const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", direccion: "", cuentaAcreditar: "", correo: "", usuarioAsociado: "" };
+const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", direccion: "", cuentaAcreditar: "", correo: "", usuarios: [] };
 
 export default function ClientesModule() {
-  const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [usuarios, setUsuarios] = useState<UsuarioAsociable[]>([]);
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Omit<Client, "id">>(EMPTY);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<Client["id"] | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof Client, string>>>({});
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<Client["id"] | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([listClients(), listUsuariosAsociables()])
+      .then(([clientesRes, usuariosRes]) => {
+        setClients(clientesRes);
+        setUsuarios(usuariosRes);
+      })
+      .catch(() => showToast("No se pudo conectar con el backend."))
+      .finally(() => setLoading(false));
+  }, []);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const usuarioLabel = (id: number) => {
+    const u = usuarios.find(x => x.id === id);
+    return u ? `${u.nombre} (${u.username})` : String(id);
   };
 
   const validate = () => {
@@ -33,31 +46,43 @@ export default function ClientesModule() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
-    if (editId) {
-      setClients(clients.map(c => c.id === editId ? { ...form, id: editId } : c));
-      showToast("Cliente modificado correctamente.");
-    } else {
-      setClients([...clients, { ...form, id: Date.now().toString() }]);
-      showToast("Cliente creado correctamente.");
+    try {
+      if (editId !== null) {
+        const updated = await updateClient(editId, form);
+        setClients(clients.map(c => c.id === editId ? updated : c));
+        showToast("Cliente modificado correctamente.");
+      } else {
+        const created = await createClient(form);
+        setClients([...clients, created]);
+        showToast("Cliente creado correctamente.");
+      }
+      setForm(EMPTY);
+      setEditId(null);
+      setErrors({});
+    } catch {
+      showToast("No se pudo guardar el cliente.");
     }
-    setForm(EMPTY);
-    setEditId(null);
-    setErrors({});
   };
 
   const handleEdit = (c: Client) => {
-    setForm({ nombre: c.nombre, tipo: c.tipo, direccion: c.direccion, cuentaAcreditar: c.cuentaAcreditar, correo: c.correo, usuarioAsociado: c.usuarioAsociado ?? "" });
+    setForm({ nombre: c.nombre, tipo: c.tipo, direccion: c.direccion, cuentaAcreditar: c.cuentaAcreditar, correo: c.correo, usuarios: c.usuarios });
     setEditId(c.id);
     setErrors({});
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleDelete = (id: string) => {
-    setClients(clients.filter(c => c.id !== id));
-    setDeleteConfirm(null);
-    showToast("Cliente eliminado.");
+  const handleDelete = async (id: Client["id"]) => {
+    try {
+      await deleteClient(id);
+      setClients(clients.filter(c => c.id !== id));
+      showToast("Cliente eliminado.");
+    } catch {
+      showToast("No se pudo eliminar el cliente.");
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   const handleCancel = () => {
@@ -95,10 +120,10 @@ export default function ClientesModule() {
       {/* Form */}
       <div className="bg-white rounded-2xl border border-[#e2e8f0] p-6 shadow-sm">
         <h2 className="text-base font-semibold text-[#1a202c] mb-1">
-          {editId ? "Modificar Cliente" : "Crear Cliente Nuevo"}
+          {editId !== null ? "Modificar Cliente" : "Crear Cliente Nuevo"}
         </h2>
         <p className="text-xs text-[#718096] mb-5">
-          {editId ? "Edita los datos del cliente seleccionado." : "Completa los campos para registrar un nuevo cliente."}
+          {editId !== null ? "Edita los datos del cliente seleccionado." : "Completa los campos para registrar un nuevo cliente."}
           <span className="text-red-500"> * Campos obligatorios</span>
         </p>
 
@@ -120,7 +145,15 @@ export default function ClientesModule() {
           {field("direccion", "Dirección", "Ej. Av. Principal 1234, Ciudad")}
           {field("cuentaAcreditar", "Cuenta a Acreditar", "PY38-XXXX-XXXX-XXXX-XXXX-XXXX-X")}
           {field("correo", "Correo Electrónico", "contacto@empresa.com", true, "email")}
-          {field("usuarioAsociado", "Usuario a Asociar", "usuario.sistema (opcional)", false)}
+          <div>
+            <label className="block text-sm font-medium text-[#374151] mb-1">Usuarios a Asociar</label>
+            <MultiSelect
+              options={usuarios.map(u => ({ value: String(u.id), label: `${u.nombre} (${u.username})` }))}
+              selected={form.usuarios.map(String)}
+              onChange={values => setForm({ ...form, usuarios: values.map(Number) })}
+              placeholder="Ninguno (opcional)"
+            />
+          </div>
         </div>
 
         <div className="flex gap-3 mt-5 pt-4 border-t border-[#f1f5f9]">
@@ -129,9 +162,9 @@ export default function ClientesModule() {
             className="bg-[#1a7eff] hover:bg-[#1565d8] text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-2"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            {editId ? "Guardar Cambios" : "Guardar Cliente"}
+            {editId !== null ? "Guardar Cambios" : "Guardar Cliente"}
           </button>
-          {editId && (
+          {editId !== null && (
             <button
               onClick={handleCancel}
               className="border border-[#e2e8f0] text-[#374151] hover:bg-[#f8fafc] font-medium px-5 py-2.5 rounded-lg text-sm transition-colors"
@@ -162,7 +195,14 @@ export default function ClientesModule() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#f1f5f9]">
-              {clients.length === 0 && (
+              {loading && (
+                <tr>
+                  <td colSpan={4} className="text-center text-sm text-[#9ca3af] py-12">
+                    Cargando clientes...
+                  </td>
+                </tr>
+              )}
+              {!loading && clients.length === 0 && (
                 <tr>
                   <td colSpan={4} className="text-center text-sm text-[#9ca3af] py-12">
                     No hay clientes registrados.
@@ -181,8 +221,8 @@ export default function ClientesModule() {
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    {c.usuarioAsociado
-                      ? <span className="text-sm text-[#374151] font-mono bg-[#f1f5f9] px-2 py-0.5 rounded">{c.usuarioAsociado}</span>
+                    {c.usuarios.length > 0
+                      ? <span className="text-sm text-[#374151]">{c.usuarios.map(usuarioLabel).join(", ")}</span>
                       : <span className="text-xs text-[#9ca3af]">—</span>
                     }
                   </td>
@@ -212,7 +252,7 @@ export default function ClientesModule() {
       </div>
 
       {/* Delete modal */}
-      {deleteConfirm && (
+      {deleteConfirm !== null && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-[#e2e8f0] p-6 w-full max-w-sm">
             <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">

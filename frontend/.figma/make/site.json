@@ -1,4 +1,5 @@
 {
+  "title": "Global Exchange",
   "description": "Manage currency exchange operations with user-specific dashboards, enabling clients, cashiers, analysts, and administrators to efficiently handle transactions and client management.",
   "robots": {
     "index": false
