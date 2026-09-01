@@ -16,3 +16,4 @@ db.sqlite3-journal
 
 # .env ya está cubierto por la raíz (.env*), se repite por claridad
 .env
+

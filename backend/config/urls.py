@@ -22,4 +22,5 @@ urlpatterns = [
     path("sesion-cerrada/", views.sesion_cerrada, name="sesion_cerrada"),
     # Página de inicio del backend (para depurar sin la maqueta).
     path("inicio/", views.inicio, name="inicio"),
+    path('monedas/', include('monedas.urls')),
 ]
