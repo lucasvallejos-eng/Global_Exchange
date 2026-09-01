@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     # Gestión de Clientes (empresas) y su relación con usuarios
     "clientes",
     "monedas",
+    "cotizaciones",
 ]
 
 MIDDLEWARE = [
