@@ -73,6 +73,28 @@ npx pnpm install
 npx pnpm dev
 ```
 
+### 4) Datos de demo y usuarios de prueba (opcional)
+
+Un backend recién migrado arranca con las tablas vacías, y un Keycloak recién
+levantado arranca sin usuarios (el realm-export no los trae: las contraseñas
+no se exportan). Para no cargar todo a mano antes de una demo:
+
+```bash
+cd backend
+.venv\Scripts\python manage.py loaddata fixtures/demo_hito4.json
+cd ..\keycloak
+..\backend\.venv\Scripts\python crear_usuarios_prueba.py
+```
+
+Esto deja 3 monedas con cotización, 3 segmentos de comisión, 2 clientes de
+ejemplo, y los usuarios `admin.test` / `analista.test` / `cajero.test` /
+`cliente.test` (contraseña `Prueba2026!` para los cuatro), uno por rol.
+
+> **Si la base ya tiene datos cargados**, `loaddata` va a fallar con un
+> `IntegrityError` (el fixture fija los mismos IDs de siempre, por ejemplo
+> `pk=1` para USD, y van a chocar con lo que ya tengas). No es que el fixture
+> esté mal: vaciá las tablas antes de cargarlo, o usá una base nueva.
+
 ### Listo
 
 Abrí **http://localhost:8000** y seguí el flujo. También podés abrir la maqueta
@@ -90,5 +112,14 @@ directo en http://localhost:8443 (si no hay sesión, te manda al login).
   valida (nunca se confía en el navegador).
 - Para proteger una vista por rol en Django:
   `from cuentas.decorators import rol_requerido` → `@rol_requerido("administrador")`.
-- La decisión de arquitectura (Django plantillas vs React) está en
-  `docs/decision-arquitectura.md` y sigue pendiente de confirmar con la cátedra.
+- **Decisión de arquitectura: Django.** El alcance de cada sprint se demuestra
+  por las pantallas de Django (`backend/templates/`), no por la maqueta React.
+  Detalle e histórico en `docs/decision-arquitectura.md`.
+- **Los roles de la maqueta ya coinciden con los de Keycloak.** `src/types.ts`
+  y `elegirRol()` en `App.tsx` esperaban `cliente_minorista` /
+  `cliente_mayorista` / `cliente_VIP` como si fueran roles de Keycloak, pero
+  Keycloak solo tiene `cliente` y `cliente_general` — el segmento comercial
+  (Minorista/VIP/Corporativo) es un dato del `Cliente` en el backend
+  (`comisiones.SegmentoCliente`), no un rol de autenticación. Se corrigió para
+  que la maqueta use los roles reales; avisale a Lucas si volvés a tocar estos
+  archivos, siguen siendo su territorio.

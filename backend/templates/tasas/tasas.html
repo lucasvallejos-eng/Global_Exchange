@@ -1,0 +1,52 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Visualización de tasas. Solo lectura: muestra la cotización vigente de cada
+moneda activa. La puede ver cualquier usuario autenticado, incluso uno sin
+cliente asociado (RN02).
+{% endcomment %}
+
+{% block titulo_pagina %}Tasas — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>Tasas vigentes</h1>
+    <a class="boton" href="{% url 'simulador' %}">Simular una conversión</a>
+  </div>
+
+  {% if cotizaciones %}
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Moneda</th>
+            <th class="numero">La casa compra a</th>
+            <th class="numero">La casa vende a</th>
+            <th>Actualizada</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cotizacion in cotizaciones %}
+            <tr>
+              <td>
+                <strong>{{ cotizacion.moneda.codigo }}</strong>
+                {{ cotizacion.moneda.simbolo }} — {{ cotizacion.moneda.nombre }}
+              </td>
+              <td class="numero">{{ cotizacion.precio_compra|floatformat:2 }}</td>
+              <td class="numero">{{ cotizacion.precio_venta|floatformat:2 }}</td>
+              <td>{{ cotizacion.fecha|date:"d/m/Y H:i" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="ayuda" style="margin-top:20px">
+      Valores expresados en guaraníes por unidad de moneda extranjera.
+      «La casa compra» es lo que se te paga si vendés esa divisa; «la casa
+      vende» es lo que pagás si la comprás.
+    </p>
+  {% else %}
+    <p class="vacio">No hay cotizaciones vigentes en este momento.</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Simulador de conversión. Solo calcula y muestra: no guarda ninguna operación.
+El resultado usa la cotización vigente y todavía no descuenta comisión (eso
+corresponde a la operación de compra/venta del Sprint 3).
+{% endcomment %}
+
+{% block titulo_pagina %}Simulador — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>Simulador de conversión</h1>
+    <a class="boton secundario" href="{% url 'ver_tasas' %}">Ver tasas</a>
+  </div>
+
+  {% if error %}
+    <div class="errores">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="{% url 'simulador' %}">
+    {% csrf_token %}
+
+    <div class="campo">
+      <label for="operacion">¿Qué querés hacer?</label>
+      <select id="operacion" name="operacion" required>
+        <option value="compra" {% if enviado.operacion == 'compra' %}selected{% endif %}>
+          Comprar divisa (pago en guaraníes)
+        </option>
+        <option value="venta" {% if enviado.operacion == 'venta' %}selected{% endif %}>
+          Vender divisa (recibo guaraníes)
+        </option>
+      </select>
+    </div>
+
+    <div class="campo">
+      <label for="moneda">Moneda</label>
+      <select id="moneda" name="moneda" required>
+        <option value="">— Elegí una moneda —</option>
+        {% for moneda in monedas %}
+          <option value="{{ moneda.pk }}"
+            {% if enviado.moneda == moneda.pk|stringformat:"s" %}selected{% endif %}>
+            {{ moneda.codigo }} — {{ moneda.nombre }}
+          </option>
+        {% endfor %}
+      </select>
+      {% if not monedas %}
+        <p class="ayuda">No hay monedas activas cargadas todavía.</p>
+      {% endif %}
+    </div>
+
+    <div class="campo">
+      <label for="monto">Monto en la divisa</label>
+      <input type="number" id="monto" name="monto" step="0.01" min="0" required
+             value="{{ enviado.monto|default:'' }}" placeholder="100">
+    </div>
+
+    <div class="botonera">
+      <button type="submit" class="boton">Simular</button>
+    </div>
+  </form>
+
+  {% if resultado %}
+    <div style="margin-top:32px; padding-top:24px; border-top:1px solid var(--borde)">
+      <p class="ayuda" style="margin:0 0 4px">{{ resultado.leyenda }}</p>
+      <p style="font-size:32px; font-weight:700; margin:0 0 12px; font-variant-numeric:tabular-nums">
+        {{ resultado.total|floatformat:2 }} <span style="font-size:18px; color:var(--texto-suave)">PYG</span>
+      </p>
+      <p class="ayuda" style="margin:0">
+        Tasa aplicada: {{ resultado.tasa|floatformat:2 }} PYG por
+        {{ resultado.moneda.codigo }}, según la cotización del
+        {{ resultado.fecha_cotizacion|date:"d/m/Y H:i" }}.
+      </p>
+      <p class="ayuda" style="margin:8px 0 0">
+        Es una simulación: no descuenta comisión ni registra ninguna operación.
+      </p>
+    </div>
+  {% endif %}
+{% endblock %}

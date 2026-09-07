@@ -13,6 +13,9 @@ from .models import Cliente
 
 
 def _cliente_a_dict(cliente):
+    # "segmento" y "porcentajeComision" se agregaron después: son campos
+    # nuevos que se suman a la respuesta, así que la maqueta que no los
+    # conoce los ignora y sigue funcionando igual.
     return {
         "id": cliente.id,
         "nombre": cliente.nombre,
@@ -21,6 +24,11 @@ def _cliente_a_dict(cliente):
         "cuentaAcreditar": cliente.cuenta_acreditar,
         "correo": cliente.correo,
         "usuarios": list(cliente.usuarios.values_list("id", flat=True)),
+        "segmento": cliente.segmento_id,
+        "porcentajeComision": (
+            str(cliente.porcentaje_comision)
+            if cliente.porcentaje_comision is not None else None
+        ),
     }
 
 
@@ -51,6 +59,7 @@ def _crear_cliente(request):
         direccion=datos.get("direccion", ""),
         cuenta_acreditar=datos.get("cuentaAcreditar", ""),
         correo=datos.get("correo", ""),
+        segmento_id=datos.get("segmento") or None,
     )
     cliente.usuarios.set(datos.get("usuarios", []))
     return JsonResponse(_cliente_a_dict(cliente), status=201)
@@ -81,9 +90,16 @@ def _actualizar_cliente(request, cliente):
         ("direccion", "direccion"),
         ("cuentaAcreditar", "cuenta_acreditar"),
         ("correo", "correo"),
+        ("segmento", "segmento_id"),
     ):
-        if campo in datos:
-            setattr(cliente, atributo, datos[campo])
+        if campo not in datos:
+            continue
+        valor = datos[campo]
+        # El segmento admite null (o cadena vacía) para dejar al cliente sin
+        # segmento asignado; el resto de los campos se copia tal cual.
+        if campo == "segmento" and not valor:
+            valor = None
+        setattr(cliente, atributo, valor)
     cliente.save()
     if "usuarios" in datos:
         cliente.usuarios.set(datos["usuarios"])

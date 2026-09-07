@@ -34,3 +34,8 @@ package-lock.json
 # beside it.
 /.plugins/
 /.opencode-skills/
+
+# Documentación generada por Sphinx. El HTML se reconstruye con
+#   cd docs && ../backend/.venv/Scripts/python -m sphinx -b html . _build/html
+# así que no tiene sentido versionarlo.
+/docs/_build/

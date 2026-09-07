@@ -1,0 +1,44 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Alta y edición de monedas. La misma plantilla sirve para las dos cosas: si la
+vista mandó "moneda", estamos editando; si no, es un alta. El "titulo" también
+lo manda la vista.
+{% endcomment %}
+
+{% block titulo_pagina %}{{ titulo }} — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>{{ titulo }}</h1>
+  </div>
+
+  <form method="post"
+        action="{% if moneda %}{% url 'editar_moneda' moneda.pk %}{% else %}{% url 'crear_moneda' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="campo">
+      <label for="codigo">Código</label>
+      <input type="text" id="codigo" name="codigo" maxlength="3" required
+             value="{{ moneda.codigo|default:'' }}" placeholder="USD">
+      <p class="ayuda">Tres letras, según ISO 4217. Por ejemplo USD, EUR, PYG o BRL.</p>
+    </div>
+
+    <div class="campo">
+      <label for="nombre">Nombre</label>
+      <input type="text" id="nombre" name="nombre" maxlength="50" required
+             value="{{ moneda.nombre|default:'' }}" placeholder="Dólar estadounidense">
+    </div>
+
+    <div class="campo">
+      <label for="simbolo">Símbolo</label>
+      <input type="text" id="simbolo" name="simbolo" maxlength="5" required
+             value="{{ moneda.simbolo|default:'' }}" placeholder="$">
+    </div>
+
+    <div class="botonera">
+      <button type="submit" class="boton">Guardar</button>
+      <a class="boton secundario" href="{% url 'listar_monedas' %}">Cancelar</a>
+    </div>
+  </form>
+{% endblock %}

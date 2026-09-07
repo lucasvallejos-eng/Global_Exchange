@@ -46,6 +46,12 @@ INSTALLED_APPS = [
     # Gestión de Clientes (empresas) y su relación con usuarios
     "clientes",
     "monedas",
+    "cotizaciones",
+    "medios_pago",
+    # Configuración de porcentajes de comisión por segmento de cliente
+    "comisiones",
+    # Consulta de tasas y simulador de conversión (solo lectura)
+    "tasas",
 ]
 
 MIDDLEWARE = [
@@ -128,7 +134,7 @@ MAQUETA_URL = os.environ.get("MAQUETA_URL", "http://localhost:8443/")
 
 # A dónde va el usuario después de entrar / salir.
 LOGIN_REDIRECT_URL = MAQUETA_URL          # tras loguear -> maqueta
-LOGOUT_REDIRECT_URL = "sesion_cerrada"    # tras salir -> página de "sesión cerrada"
+LOGOUT_REDIRECT_URL = "portada"           # tras salir -> "portada" manda derecho al login
 LOGIN_URL = "oidc_authentication_init"
 
 # --- CORS / CSRF para la maqueta (React en otro puerto) ----------------------
