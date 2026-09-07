@@ -5,19 +5,17 @@ import {
   crearMedioPago,
   listarMediosPago,
   type MedioPago,
-  type TipoMedioPago,
 } from "../lib/mediosPagoApi";
 
 // Los medios de pago salen de la base (app `medios_pago`). El backend decide
 // qué ve cada rol: un cliente solo los suyos, administrador y cajero todos.
-// La lista de tipos también viene del backend (MedioPago.TIPO_CHOICES), así no
-// se duplica el catálogo en el navegador.
+// El alta pide únicamente nombre y estado; el detalle de la tarjeta o la
+// cuenta se completa desde las pantallas de Django cuando hace falta.
 
-const formVacio = { tipo: "", alias: "", numero: "", banco: "", activo: true };
+const formVacio = { alias: "", activo: true };
 
 export default function MediosPagoModule() {
   const [medios, setMedios] = useState<MedioPago[]>([]);
-  const [tipos, setTipos] = useState<TipoMedioPago[]>([]);
   const [cargando, setCargando] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -33,7 +31,6 @@ export default function MediosPagoModule() {
     try {
       const datos = await listarMediosPago();
       setMedios(datos.medios);
-      setTipos(datos.tipos);
     } catch (e) {
       avisar(e instanceof Error ? e.message : "No se pudieron cargar los medios de pago.");
     } finally {
@@ -47,25 +44,19 @@ export default function MediosPagoModule() {
 
   const openAddModal = () => {
     setEditandoId(null);
-    setForm({ ...formVacio, tipo: tipos[0]?.valor ?? "" });
+    setForm(formVacio);
     setModalOpen(true);
   };
 
   const openEditModal = (medio: MedioPago) => {
     setEditandoId(medio.id);
-    setForm({
-      tipo: medio.tipo,
-      alias: medio.alias,
-      numero: medio.numero,
-      banco: medio.banco,
-      activo: medio.activo,
-    });
+    setForm({ alias: medio.alias, activo: medio.activo });
     setModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!form.alias || !form.tipo) {
-      avisar("El alias y el tipo son obligatorios.");
+    if (!form.alias.trim()) {
+      avisar("El nombre es obligatorio.");
       return;
     }
     try {
@@ -83,17 +74,8 @@ export default function MediosPagoModule() {
     }
   };
 
-  const toggleActivo = async (medio: MedioPago) => {
-    try {
-      await actualizarMedioPago(medio.id, { activo: !medio.activo });
-      await recargar();
-      avisar(`${medio.alias} ${medio.activo ? "desactivado" : "activado"}.`);
-    } catch (e) {
-      avisar(e instanceof Error ? e.message : "No se pudo cambiar el estado.");
-    }
-  };
-
   const eliminar = async (medio: MedioPago) => {
+    if (!window.confirm(`¿Eliminar «${medio.alias}»?`)) return;
     try {
       await borrarMedioPago(medio.id);
       await recargar();
@@ -123,11 +105,7 @@ export default function MediosPagoModule() {
           <table className="min-w-full border-collapse bg-white text-left text-sm text-[#1f2937]">
             <thead className="bg-[#f8fafc] text-[#475569]">
               <tr>
-                <th className="px-4 py-3 font-semibold">Alias</th>
-                <th className="px-4 py-3 font-semibold">Tipo</th>
-                <th className="px-4 py-3 font-semibold">Número / Cuenta</th>
-                <th className="px-4 py-3 font-semibold">Banco o proveedor</th>
-                <th className="px-4 py-3 font-semibold">Titular</th>
+                <th className="px-4 py-3 font-semibold">Medio de pago</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
                 <th className="px-4 py-3 text-center font-semibold">Acciones</th>
               </tr>
@@ -135,7 +113,7 @@ export default function MediosPagoModule() {
             <tbody>
               {cargando && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-[#64748b]">
+                  <td colSpan={3} className="px-4 py-6 text-center text-[#64748b]">
                     Cargando medios de pago…
                   </td>
                 </tr>
@@ -143,8 +121,8 @@ export default function MediosPagoModule() {
 
               {!cargando && medios.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-[#64748b]">
-                    Todavía no hay medios de pago cargados. Usá «Agregar» para crear el primero.
+                  <td colSpan={3} className="px-4 py-6 text-center text-[#64748b]">
+                    Todavía no hay medios de pago. Usá «Agregar» para crear el primero.
                   </td>
                 </tr>
               )}
@@ -152,10 +130,6 @@ export default function MediosPagoModule() {
               {medios.map((medio) => (
                 <tr key={medio.id} className="border-t border-[#edf2f7] bg-white hover:bg-[#f8fafc]">
                   <td className="px-4 py-3 font-medium text-[#0f172a]">{medio.alias}</td>
-                  <td className="px-4 py-3 text-[#475569]">{medio.tipoTexto}</td>
-                  <td className="px-4 py-3 tabular-nums text-[#475569]">{medio.numero || "—"}</td>
-                  <td className="px-4 py-3 text-[#475569]">{medio.banco || "—"}</td>
-                  <td className="px-4 py-3 text-[#475569]">{medio.usuario}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -174,12 +148,6 @@ export default function MediosPagoModule() {
                         Modificar
                       </button>
                       <button
-                        onClick={() => toggleActivo(medio)}
-                        className="rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-[#e2e8f0]"
-                      >
-                        {medio.activo ? "Desactivar" : "Activar"}
-                      </button>
-                      <button
                         onClick={() => eliminar(medio)}
                         className="rounded-lg bg-[#fdeceb] px-3 py-1.5 text-xs font-semibold text-[#c0392b] hover:bg-[#fbdedb]"
                       >
@@ -196,66 +164,33 @@ export default function MediosPagoModule() {
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-2xl font-bold text-[#0f172a]">
               {editandoId !== null ? "Modificar medio de pago" : "Nuevo medio de pago"}
             </h3>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="mt-5 grid gap-4">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#374151]">Tipo</span>
-                <select
-                  value={form.tipo}
-                  onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
-                >
-                  <option value="">Elegí un tipo…</option>
-                  {tipos.map((t) => (
-                    <option key={t.valor} value={t.valor}>
-                      {t.texto}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#374151]">Alias</span>
+                <span className="mb-2 block text-sm font-medium text-[#374151]">Nombre</span>
                 <input
                   value={form.alias}
                   onChange={(e) => setForm({ ...form, alias: e.target.value })}
-                  placeholder="Mi Visa ITAU"
+                  placeholder="Transferencia Bancaria"
+                  autoFocus
                   className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#374151]">Número o cuenta</span>
-                <input
-                  value={form.numero}
-                  onChange={(e) => setForm({ ...form, numero: e.target.value })}
-                  placeholder="**** **** **** 4521"
+                <span className="mb-2 block text-sm font-medium text-[#374151]">Estado</span>
+                <select
+                  value={form.activo ? "Activo" : "Inactivo"}
+                  onChange={(e) => setForm({ ...form, activo: e.target.value === "Activo" })}
                   className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#374151]">Banco o proveedor</span>
-                <input
-                  value={form.banco}
-                  onChange={(e) => setForm({ ...form, banco: e.target.value })}
-                  placeholder="Banco Itaú"
-                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
-                />
-              </label>
-
-              <label className="flex items-center gap-2 md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={form.activo}
-                  onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-                  className="h-4 w-4"
-                />
-                <span className="text-sm font-medium text-[#374151]">Medio de pago activo</span>
+                >
+                  <option value="Activo">Activo</option>
+                  <option value="Inactivo">Inactivo</option>
+                </select>
               </label>
             </div>
 

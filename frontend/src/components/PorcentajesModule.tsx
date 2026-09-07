@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
-import {
-  actualizarSegmento,
-  crearSegmento,
-  listarSegmentos,
-  type Segmento,
-} from "../lib/comisionesApi";
+import { actualizarSegmento, listarSegmentos, type Segmento } from "../lib/comisionesApi";
 
 // Los segmentos y su porcentaje de comisión salen de la base (app `comisiones`).
 // El modelo guarda UN porcentaje por segmento, no dos: la maqueta original
 // dibujaba columnas de venta y compra que no existían en ninguna tabla.
-
-const formVacio = { nombre: "", porcentaje: "", descripcion: "", activo: true };
+//
+// Los segmentos son fijos (Minorista, VIP, Corporativo): solo se puede
+// modificar su porcentaje y su descripción, no crear ni borrar. Dar de alta o
+// eliminar segmentos se hace desde las pantallas de Django.
 
 export default function PorcentajesModule() {
   const [rows, setRows] = useState<Segmento[]>([]);
@@ -18,7 +15,7 @@ export default function PorcentajesModule() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [formData, setFormData] = useState(formVacio);
+  const [formData, setFormData] = useState({ nombre: "", porcentaje: "", descripcion: "" });
 
   const avisar = (mensaje: string) => {
     setToast(mensaje);
@@ -39,77 +36,44 @@ export default function PorcentajesModule() {
     void recargar();
   }, []);
 
-  const openAdd = () => {
-    setEditandoId(null);
-    setFormData(formVacio);
-    setIsModalOpen(true);
-  };
-
   const openEdit = (row: Segmento) => {
     setEditandoId(row.id);
     setFormData({
       nombre: row.nombre,
       porcentaje: String(row.porcentajeComision),
       descripcion: row.descripcion,
-      activo: row.activo,
     });
     setIsModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!formData.nombre || formData.porcentaje === "") {
-      avisar("El nombre y el porcentaje son obligatorios.");
+    if (editandoId === null) return;
+    if (formData.porcentaje === "") {
+      avisar("El porcentaje es obligatorio.");
       return;
     }
 
-    const datos = {
-      nombre: formData.nombre,
-      porcentajeComision: Number(formData.porcentaje),
-      descripcion: formData.descripcion,
-      activo: formData.activo,
-    };
-
     try {
-      if (editandoId !== null) {
-        await actualizarSegmento(editandoId, datos);
-        avisar(`Porcentaje actualizado para ${formData.nombre}.`);
-      } else {
-        await crearSegmento(datos);
-        avisar(`Segmento ${formData.nombre} creado.`);
-      }
+      await actualizarSegmento(editandoId, {
+        porcentajeComision: Number(formData.porcentaje),
+        descripcion: formData.descripcion,
+      });
       await recargar();
       setIsModalOpen(false);
+      avisar(`Porcentaje actualizado para ${formData.nombre}.`);
     } catch (e) {
       avisar(e instanceof Error ? e.message : "No se pudo guardar el segmento.");
-    }
-  };
-
-  const toggleActivo = async (row: Segmento) => {
-    try {
-      await actualizarSegmento(row.id, { activo: !row.activo });
-      await recargar();
-      avisar(`Segmento ${row.nombre} ${row.activo ? "desactivado" : "activado"}.`);
-    } catch (e) {
-      avisar(e instanceof Error ? e.message : "No se pudo cambiar el estado.");
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-[#dbe3ee] bg-white p-6 shadow-sm">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-[#64748b]">Administración</p>
-            <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">
-              Porcentajes de comisión por segmento
-            </h2>
-          </div>
-          <button
-            onClick={openAdd}
-            className="rounded-xl bg-[#1a7eff] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#146be7]"
-          >
-            Agregar segmento
-          </button>
+        <div className="mb-5">
+          <p className="text-sm font-medium text-[#64748b]">Administración</p>
+          <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">
+            Porcentajes de comisión por segmento
+          </h2>
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-[#e2e8f0]">
@@ -168,12 +132,6 @@ export default function PorcentajesModule() {
                       >
                         Modificar
                       </button>
-                      <button
-                        onClick={() => toggleActivo(row)}
-                        className="rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-[#e2e8f0]"
-                      >
-                        {row.activo ? "Desactivar" : "Activar"}
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -186,18 +144,15 @@ export default function PorcentajesModule() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
           <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
-            <h3 className="text-2xl font-bold text-[#0f172a]">
-              {editandoId !== null ? "Modificar segmento" : "Nuevo segmento"}
-            </h3>
+            <h3 className="text-2xl font-bold text-[#0f172a]">Modificar porcentaje</h3>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#374151]">Nombre del segmento</span>
+                <span className="mb-2 block text-sm font-medium text-[#374151]">Segmento</span>
                 <input
                   value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  placeholder="VIP"
-                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
+                  readOnly
+                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#eef2f7] px-3 py-2.5 text-sm text-[#475569] outline-none"
                 />
               </label>
 
@@ -226,15 +181,6 @@ export default function PorcentajesModule() {
                 />
               </label>
 
-              <label className="flex items-center gap-2 md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={formData.activo}
-                  onChange={(e) => setFormData({ ...formData, activo: e.target.checked })}
-                  className="h-4 w-4"
-                />
-                <span className="text-sm font-medium text-[#374151]">Segmento activo</span>
-              </label>
             </div>
 
             <div className="mt-6 flex justify-end gap-3">
