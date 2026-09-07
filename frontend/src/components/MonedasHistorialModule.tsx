@@ -1,51 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { listarHistorial } from "../lib/cotizacionesApi";
+import { useTasas } from "../lib/useTasas";
 
-const CURRENCY_OPTIONS = ["USD", "EUR", "BRL"] as const;
-type Currency = (typeof CURRENCY_OPTIONS)[number];
 type ChartMode = "Línea" | "Vela";
 type RangeOption = "1D" | "5D" | "1M" | "6M" | "YTD" | "1A" | "5A" | "MÁX";
 
-const MOCK_SERIES: Record<Currency, { date: string; label: string; value: number }[]> = {
-  USD: [
-    { date: "2025-11-01", label: "nov 2025", value: 6880 },
-    { date: "2025-12-15", label: "dic 2025", value: 7020 },
-    { date: "2026-01-20", label: "ene 2026", value: 7140 },
-    { date: "2026-02-12", label: "feb 2026", value: 7210 },
-    { date: "2026-03-18", label: "mar 2026", value: 7350 },
-    { date: "2026-04-15", label: "abr 2026", value: 7480 },
-    { date: "2026-05-20", label: "may 2026", value: 7615 },
-    { date: "2026-06-18", label: "jun 2026", value: 7700 },
-    { date: "2026-07-17", label: "jul 2026", value: 7825 },
-    { date: "2026-08-15", label: "ago 2026", value: 7950 },
-    { date: "2026-09-01", label: "sept 2026", value: 8070 },
-  ],
-  EUR: [
-    { date: "2025-11-01", label: "nov 2025", value: 7450 },
-    { date: "2025-12-15", label: "dic 2025", value: 7580 },
-    { date: "2026-01-20", label: "ene 2026", value: 7650 },
-    { date: "2026-02-12", label: "feb 2026", value: 7720 },
-    { date: "2026-03-18", label: "mar 2026", value: 7850 },
-    { date: "2026-04-15", label: "abr 2026", value: 7985 },
-    { date: "2026-05-20", label: "may 2026", value: 8110 },
-    { date: "2026-06-18", label: "jun 2026", value: 8200 },
-    { date: "2026-07-17", label: "jul 2026", value: 8335 },
-    { date: "2026-08-15", label: "ago 2026", value: 8475 },
-    { date: "2026-09-01", label: "sept 2026", value: 8580 },
-  ],
-  BRL: [
-    { date: "2025-11-01", label: "nov 2025", value: 1090 },
-    { date: "2025-12-15", label: "dic 2025", value: 1110 },
-    { date: "2026-01-20", label: "ene 2026", value: 1125 },
-    { date: "2026-02-12", label: "feb 2026", value: 1135 },
-    { date: "2026-03-18", label: "mar 2026", value: 1145 },
-    { date: "2026-04-15", label: "abr 2026", value: 1160 },
-    { date: "2026-05-20", label: "may 2026", value: 1175 },
-    { date: "2026-06-18", label: "jun 2026", value: 1180 },
-    { date: "2026-07-17", label: "jul 2026", value: 1195 },
-    { date: "2026-08-15", label: "ago 2026", value: 1208 },
-    { date: "2026-09-01", label: "sept 2026", value: 1225 },
-  ],
-};
 
 const RANGE_OPTIONS: RangeOption[] = ["1D", "5D", "1M", "6M", "YTD", "1A", "5A", "MÁX"];
 
@@ -63,10 +22,48 @@ const formatDate = (dateStr: string) =>
   });
 
 export default function MonedasHistorialModule() {
-  const [currency, setCurrency] = useState<Currency>("USD");
+  const [currency, setCurrency] = useState<string>("");
   const [range, setRange] = useState<RangeOption>("1A");
 
-  const baseSeries = MOCK_SERIES[currency];
+  // Las monedas disponibles y el historial salen de la base.
+  const { codigos } = useTasas();
+  const [baseSeries, setBaseSeries] = useState<{ date: string; label: string; value: number }[]>([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    if (!currency && codigos.length > 0) setCurrency(codigos[0]);
+  }, [codigos, currency]);
+
+  useEffect(() => {
+    if (!currency) return;
+    let vigente = true;
+    setCargando(true);
+
+    listarHistorial(currency)
+      .then((cotizaciones) => {
+        if (!vigente) return;
+        // El grafico va de la mas vieja a la mas nueva; la API las manda al reves.
+        const serie = [...cotizaciones].reverse().map((c) => {
+          const fecha = new Date(c.fecha);
+          return {
+            date: c.fecha,
+            label: fecha.toLocaleDateString("es-PY", { month: "short", year: "numeric" }),
+            value: c.precioVenta,
+          };
+        });
+        setBaseSeries(serie);
+      })
+      .catch(() => {
+        if (vigente) setBaseSeries([]);
+      })
+      .finally(() => {
+        if (vigente) setCargando(false);
+      });
+
+    return () => {
+      vigente = false;
+    };
+  }, [currency]);
 
   const filteredData = useMemo(() => {
     if (range === "MÁX") return baseSeries;
@@ -124,10 +121,10 @@ export default function MonedasHistorialModule() {
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#64748b]">Moneda</span>
               <select
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value as Currency)}
+                onChange={(e) => setCurrency(e.target.value)}
                 className="bg-transparent text-sm font-semibold text-[#0f172a] outline-none"
               >
-                {CURRENCY_OPTIONS.map((option) => (
+                {codigos.map((option) => (
                   <option key={option} value={option}>{option}</option>
                 ))}
               </select>

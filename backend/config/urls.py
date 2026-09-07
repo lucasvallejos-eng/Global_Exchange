@@ -17,6 +17,12 @@ urlpatterns = [
     path("api/me/", views.api_me, name="api_me"),
     # API de Clientes (empresas) y usuarios asociables.
     path("api/", include("clientes.urls")),
+    # API JSON de monedas: la consume la maqueta (las pantallas de Django
+    # siguen en /monedas/, ver monedas/urls.py).
+    path("api/", include("monedas.api_urls")),
+    path("api/", include("comisiones.api_urls")),
+    path("api/", include("medios_pago.api_urls")),
+    path("api/", include("cotizaciones.api_urls")),
     # Cerrar sesión (acepta GET) y página tras cerrar sesión.
     path("logout/", views.cerrar_sesion, name="cerrar_sesion"),
     path("sesion-cerrada/", views.sesion_cerrada, name="sesion_cerrada"),

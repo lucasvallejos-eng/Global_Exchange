@@ -2,27 +2,37 @@ export type ClientType = "Minorista" | "Mayorista" | "VIP";
 
 export const CLIENT_TYPE_OPTIONS: ClientType[] = ["Minorista", "Mayorista", "VIP"];
 
-export const BASE_RATES = {
-  USD: { compra: 7500, venta: 7600 },
-  EUR: { compra: 8100, venta: 8250 },
-  BRL: { compra: 1140, venta: 1150 },
-} as const;
+/** Cotización de una moneda, tal como llega del backend. */
+export type Tasa = {
+  compra: number;
+  venta: number;
+};
 
+/**
+ * Ajuste que se le aplica a la cotización base según el segmento del cliente.
+ * Es configuración comercial de la maqueta; el cálculo real de la operación
+ * corresponde al Sprint 3.
+ */
 export const CLIENT_MARGINS: Record<ClientType, { descVenta: number; benefCompra: number }> = {
   Minorista: { descVenta: 0, benefCompra: 0 },
   Mayorista: { descVenta: 0.02, benefCompra: 0.02 },
   VIP: { descVenta: 0.05, benefCompra: 0.05 },
 };
 
-export function getAppliedRate(currency: keyof typeof BASE_RATES, mode: "compra" | "venta", userType: ClientType) {
-  const base = BASE_RATES[currency];
+/**
+ * Precio que se le aplica al cliente sobre una cotización de la base.
+ *
+ * Antes esta función leía una tabla de tasas escrita a mano; ahora recibe la
+ * cotización real para que la pantalla muestre lo que hay en la base de datos.
+ */
+export function getAppliedRate(tasa: Tasa, mode: "compra" | "venta", userType: ClientType) {
   const margin = CLIENT_MARGINS[userType];
 
   if (mode === "compra") {
-    return base.compra * (1 + margin.benefCompra);
+    return tasa.compra * (1 + margin.benefCompra);
   }
 
-  return base.venta * (1 - margin.descVenta);
+  return tasa.venta * (1 - margin.descVenta);
 }
 
 export function getClientTypeBadge(userType: ClientType) {

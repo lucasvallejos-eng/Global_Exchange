@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
-import { BASE_RATES, ClientType, getAppliedRate } from "../lib/clientRates";
+import { useEffect, useMemo, useState } from "react";
+import { ClientType, getAppliedRate } from "../lib/clientRates";
+import { useTasas } from "../lib/useTasas";
 
 type SimulacionType = "compra" | "venta";
-type Currency = keyof typeof BASE_RATES;
 
 const formatPyg = (value: number) =>
   new Intl.NumberFormat("es-PY", {
@@ -13,18 +13,29 @@ const formatPyg = (value: number) =>
 export default function SimulacionModule({ userType }: { userType: ClientType }) {
   const [tab, setTab] = useState<SimulacionType>("compra");
   const [amount, setAmount] = useState("1000");
-  const [currency, setCurrency] = useState<Currency>("USD");
+  const [currency, setCurrency] = useState<string>("");
   const [showSimulation, setShowSimulation] = useState(false);
 
+  // Cotizaciones reales de la base; antes eran una tabla fija en el codigo.
+  const { tasas, codigos, cargando, error } = useTasas();
+
+  useEffect(() => {
+    // Cuando llegan las monedas se elige la primera, si no hay ninguna puesta.
+    if (!currency && codigos.length > 0) setCurrency(codigos[0]);
+  }, [codigos, currency]);
+
+  const tasa = tasas[currency];
+
   const baseRate = useMemo(() => {
-    const rateKey = tab === "compra" ? "venta" : "compra";
-    return BASE_RATES[currency][rateKey];
-  }, [currency, tab]);
+    if (!tasa) return 0;
+    return tab === "compra" ? tasa.venta : tasa.compra;
+  }, [tasa, tab]);
 
   const rate = useMemo(() => {
+    if (!tasa) return 0;
     const mode = tab === "compra" ? "venta" : "compra";
-    return getAppliedRate(currency, mode, userType);
-  }, [currency, tab, userType]);
+    return getAppliedRate(tasa, mode, userType);
+  }, [tasa, tab, userType]);
 
   const numericAmount = Number.parseFloat(amount) || 0;
   const total = numericAmount * rate;
@@ -35,6 +46,11 @@ export default function SimulacionModule({ userType }: { userType: ClientType })
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="rounded-2xl border border-[#f5c6c2] bg-[#fdeceb] px-4 py-3 text-sm text-[#c0392b]">
+          {error}
+        </div>
+      )}
       <div className="rounded-3xl border border-[#dbe3ee] bg-white p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between gap-4">
           <div>
@@ -82,12 +98,17 @@ export default function SimulacionModule({ userType }: { userType: ClientType })
               />
               <select
                 value={currency}
-                onChange={(event) => setCurrency(event.target.value as Currency)}
+                onChange={(event) => setCurrency(event.target.value)}
+                disabled={cargando || codigos.length === 0}
                 className="border-l border-[#dbe3ee] bg-white px-3 py-3 text-sm font-medium text-[#374151] outline-none"
               >
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="BRL">BRL</option>
+                {cargando && <option>Cargando...</option>}
+                {!cargando && codigos.length === 0 && <option>Sin monedas</option>}
+                {codigos.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </select>
             </div>
           </label>

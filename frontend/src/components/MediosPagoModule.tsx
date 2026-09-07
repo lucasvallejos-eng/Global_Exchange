@@ -1,142 +1,189 @@
-import { useState } from "react";
-import { getPaymentMethods, PaymentMethodOption, setPaymentMethods } from "../lib/paymentMethods";
+import { useEffect, useState } from "react";
+import {
+  actualizarMedioPago,
+  borrarMedioPago,
+  crearMedioPago,
+  listarMediosPago,
+  type MedioPago,
+  type TipoMedioPago,
+} from "../lib/mediosPagoApi";
 
-const emptyForm = { id: "", medio: "", estado: "Activo" as "Activo" | "Inactivo" };
+// Los medios de pago salen de la base (app `medios_pago`). El backend decide
+// qué ve cada rol: un cliente solo los suyos, administrador y cajero todos.
+// La lista de tipos también viene del backend (MedioPago.TIPO_CHOICES), así no
+// se duplica el catálogo en el navegador.
+
+const formVacio = { tipo: "", alias: "", numero: "", banco: "", activo: true };
 
 export default function MediosPagoModule() {
-  const [methods, setMethods] = useState<PaymentMethodOption[]>(() => getPaymentMethods());
+  const [medios, setMedios] = useState<MedioPago[]>([]);
+  const [tipos, setTipos] = useState<TipoMedioPago[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [form, setForm] = useState(formVacio);
 
-  const persistAndNotify = (nextMethods: PaymentMethodOption[], message: string) => {
-    setMethods(nextMethods);
-    setPaymentMethods(nextMethods);
-    setToast(message);
-    setTimeout(() => setToast(null), 2600);
+  const avisar = (mensaje: string) => {
+    setToast(mensaje);
+    setTimeout(() => setToast(null), 2800);
   };
+
+  const recargar = async () => {
+    try {
+      const datos = await listarMediosPago();
+      setMedios(datos.medios);
+      setTipos(datos.tipos);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudieron cargar los medios de pago.");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    void recargar();
+  }, []);
 
   const openAddModal = () => {
-    setForm({ ...emptyForm, id: "", medio: "", estado: "Activo" });
-    setIsEditing(false);
+    setEditandoId(null);
+    setForm({ ...formVacio, tipo: tipos[0]?.valor ?? "" });
     setModalOpen(true);
   };
 
-  const openEditModal = (method: PaymentMethodOption) => {
-    setForm({ id: method.id, medio: method.medio, estado: method.estado });
-    setIsEditing(true);
+  const openEditModal = (medio: MedioPago) => {
+    setEditandoId(medio.id);
+    setForm({
+      tipo: medio.tipo,
+      alias: medio.alias,
+      numero: medio.numero,
+      banco: medio.banco,
+      activo: medio.activo,
+    });
     setModalOpen(true);
   };
 
-  const closeModal = () => {
-    setModalOpen(false);
-    setForm(emptyForm);
-    setIsEditing(false);
-  };
-
-  const handleSave = () => {
-    const name = form.medio.trim();
-    if (!name) {
-      setToast("El nombre del medio de pago no puede estar vacío.");
-      setTimeout(() => setToast(null), 2600);
+  const handleSave = async () => {
+    if (!form.alias || !form.tipo) {
+      avisar("El alias y el tipo son obligatorios.");
       return;
     }
-
-    if (isEditing && form.id) {
-      const nextMethods = methods.map((method) =>
-        method.id === form.id ? { ...method, medio: name, estado: form.estado } : method,
-      );
-
-      persistAndNotify(nextMethods, `El medio de pago ${name} se actualizó correctamente.`);
-    } else {
-      const newMethod: PaymentMethodOption = {
-        id: crypto.randomUUID(),
-        medio: name,
-        estado: form.estado,
-      };
-
-      const nextMethods = [...methods, newMethod];
-      persistAndNotify(nextMethods, `El medio de pago ${name} se agregó correctamente.`);
+    try {
+      if (editandoId !== null) {
+        await actualizarMedioPago(editandoId, form);
+        avisar("Medio de pago actualizado.");
+      } else {
+        await crearMedioPago(form);
+        avisar("Medio de pago agregado.");
+      }
+      await recargar();
+      setModalOpen(false);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudo guardar el medio de pago.");
     }
-
-    closeModal();
   };
 
-  const handleDelete = (id: string) => {
-    const target = methods.find((method) => method.id === id);
-    const nextMethods = methods.filter((method) => method.id !== id);
-    persistAndNotify(nextMethods, `El medio de pago ${target?.medio ?? "seleccionado"} fue eliminado.`);
-    closeModal();
+  const toggleActivo = async (medio: MedioPago) => {
+    try {
+      await actualizarMedioPago(medio.id, { activo: !medio.activo });
+      await recargar();
+      avisar(`${medio.alias} ${medio.activo ? "desactivado" : "activado"}.`);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudo cambiar el estado.");
+    }
   };
 
-  const handleToggle = (id: string, mediumName: string) => {
-    const nextMethods = methods.map((method) =>
-      method.id === id
-        ? { ...method, estado: method.estado === "Activo" ? "Inactivo" : "Activo" }
-        : method,
-    );
-
-    persistAndNotify(nextMethods, `El medio de pago ${mediumName} ha sido cambiado a ${nextMethods.find((method) => method.id === id)?.estado ?? "Activo"}.`);
+  const eliminar = async (medio: MedioPago) => {
+    try {
+      await borrarMedioPago(medio.id);
+      await recargar();
+      avisar(`${medio.alias} eliminado.`);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudo eliminar el medio de pago.");
+    }
   };
 
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-[#dbe3ee] bg-white p-6 shadow-sm">
-        <div className="mb-5 flex items-center justify-between gap-4">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-[#64748b]">Administración</p>
-            <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">Medios de Pago</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">Medios de pago</h2>
           </div>
           <button
             onClick={openAddModal}
-            className="rounded-xl bg-[#1a7eff] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#176ae6]"
+            className="rounded-xl bg-[#1a7eff] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#146be7]"
           >
             Agregar
           </button>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-[#e2e8f0]">
+        <div className="overflow-x-auto rounded-2xl border border-[#e2e8f0]">
           <table className="min-w-full border-collapse bg-white text-left text-sm text-[#1f2937]">
             <thead className="bg-[#f8fafc] text-[#475569]">
               <tr>
-                <th className="px-4 py-3 font-semibold">Medios de Pago</th>
+                <th className="px-4 py-3 font-semibold">Alias</th>
+                <th className="px-4 py-3 font-semibold">Tipo</th>
+                <th className="px-4 py-3 font-semibold">Número / Cuenta</th>
+                <th className="px-4 py-3 font-semibold">Banco o proveedor</th>
+                <th className="px-4 py-3 font-semibold">Titular</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
                 <th className="px-4 py-3 text-center font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {methods.map((method) => (
-                <tr key={method.id} className="border-t border-[#edf2f7] bg-white hover:bg-[#f8fafc]">
-                  <td className="px-4 py-3 font-medium text-[#0f172a]">{method.medio}</td>
+              {cargando && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-[#64748b]">
+                    Cargando medios de pago…
+                  </td>
+                </tr>
+              )}
+
+              {!cargando && medios.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-[#64748b]">
+                    Todavía no hay medios de pago cargados. Usá «Agregar» para crear el primero.
+                  </td>
+                </tr>
+              )}
+
+              {medios.map((medio) => (
+                <tr key={medio.id} className="border-t border-[#edf2f7] bg-white hover:bg-[#f8fafc]">
+                  <td className="px-4 py-3 font-medium text-[#0f172a]">{medio.alias}</td>
+                  <td className="px-4 py-3 text-[#475569]">{medio.tipoTexto}</td>
+                  <td className="px-4 py-3 tabular-nums text-[#475569]">{medio.numero || "—"}</td>
+                  <td className="px-4 py-3 text-[#475569]">{medio.banco || "—"}</td>
+                  <td className="px-4 py-3 text-[#475569]">{medio.usuario}</td>
                   <td className="px-4 py-3">
                     <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        method.estado === "Activo"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
+                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        medio.activo ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"
                       }`}
                     >
-                      {method.estado}
+                      {medio.activo ? "Activo" : "Inactivo"}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-center gap-2">
+                    <div className="flex flex-wrap justify-center gap-2">
                       <button
-                        onClick={() => openEditModal(method)}
-                        className="rounded-lg bg-[#eaf3ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff] transition hover:bg-[#dfeeff]"
+                        onClick={() => openEditModal(medio)}
+                        className="rounded-lg bg-[#eaf3ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff] hover:bg-[#dfeeff]"
                       >
                         Modificar
                       </button>
                       <button
-                        onClick={() => handleToggle(method.id, method.medio)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                          method.estado === "Activo"
-                            ? "bg-[#eaf3ff] text-[#1a7eff] hover:bg-[#dfeeff]"
-                            : "bg-[#fef2f2] text-red-600 hover:bg-[#fee2e2]"
-                        }`}
+                        onClick={() => toggleActivo(medio)}
+                        className="rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-[#e2e8f0]"
                       >
-                        {method.estado === "Activo" ? "Desactivar" : "Activar"}
+                        {medio.activo ? "Desactivar" : "Activar"}
+                      </button>
+                      <button
+                        onClick={() => eliminar(medio)}
+                        className="rounded-lg bg-[#fdeceb] px-3 py-1.5 text-xs font-semibold text-[#c0392b] hover:bg-[#fbdedb]"
+                      >
+                        Eliminar
                       </button>
                     </div>
                   </td>
@@ -148,61 +195,83 @@ export default function MediosPagoModule() {
       </div>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-[#e2e8f0] bg-white p-6 shadow-2xl">
-            <div className="mb-4">
-              <p className="text-sm font-medium text-[#64748b]">{isEditing ? "Editar" : "Agregar"}</p>
-              <h3 className="text-xl font-bold text-[#0f172a]">Medio de pago</h3>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-2xl font-bold text-[#0f172a]">
+              {editandoId !== null ? "Modificar medio de pago" : "Nuevo medio de pago"}
+            </h3>
 
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Nombre</label>
-                <input
-                  value={form.medio}
-                  onChange={(e) => setForm((prev) => ({ ...prev, medio: e.target.value }))}
-                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#0f172a] outline-none transition focus:border-[#1a7eff]"
-                  placeholder="Ej: Efectivo, Cheque, etc."
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Estado</label>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[#374151]">Tipo</span>
                 <select
-                  value={form.estado}
-                  onChange={(e) => setForm((prev) => ({ ...prev, estado: e.target.value as "Activo" | "Inactivo" }))}
-                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#0f172a] outline-none transition focus:border-[#1a7eff]"
+                  value={form.tipo}
+                  onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
                 >
-                  <option value="Activo">Activo</option>
-                  <option value="Inactivo">Inactivo</option>
+                  <option value="">Elegí un tipo…</option>
+                  {tipos.map((t) => (
+                    <option key={t.valor} value={t.valor}>
+                      {t.texto}
+                    </option>
+                  ))}
                 </select>
-              </div>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[#374151]">Alias</span>
+                <input
+                  value={form.alias}
+                  onChange={(e) => setForm({ ...form, alias: e.target.value })}
+                  placeholder="Mi Visa ITAU"
+                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[#374151]">Número o cuenta</span>
+                <input
+                  value={form.numero}
+                  onChange={(e) => setForm({ ...form, numero: e.target.value })}
+                  placeholder="**** **** **** 4521"
+                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[#374151]">Banco o proveedor</span>
+                <input
+                  value={form.banco}
+                  onChange={(e) => setForm({ ...form, banco: e.target.value })}
+                  placeholder="Banco Itaú"
+                  className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
+                />
+              </label>
+
+              <label className="flex items-center gap-2 md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={form.activo}
+                  onChange={(e) => setForm({ ...form, activo: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm font-medium text-[#374151]">Medio de pago activo</span>
+              </label>
             </div>
 
-            <div className="mt-6 flex items-center justify-between gap-3">
-              {isEditing && (
-                <button
-                  onClick={() => handleDelete(form.id)}
-                  className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-100"
-                >
-                  Borrar
-                </button>
-              )}
-
-              <div className="ml-auto flex gap-3">
-                <button
-                  onClick={closeModal}
-                  className="rounded-xl border border-[#dbe3ee] bg-white px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#f8fafc]"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSave}
-                  className="rounded-xl bg-[#1a7eff] px-3 py-2 text-sm font-semibold text-white hover:bg-[#176ae6]"
-                >
-                  Guardar
-                </button>
-              </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="rounded-xl border border-[#dbe3ee] bg-white px-4 py-2.5 text-sm font-semibold text-[#374151] hover:bg-[#f8fafc]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                className="rounded-xl bg-[#1a7eff] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#146be7]"
+              >
+                Guardar
+              </button>
             </div>
           </div>
         </div>

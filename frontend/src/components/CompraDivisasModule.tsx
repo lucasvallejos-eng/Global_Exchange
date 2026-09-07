@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { BASE_RATES, ClientType, getAppliedRate } from "../lib/clientRates";
+import { ClientType, getAppliedRate } from "../lib/clientRates";
+import { useTasas } from "../lib/useTasas";
 import { getActivePaymentMethods } from "../lib/paymentMethods";
 
-const CURRENCY_RATES = BASE_RATES;
 
 type PaymentMethod = "tarjeta" | "transferencia" | "billetera";
 
@@ -14,7 +14,7 @@ const formatCurrency = (value: number) =>
 
 export default function CompraDivisasModule({ userType }: { userType: ClientType }) {
   const [amount, setAmount] = useState("500");
-  const [currency, setCurrency] = useState<keyof typeof CURRENCY_RATES>("BRL");
+  const [currency, setCurrency] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("tarjeta");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -38,9 +38,18 @@ export default function CompraDivisasModule({ userType }: { userType: ClientType
   const [transferReceipt, setTransferReceipt] = useState<File | null>(null);
   const [walletReceipt, setWalletReceipt] = useState<File | null>(null);
 
+  // Cotizaciones reales de la base, en vez de una tabla fija.
+  const { tasas, codigos, cargando } = useTasas();
+
+  useEffect(() => {
+    if (!currency && codigos.length > 0) setCurrency(codigos[0]);
+  }, [codigos, currency]);
+
+  const tasa = tasas[currency] ?? { compra: 0, venta: 0 };
+
   const numericAmount = Number.parseFloat(amount) || 0;
-  const baseRate = CURRENCY_RATES[currency].venta;
-  const conversionRate = getAppliedRate(currency, "venta", userType);
+  const baseRate = tasa.venta;
+  const conversionRate = getAppliedRate(tasa, "venta", userType);
   const totalInPyg = numericAmount * conversionRate;
 
   const methodLabels: Record<PaymentMethod, string> = {
@@ -186,12 +195,16 @@ export default function CompraDivisasModule({ userType }: { userType: ClientType
               />
               <select
                 value={currency}
-                onChange={(event) => setCurrency(event.target.value as keyof typeof CURRENCY_RATES)}
+                onChange={(event) => setCurrency(event.target.value)}
                 className="border-l border-[#dbe3ee] bg-white px-3 py-3 text-sm font-medium text-[#374151] outline-none"
               >
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="BRL">BRL</option>
+                {cargando && <option>Cargando...</option>}
+                {!cargando && codigos.length === 0 && <option>Sin monedas</option>}
+                {codigos.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </select>
             </div>
           </label>
