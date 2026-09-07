@@ -23,7 +23,7 @@ def _a_dict(medio):
     return {
         "id": medio.id,
         "tipo": medio.tipo,
-        "tipoTexto": medio.get_tipo_display(),
+        "tipoTexto": medio.get_tipo_display() if medio.tipo else "",
         "alias": medio.alias,
         "numero": medio.numero_cuenta_o_tarjeta,
         "banco": medio.banco_o_proveedor or "",
@@ -68,10 +68,12 @@ def _crear(request):
     alias = (datos.get("alias") or "").strip()
     tipo = (datos.get("tipo") or "").strip()
 
-    if not alias or not tipo:
-        return JsonResponse({"error": "El alias y el tipo son obligatorios."}, status=400)
-    if tipo not in dict(MedioPago.TIPO_CHOICES):
+    if not alias:
+        return JsonResponse({"error": "El nombre es obligatorio."}, status=400)
+    if tipo and tipo not in dict(MedioPago.TIPO_CHOICES):
         return JsonResponse({"error": f"Tipo no válido: {tipo}."}, status=400)
+    if MedioPago.objects.filter(usuario=request.user, alias__iexact=alias).exists():
+        return JsonResponse({"error": f'Ya tenés un medio de pago llamado "{alias}".'}, status=400)
 
     medio = MedioPago.objects.create(
         usuario=request.user,
@@ -103,9 +105,9 @@ def medios_detalle(request, pk):
     if "alias" in datos:
         medio.alias = (datos["alias"] or "").strip()
     if "tipo" in datos:
-        if datos["tipo"] not in dict(MedioPago.TIPO_CHOICES):
+        if datos["tipo"] and datos["tipo"] not in dict(MedioPago.TIPO_CHOICES):
             return JsonResponse({"error": f"Tipo no válido: {datos['tipo']}."}, status=400)
-        medio.tipo = datos["tipo"]
+        medio.tipo = datos["tipo"] or ""
     if "numero" in datos:
         medio.numero_cuenta_o_tarjeta = (datos["numero"] or "").strip()
     if "banco" in datos:

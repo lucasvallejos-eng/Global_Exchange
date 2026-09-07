@@ -14,9 +14,12 @@ class MedioPago(models.Model):
         on_delete=models.CASCADE,
         related_name='medios_pago'
     )
-    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
-    alias = models.CharField(max_length=50, help_text="Nombre descriptivo (ej: Mi Visa ITAU)")
-    numero_cuenta_o_tarjeta = models.CharField(max_length=50, help_text="Número o alias/CBU codificado")
+    # El alta desde la maqueta pide solo nombre y estado, así que el tipo y el
+    # número quedan opcionales: se completan desde las pantallas de Django
+    # cuando hace falta el detalle de la tarjeta o la cuenta.
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES, blank=True)
+    alias = models.CharField(max_length=50, help_text="Nombre del medio de pago (ej: Transferencia Bancaria)")
+    numero_cuenta_o_tarjeta = models.CharField(max_length=50, blank=True, help_text="Número o alias/CBU codificado")
     banco_o_proveedor = models.CharField(max_length=100, blank=True, null=True)
     activo = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
