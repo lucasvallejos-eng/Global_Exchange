@@ -12,7 +12,6 @@ const PRIORIDAD_ROLES: Role[] = [
   "analista_cambiario",
   "cajero",
   "cliente",
-  "cliente_general",
 ];
 
 function elegirRol(roles: string[]): Role {

@@ -18,14 +18,12 @@ from cotizaciones.models import Cotizacion
 from monedas.models import Moneda
 
 # Todos los roles del sistema. La consulta de tasas está permitida a cualquier
-# usuario autenticado: es lo único que puede hacer alguien sin cliente
-# asociado (RN02).
+# usuario autenticado.
 TODOS_LOS_ROLES = (
     "administrador",
     "analista_cambiario",
     "cajero",
     "cliente",
-    "cliente_general",
 )
 
 

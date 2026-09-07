@@ -1,4 +1,4 @@
-export type Role = "cliente" | "cliente_general" | "cajero" | "analista_cambiario" | "administrador";
+export type Role = "cliente" | "cajero" | "analista_cambiario" | "administrador";
 export type ClientCategory = "Minorista" | "Mayorista" | "VIP";
 
 export interface ClienteAsignado {
@@ -53,7 +53,6 @@ export const DEMO_USERS: Record<string, User> = {
 
 export const ROLE_LABELS: Record<Role, string> = {
   cliente: "Cliente",
-  cliente_general: "Cliente General",
   cajero: "Cajero",
   analista_cambiario: "Analista Cambiario",
   administrador: "Administrador",

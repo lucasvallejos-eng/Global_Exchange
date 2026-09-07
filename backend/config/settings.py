@@ -142,8 +142,13 @@ LOGIN_URL = "oidc_authentication_init"
 # cookie de sesión, y Django exige CSRF en esas mutaciones aunque la sesión
 # venga de OIDC. Maqueta y backend comparten host (localhost), solo cambia el
 # puerto, así que son "same site" y SameSite=Lax alcanza.
+# Sin la barra final: Django compara estas entradas tal cual contra la cabecera
+# `Origin` que manda el navegador, y esa cabecera nunca la lleva. Como
+# MAQUETA_URL sí termina en "/", sin el rstrip la comparación nunca coincidía y
+# guardar un cliente desde la maqueta devolvía 403 (los GET no se veían
+# afectados porque no pasan por la validación CSRF).
 CSRF_TRUSTED_ORIGINS = [
-    origen.strip()
+    origen.strip().rstrip("/")
     for origen in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", MAQUETA_URL).split(",")
     if origen.strip()
 ]

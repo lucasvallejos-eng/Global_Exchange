@@ -44,11 +44,6 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { id: "historial", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
     { id: "configuracion", label: "Configuración de Datos", icon: <Icon path="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/> },
   ],
-  // RN02: sin un cliente asociado, solo puede consultar tasas y simular.
-  cliente_general: [
-    { id: "cotizaciones", label: "Cotizaciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
-    { id: "simulacion", label: "Simulación", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
-  ],
   cajero: [
     { id: "apertura-caja", label: "Apertura de Caja", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6"/> },
     { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
