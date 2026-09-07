@@ -13,6 +13,7 @@ from .models import Cliente
 
 
 def _cliente_a_dict(cliente):
+    """Convierte una instancia de Cliente en un diccionario serializable a JSON."""
     return {
         "id": cliente.id,
         "nombre": cliente.nombre,
@@ -25,6 +26,7 @@ def _cliente_a_dict(cliente):
 
 
 def _body_json(request):
+    """Parsea el cuerpo de la request como JSON; devuelve un dict vacío si falla."""
     try:
         return json.loads(request.body or b"{}")
     except json.JSONDecodeError:
@@ -35,6 +37,13 @@ def _body_json(request):
 @require_http_methods(["GET", "POST"])
 @csrf_protect
 def clientes_lista(request):
+    """
+    Lista todos los clientes (GET) o crea uno nuevo (POST).
+
+    GET no requiere rol especial, cualquier usuario autenticado puede
+    consultar el listado. La creación (POST) delega en
+    :func:`_crear_cliente`, que sí exige rol de administrador.
+    """
     if request.method == "GET":
         clientes = Cliente.objects.prefetch_related("usuarios").all()
         return JsonResponse([_cliente_a_dict(c) for c in clientes], safe=False)
@@ -44,6 +53,12 @@ def clientes_lista(request):
 
 @rol_requerido("administrador")
 def _crear_cliente(request):
+    """
+    Crea un nuevo cliente a partir de los datos recibidos en el body (JSON).
+
+    Requiere rol de administrador. Asocia además la lista de usuarios
+    indicada en el campo ``usuarios`` del payload.
+    """
     datos = _body_json(request)
     cliente = Cliente.objects.create(
         nombre=datos.get("nombre", ""),
@@ -60,6 +75,13 @@ def _crear_cliente(request):
 @require_http_methods(["GET", "PATCH", "DELETE"])
 @csrf_protect
 def clientes_detalle(request, pk):
+    """
+    Obtiene (GET), actualiza (PATCH) o elimina (DELETE) un cliente puntual.
+
+    Devuelve 404 si no existe un cliente con el ``pk`` indicado.
+    PATCH y DELETE requieren rol de administrador (ver
+    :func:`_actualizar_cliente` y :func:`_borrar_cliente`).
+    """
     try:
         cliente = Cliente.objects.get(pk=pk)
     except Cliente.DoesNotExist:
@@ -74,6 +96,13 @@ def clientes_detalle(request, pk):
 
 @rol_requerido("administrador")
 def _actualizar_cliente(request, cliente):
+    """
+    Actualiza parcialmente los campos de un cliente (PATCH).
+
+    Solo modifica los campos presentes en el body; el resto queda
+    sin cambios. Si el body incluye ``usuarios``, reemplaza la
+    asociación completa de usuarios del cliente.
+    """
     datos = _body_json(request)
     for campo, atributo in (
         ("nombre", "nombre"),
@@ -92,6 +121,7 @@ def _actualizar_cliente(request, cliente):
 
 @rol_requerido("administrador")
 def _borrar_cliente(request, cliente):
+    """Elimina un cliente de la base de datos. Requiere rol de administrador."""
     cliente.delete()
     return JsonResponse({}, status=204)
 

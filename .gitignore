@@ -34,3 +34,4 @@ package-lock.json
 # beside it.
 /.plugins/
 /.opencode-skills/
+docs/_build/

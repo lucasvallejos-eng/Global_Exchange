@@ -6,7 +6,8 @@ from django.db import models
 class Cliente(models.Model):
     """Empresa que opera en la casa de cambio."""
 
-    class Tipo(models.TextChoices):
+    class Tipo(models.TextChoices): 
+        """Tipo legal del cliente: persona jurídica o física."""
         JURIDICA = "Jurídica", "Jurídica"
         FISICA = "Física", "Física"
 
