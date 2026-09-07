@@ -1,18 +1,6 @@
 import { useState } from "react";
-import { BASE_RATES, ClientType, getAppliedRate, getClientTypeBadge } from "../lib/clientRates";
-
-type MonedaCotizacion = {
-  code: keyof typeof BASE_RATES | "PYG";
-  name: string;
-  icon: string;
-};
-
-const COTIZACIONES: MonedaCotizacion[] = [
-  { code: "USD", name: "Dólar", icon: "💵" },
-  { code: "EUR", name: "Euro", icon: "💶" },
-  { code: "BRL", name: "Real Brasileño", icon: "💸" },
-  { code: "PYG", name: "Guaraní", icon: "₲" },
-];
+import { ClientType, getAppliedRate, getClientTypeBadge } from "../lib/clientRates";
+import { useTasas } from "../lib/useTasas";
 
 const formatPyg = (value: number) =>
   new Intl.NumberFormat("es-PY", {
@@ -21,7 +9,9 @@ const formatPyg = (value: number) =>
   }).format(value);
 
 export default function CotizacionesModule({ userType }: { userType: ClientType }) {
-  const [selectedCode, setSelectedCode] = useState<string>("USD");
+  const [selectedCode, setSelectedCode] = useState<string>("");
+  // Las cotizaciones salen de la base, no de una tabla escrita a mano.
+  const { monedas, cargando, error } = useTasas();
 
   return (
     <div className="space-y-6">
@@ -51,25 +41,47 @@ export default function CotizacionesModule({ userType }: { userType: ClientType 
               </tr>
             </thead>
             <tbody>
-              {COTIZACIONES.map((currency) => {
-                const code = currency.code as keyof typeof BASE_RATES | "PYG";
-                const venta = code === "PYG" ? 1 : getAppliedRate(code, "venta", userType);
-                const compra = code === "PYG" ? 1 : getAppliedRate(code, "compra", userType);
+              {cargando && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-center text-[#64748b]">
+                    Cargando cotizaciones…
+                  </td>
+                </tr>
+              )}
+
+              {!cargando && error && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-center text-[#c0392b]">{error}</td>
+                </tr>
+              )}
+
+              {!cargando && !error && monedas.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-center text-[#64748b]">
+                    No hay cotizaciones cargadas todavía.
+                  </td>
+                </tr>
+              )}
+
+              {monedas.map((currency) => {
+                const tasa = { compra: currency.precioCompra, venta: currency.precioVenta };
+                const venta = getAppliedRate(tasa, "venta", userType);
+                const compra = getAppliedRate(tasa, "compra", userType);
 
                 return (
                   <tr
-                    key={currency.code}
-                    onClick={() => setSelectedCode(currency.code)}
+                    key={currency.codigo}
+                    onClick={() => setSelectedCode(currency.codigo)}
                     className={`cursor-pointer border-t border-[#edf2f7] transition ${
-                      selectedCode === currency.code ? "bg-[#f0f7ff]" : "bg-white hover:bg-[#f8fafc]"
+                      selectedCode === currency.codigo ? "bg-[#f0f7ff]" : "bg-white hover:bg-[#f8fafc]"
                     }`}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <span className="text-xl">{currency.icon}</span>
+                        <span className="text-xl">{currency.simbolo}</span>
                         <div>
-                          <div className="font-medium text-[#0f172a]">{currency.name}</div>
-                          <div className="text-xs text-[#64748b]">{currency.code}</div>
+                          <div className="font-medium text-[#0f172a]">{currency.nombre}</div>
+                          <div className="text-xs text-[#64748b]">{currency.codigo}</div>
                         </div>
                       </div>
                     </td>

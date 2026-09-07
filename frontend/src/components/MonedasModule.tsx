@@ -1,4 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  actualizarMoneda,
+  crearMoneda,
+  listarMonedas,
+  type Moneda,
+} from "../lib/monedasApi";
 
 type CurrencyState = "Activo" | "Inactivo";
 
@@ -11,12 +17,17 @@ type CurrencyRow = {
   sellRate: number;
 };
 
-const initialRows: CurrencyRow[] = [
-  { id: 1, name: "Dólar", code: "USD", state: "Activo", buyRate: 7500, sellRate: 7700 },
-  { id: 2, name: "Euro", code: "EUR", state: "Activo", buyRate: 8200, sellRate: 8450 },
-  { id: 3, name: "Real Brasileño", code: "BRL", state: "Inactivo", buyRate: 1148, sellRate: 1185 },
-  { id: 4, name: "Yen", code: "JPY", state: "Activo", buyRate: 52, sellRate: 58 },
-];
+/** Pasa una moneda de la API a la fila que dibuja la tabla. */
+function aFila(moneda: Moneda): CurrencyRow {
+  return {
+    id: moneda.id,
+    name: moneda.nombre,
+    code: moneda.codigo,
+    state: moneda.activo ? "Activo" : "Inactivo",
+    buyRate: moneda.precioCompra ?? 0,
+    sellRate: moneda.precioVenta ?? 0,
+  };
+}
 
 const formatPyg = (value: number) =>
   new Intl.NumberFormat("es-PY", {
@@ -25,8 +36,9 @@ const formatPyg = (value: number) =>
   }).format(value);
 
 export default function MonedasModule() {
-  const [rows, setRows] = useState<CurrencyRow[]>(initialRows);
-  const [selectedId, setSelectedId] = useState<number | null>(initialRows[0]?.id ?? null);
+  const [rows, setRows] = useState<CurrencyRow[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [cargando, setCargando] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -35,6 +47,30 @@ export default function MonedasModule() {
     () => rows.find((row) => row.id === selectedId) ?? null,
     [rows, selectedId],
   );
+
+  const avisar = (mensaje: string) => {
+    setToast(mensaje);
+    setTimeout(() => setToast(null), 2600);
+  };
+
+  /** Trae las monedas del backend y deja seleccionada la primera. */
+  const recargar = async (idPreferido?: number) => {
+    try {
+      const monedas = await listarMonedas();
+      const filas = monedas.map(aFila);
+      setRows(filas);
+      setSelectedId((actual) => idPreferido ?? actual ?? filas[0]?.id ?? null);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudieron cargar las monedas.");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    void recargar();
+    // Solo al montar: despues se recarga a mano tras cada alta o edicion.
+  }, []);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -69,60 +105,50 @@ export default function MonedasModule() {
     setShowForm(true);
   };
 
-  const handleToggleState = (id: number) => {
-    setRows((prev) =>
-      prev.map((row) =>
-        row.id === id
-          ? { ...row, state: row.state === "Activo" ? "Inactivo" : "Activo" }
-          : row,
-      ),
-    );
-    setToast("Estado actualizado correctamente.");
-    setTimeout(() => setToast(null), 2200);
+  const handleToggleState = async (id: number) => {
+    const fila = rows.find((row) => row.id === id);
+    if (!fila) return;
+    try {
+      await actualizarMoneda(id, { activo: fila.state !== "Activo" });
+      await recargar(id);
+      avisar("Estado actualizado correctamente.");
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudo actualizar el estado.");
+    }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.code || !formData.buyRate || !formData.sellRate) {
-      setToast("Completa todos los campos para continuar.");
-      setTimeout(() => setToast(null), 2200);
+      avisar("Completa todos los campos para continuar.");
       return;
     }
 
-    if (isEditing && selectedRow) {
-      setRows((prev) =>
-        prev.map((row) =>
-          row.id === selectedRow.id
-            ? {
-                ...row,
-                name: formData.name,
-                code: formData.code,
-                buyRate: Number(formData.buyRate),
-                sellRate: Number(formData.sellRate),
-                state: formData.state,
-              }
-            : row,
-        ),
-      );
-      setToast("Cotización actualizada correctamente.");
-    } else {
-      const nextId = Math.max(0, ...rows.map((row) => row.id)) + 1;
-      setRows((prev) => [
-        ...prev,
-        {
-          id: nextId,
-          name: formData.name,
-          code: formData.code,
-          buyRate: Number(formData.buyRate),
-          sellRate: Number(formData.sellRate),
-          state: formData.state,
-        },
-      ]);
-      setSelectedId(nextId);
-      setToast("Moneda agregada correctamente.");
-    }
+    const datos = {
+      nombre: formData.name,
+      codigo: formData.code,
+      simbolo: formData.code,
+      activo: formData.state === "Activo",
+      precioCompra: Number(formData.buyRate),
+      precioVenta: Number(formData.sellRate),
+    };
 
-    setShowForm(false);
-    setTimeout(() => setToast(null), 2400);
+    try {
+      if (isEditing && selectedRow) {
+        // El codigo identifica la moneda y no se cambia al editar.
+        const { codigo, ...sinCodigo } = datos;
+        await actualizarMoneda(selectedRow.id, sinCodigo);
+        await recargar(selectedRow.id);
+        avisar("Cotizacion actualizada correctamente.");
+      } else {
+        const creada = await crearMoneda(datos);
+        await recargar(creada.id);
+        avisar("Moneda agregada correctamente.");
+      }
+      setShowForm(false);
+    } catch (e) {
+      // Incluye el mensaje de RN10 cuando la venta no supera a la compra.
+      avisar(e instanceof Error ? e.message : "No se pudo guardar la moneda.");
+    }
   };
 
   return (
