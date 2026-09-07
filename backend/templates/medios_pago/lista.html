@@ -1,0 +1,60 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Listado de medios de pago. La vista manda "medios" ya filtrados: si el usuario
+tiene rol cliente ve solo los suyos; el administrador y el cajero ven todos los
+activos. Ese filtro se hace en el servidor, nunca acá.
+
+Se muestra el dueño de cada medio de pago para que al administrador le sirva de
+algo la pantalla; para un cliente la columna siempre dice su propio usuario.
+{% endcomment %}
+
+{% block titulo_pagina %}Medios de pago — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>Medios de pago</h1>
+    <a class="boton" href="{% url 'crear_medio_pago' %}">Nuevo medio de pago</a>
+  </div>
+
+  {% if medios %}
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Alias</th>
+            <th>Tipo</th>
+            <th>Número / cuenta</th>
+            <th>Banco o proveedor</th>
+            <th>Usuario</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for medio in medios %}
+            <tr>
+              <td><strong>{{ medio.alias }}</strong></td>
+              <td>{{ medio.get_tipo_display }}</td>
+              <td>{{ medio.numero_cuenta_o_tarjeta }}</td>
+              <td>{{ medio.banco_o_proveedor|default:"—" }}</td>
+              <td>{{ medio.usuario.username }}</td>
+              <td class="acciones">
+                <a href="{% url 'editar_medio_pago' medio.pk %}">Editar</a>
+                {# Baja lógica (activo=False), por POST: un GET que modifica datos
+                   lo puede disparar cualquier precarga del navegador. #}
+                <form method="post" action="{% url 'eliminar_medio_pago' medio.pk %}"
+                      style="display:inline"
+                      onsubmit="return confirm('¿Dar de baja «{{ medio.alias }}»?')">
+                  {% csrf_token %}
+                  <button type="submit" class="boton peligro">Dar de baja</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="vacio">Todavía no hay medios de pago registrados.</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,129 @@
+[
+  {
+    "model": "monedas.moneda",
+    "pk": 1,
+    "fields": {
+      "codigo": "USD",
+      "nombre": "Dólar estadounidense",
+      "simbolo": "$",
+      "activo": true,
+      "fecha_creacion": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.moneda",
+    "pk": 2,
+    "fields": {
+      "codigo": "EUR",
+      "nombre": "Euro",
+      "simbolo": "€",
+      "activo": true,
+      "fecha_creacion": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.moneda",
+    "pk": 3,
+    "fields": {
+      "codigo": "BRL",
+      "nombre": "Real brasileño",
+      "simbolo": "R$",
+      "activo": true,
+      "fecha_creacion": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "cotizaciones.cotizacion",
+    "pk": 1,
+    "fields": {
+      "moneda": 1,
+      "precio_compra": "7300.00",
+      "precio_venta": "7400.00",
+      "fecha": "2026-09-04T09:00:00Z",
+      "activa": true
+    }
+  },
+  {
+    "model": "cotizaciones.cotizacion",
+    "pk": 2,
+    "fields": {
+      "moneda": 2,
+      "precio_compra": "7900.00",
+      "precio_venta": "8050.00",
+      "fecha": "2026-09-04T09:00:00Z",
+      "activa": true
+    }
+  },
+  {
+    "model": "cotizaciones.cotizacion",
+    "pk": 3,
+    "fields": {
+      "moneda": 3,
+      "precio_compra": "1300.00",
+      "precio_venta": "1360.00",
+      "fecha": "2026-09-04T09:00:00Z",
+      "activa": true
+    }
+  },
+  {
+    "model": "comisiones.segmentocliente",
+    "pk": 1,
+    "fields": {
+      "nombre": "Minorista",
+      "porcentaje_comision": "0.20",
+      "descripcion": "Cliente ocasional, sin volumen mínimo.",
+      "activo": true,
+      "fecha_creacion": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "comisiones.segmentocliente",
+    "pk": 2,
+    "fields": {
+      "nombre": "VIP",
+      "porcentaje_comision": "0.50",
+      "descripcion": "Cliente frecuente, volumen medio.",
+      "activo": true,
+      "fecha_creacion": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "comisiones.segmentocliente",
+    "pk": 3,
+    "fields": {
+      "nombre": "Corporativo",
+      "porcentaje_comision": "1.00",
+      "descripcion": "Empresas con alto volumen de operaciones.",
+      "activo": true,
+      "fecha_creacion": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "clientes.cliente",
+    "pk": 1,
+    "fields": {
+      "nombre": "Clara Cliente",
+      "tipo": "Física",
+      "direccion": "Av. Mariscal Lopez 1234, Asunción",
+      "cuenta_acreditar": "001-234567-8",
+      "correo": "cliente.test@globalexchange.local",
+      "segmento": null,
+      "usuarios": [],
+      "created_at": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "clientes.cliente",
+    "pk": 2,
+    "fields": {
+      "nombre": "Cliente Ejemplo S.A.",
+      "tipo": "Jurídica",
+      "direccion": "Av. España 567, Asunción",
+      "cuenta_acreditar": "002-987654-3",
+      "correo": "contacto@clienteejemplo.com.py",
+      "segmento": null,
+      "usuarios": [],
+      "created_at": "2026-09-04T09:00:00Z"
+    }
+  }
+]

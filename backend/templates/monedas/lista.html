@@ -1,0 +1,62 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Listado de monedas. La vista listar_monedas manda "monedas" con todas las
+filas de la tabla (Moneda.objects.all()).
+{% endcomment %}
+
+{% block titulo_pagina %}Monedas — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>Monedas</h1>
+    <a class="boton" href="{% url 'crear_moneda' %}">Nueva moneda</a>
+  </div>
+
+  {% if monedas %}
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Nombre</th>
+            <th>Símbolo</th>
+            <th>Estado</th>
+            <th>Alta</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for moneda in monedas %}
+            <tr>
+              <td><strong>{{ moneda.codigo }}</strong></td>
+              <td>{{ moneda.nombre }}</td>
+              <td>{{ moneda.simbolo }}</td>
+              <td>
+                {% if moneda.activo %}
+                  <span class="etiqueta activo">Activa</span>
+                {% else %}
+                  <span class="etiqueta inactivo">Inactiva</span>
+                {% endif %}
+              </td>
+              <td>{{ moneda.fecha_creacion|date:"d/m/Y" }}</td>
+              <td class="acciones">
+                <a href="{% url 'editar_moneda' moneda.pk %}">Editar</a>
+                {# Se borra por POST y no por enlace: un GET que borra lo puede
+                   disparar cualquier precarga del navegador. #}
+                <form method="post" action="{% url 'eliminar_moneda' moneda.pk %}"
+                      style="display:inline"
+                      onsubmit="return confirm('¿Eliminar la moneda {{ moneda.codigo }}?')">
+                  {% csrf_token %}
+                  <button type="submit" class="boton peligro">Eliminar</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="vacio">Todavía no hay monedas cargadas.</p>
+  {% endif %}
+{% endblock %}

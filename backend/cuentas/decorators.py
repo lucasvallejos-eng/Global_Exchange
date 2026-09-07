@@ -1,7 +1,7 @@
 """
 Helper para proteger vistas según el rol de Keycloak.
 
-Uso:
+Uso (los dos puntos dobles marcan un bloque de código para Sphinx)::
 
     from cuentas.decorators import rol_requerido
 

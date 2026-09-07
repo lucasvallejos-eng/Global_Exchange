@@ -23,4 +23,8 @@ urlpatterns = [
     # Página de inicio del backend (para depurar sin la maqueta).
     path("inicio/", views.inicio, name="inicio"),
     path('monedas/', include('monedas.urls')),
+    path('cotizaciones/', include('cotizaciones.urls')),
+    path('medios-pago/', include('medios_pago.urls')),
+    path('comisiones/', include('comisiones.urls')),
+    path('tasas/', include('tasas.urls')),
 ]

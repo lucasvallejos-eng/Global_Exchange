@@ -1,0 +1,55 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Alta y edición de segmentos de cliente. Si la vista mandó "segmento",
+estamos editando.
+{% endcomment %}
+
+{% block titulo_pagina %}{{ titulo }} — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>{{ titulo }}</h1>
+  </div>
+
+  {% if errores %}
+    <div class="errores">
+      <ul>
+        {% for error in errores %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post"
+        action="{% if segmento %}{% url 'editar_segmento' segmento.pk %}{% else %}{% url 'crear_segmento' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="campo">
+      <label for="nombre">Nombre del segmento</label>
+      <input type="text" id="nombre" name="nombre" maxlength="50" required
+             value="{% if enviado %}{{ enviado.nombre }}{% else %}{{ segmento.nombre|default:'' }}{% endif %}"
+             placeholder="VIP">
+      <p class="ayuda">Por ejemplo: VIP, Corporativo o Minorista.</p>
+    </div>
+
+    <div class="campo">
+      <label for="porcentaje_comision">Porcentaje de comisión</label>
+      <input type="number" id="porcentaje_comision" name="porcentaje_comision"
+             step="0.01" min="0" max="100" required
+             value="{% if enviado %}{{ enviado.porcentaje_comision }}{% else %}{{ segmento.porcentaje_comision|default:'' }}{% endif %}">
+      <p class="ayuda">Entre 0 y 100. Es el porcentaje que se le cobra a este segmento.</p>
+    </div>
+
+    <div class="campo">
+      <label for="descripcion">Descripción</label>
+      <input type="text" id="descripcion" name="descripcion" maxlength="200"
+             value="{% if enviado %}{{ enviado.descripcion }}{% else %}{{ segmento.descripcion|default:'' }}{% endif %}">
+      <p class="ayuda">Opcional.</p>
+    </div>
+
+    <div class="botonera">
+      <button type="submit" class="boton">Guardar</button>
+      <a class="boton secundario" href="{% url 'listar_segmentos' %}">Cancelar</a>
+    </div>
+  </form>
+{% endblock %}

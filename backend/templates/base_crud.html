@@ -1,0 +1,200 @@
+{% load roles %}
+{% comment %}
+Plantilla base de las pantallas de ABM (monedas, cotizaciones, medios de pago).
+
+Existe para no repetir el mismo encabezado y los mismos estilos en las seis
+pantallas: si mañana cambia un color o se agrega un módulo al menú, se toca
+acá y se propaga a todas. Los colores son los mismos que ya usaban
+portada.html e inicio.html, así el sistema se ve de una sola pieza.
+
+Bloques que rellenan las plantillas hijas:
+  titulo_pagina  -> lo que va en la pestaña del navegador
+  contenido      -> el cuerpo de la tarjeta (la tabla o el formulario)
+
+Cuál de los enlaces del menú se ve resaltado se deduce de la URL actual
+(request.path), así ninguna vista necesita mandar una variable extra.
+{% endcomment %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block titulo_pagina %}Global Exchange{% endblock %}</title>
+  <style>
+    :root {
+      --azul: #1a7eff;
+      --azul-suave: #f0f7ff;
+      --fondo: #f0f4f8;
+      --texto: #1a202c;
+      --texto-suave: #718096;
+      --borde: #e2e8f0;
+      --rojo: #ef4444;
+      --verde: #16a34a;
+    }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: var(--fondo);
+      color: var(--texto);
+      margin: 0;
+      padding: 32px 16px 64px;
+    }
+
+    .contenedor { max-width: 960px; margin: 0 auto; }
+
+    /* Menú de navegación entre los módulos */
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    nav a {
+      color: var(--texto-suave);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 999px;
+    }
+    nav a:hover { background: #fff; color: var(--azul); }
+    nav a.activo { background: var(--azul-suave); color: var(--azul); }
+
+    .tarjeta {
+      background: #fff;
+      padding: 32px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .08);
+    }
+
+    .cabecera {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    h1 { margin: 0; font-size: 24px; }
+
+    /* Botones */
+    .boton {
+      display: inline-block;
+      background: var(--azul);
+      color: #fff;
+      text-decoration: none;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .boton.secundario { background: #fff; color: var(--texto-suave); border: 1px solid var(--borde); }
+    .boton.peligro { background: none; color: var(--rojo); padding: 4px 8px; }
+
+    /* Tablas de listado */
+    .tabla-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th {
+      text-align: left;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--texto-suave);
+      padding: 0 12px 8px;
+      border-bottom: 1px solid var(--borde);
+      white-space: nowrap;
+    }
+    td { padding: 12px; border-bottom: 1px solid var(--borde); }
+    tr:last-child td { border-bottom: none; }
+    .numero { text-align: right; font-variant-numeric: tabular-nums; }
+    .acciones { white-space: nowrap; text-align: right; }
+    .acciones a { color: var(--azul); text-decoration: none; font-weight: 600; margin-right: 8px; }
+
+    /* Etiquetas de estado */
+    .etiqueta {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
+    .etiqueta.activo { background: #dcfce7; color: var(--verde); }
+    .etiqueta.inactivo { background: #f1f5f9; color: var(--texto-suave); }
+
+    /* Formularios */
+    .campo { margin-bottom: 18px; }
+    label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border: 1px solid var(--borde);
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      background: #fff;
+      color: var(--texto);
+    }
+    input:focus, select:focus { outline: 2px solid var(--azul); border-color: var(--azul); }
+    .ayuda { font-size: 13px; color: var(--texto-suave); margin: 6px 0 0; }
+    .botonera { display: flex; gap: 12px; align-items: center; margin-top: 24px; }
+
+    /* Errores de validación (por ejemplo RN10) */
+    .errores {
+      background: #fef2f2;
+      border-left: 4px solid var(--rojo);
+      color: #991b1b;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .errores ul { margin: 0; padding-left: 18px; }
+
+    .vacio { color: var(--texto-suave); text-align: center; padding: 32px 0; }
+  </style>
+</head>
+<body>
+  <div class="contenedor">
+    {% comment %}
+      Se esconden los enlaces que el usuario no puede abrir, para que no se
+      encuentre con un 403 al hacer clic. El permiso de verdad lo controla
+      rol_requerido en cada vista: esconder el enlace no protege nada.
+    {% endcomment %}
+    <nav>
+      <a href="{% url 'inicio' %}">Inicio</a>
+      <a href="{% url 'ver_tasas' %}" {% if request.path == '/tasas/' %}class="activo"{% endif %}>Tasas</a>
+      <a href="{% url 'simulador' %}" {% if '/simulador/' in request.path %}class="activo"{% endif %}>Simulador</a>
+      {% if user|tiene_rol:"administrador" %}
+        <a href="{% url 'listar_monedas' %}" {% if '/monedas/' in request.path %}class="activo"{% endif %}>Monedas</a>
+      {% endif %}
+      {% comment %}
+        Las cotizaciones son las tasas, y según la ERS el analista_cambiario
+        está para modificarlas: tiene los mismos permisos que el administrador
+        sobre ese módulo (ver GESTIONAN_TASAS en cotizaciones/views.py).
+      {% endcomment %}
+      {% if user|tiene_rol:"administrador" or user|tiene_rol:"analista_cambiario" %}
+        <a href="{% url 'listar_cotizaciones' %}" {% if '/cotizaciones/' in request.path %}class="activo"{% endif %}>Cotizaciones</a>
+      {% endif %}
+      {% if user|tiene_rol:"administrador" %}
+        <a href="{% url 'listar_segmentos' %}" {% if '/comisiones/' in request.path %}class="activo"{% endif %}>Comisiones</a>
+      {% endif %}
+      {% comment %}
+        listar_medios_pago admite cliente, administrador y cajero. El
+        analista_cambiario queda afuera: la ERS le da las tasas, no la
+        administración.
+      {% endcomment %}
+      {% if user|tiene_rol:"cliente" or user|tiene_rol:"administrador" or user|tiene_rol:"cajero" %}
+        <a href="{% url 'listar_medios_pago' %}" {% if '/medios-pago/' in request.path %}class="activo"{% endif %}>Medios de pago</a>
+      {% endif %}
+    </nav>
+
+    <div class="tarjeta">
+      {% block contenido %}{% endblock %}
+    </div>
+  </div>
+</body>
+</html>

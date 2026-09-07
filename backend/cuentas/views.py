@@ -63,10 +63,11 @@ def cerrar_sesion(request):
 
     if not id_token:
         # No había id_token guardado (p.ej. login vía ModelBackend) -> solo
-        # queda cerrar la sesión de Django.
-        return redirect("sesion_cerrada")
+        # queda cerrar la sesión de Django. "portada" ya manda a Keycloak
+        # cuando no hay usuario autenticado.
+        return redirect("portada")
 
-    post_logout_redirect_uri = request.build_absolute_uri(reverse("sesion_cerrada"))
+    post_logout_redirect_uri = request.build_absolute_uri(reverse("portada"))
     query = urlencode(
         {
             "id_token_hint": id_token,

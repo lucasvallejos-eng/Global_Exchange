@@ -3,7 +3,7 @@ import { Client, UsuarioAsociable } from "../types";
 import { createClient, deleteClient, listClients, listUsuariosAsociables, updateClient } from "../lib/clientesApi";
 import MultiSelect from "./MultiSelect";
 
-const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", direccion: "", cuentaAcreditar: "", correo: "", usuarios: [] };
+const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", categoria: "Minorista", direccion: "", cuentaAcreditar: "", correo: "", usuarios: [] };
 
 export default function ClientesModule() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -67,7 +67,7 @@ export default function ClientesModule() {
   };
 
   const handleEdit = (c: Client) => {
-    setForm({ nombre: c.nombre, tipo: c.tipo, direccion: c.direccion, cuentaAcreditar: c.cuentaAcreditar, correo: c.correo, usuarios: c.usuarios });
+    setForm({ nombre: c.nombre, tipo: c.tipo, categoria: c.categoria, direccion: c.direccion, cuentaAcreditar: c.cuentaAcreditar, correo: c.correo, usuarios: c.usuarios });
     setEditId(c.id);
     setErrors({});
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -131,7 +131,7 @@ export default function ClientesModule() {
           {field("nombre", "Nombre", "Ej. Empresa XYZ S.A.")}
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1">
-              Tipo<span className="text-red-500 ml-0.5">*</span>
+              Naturaleza Legal<span className="text-red-500 ml-0.5">*</span>
             </label>
             <select
               value={form.tipo}
@@ -140,6 +140,20 @@ export default function ClientesModule() {
             >
               <option value="Jurídica">Jurídica</option>
               <option value="Física">Física</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#374151] mb-1">
+              Categoría<span className="text-red-500 ml-0.5">*</span>
+            </label>
+            <select
+              value={form.categoria}
+              onChange={e => setForm({ ...form, categoria: e.target.value as Client["categoria"] })}
+              className="w-full px-3 py-2.5 rounded-lg border border-[#e2e8f0] text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7eff] transition bg-white"
+            >
+              <option value="Minorista">Minorista</option>
+              <option value="Mayorista">Mayorista</option>
+              <option value="VIP">VIP</option>
             </select>
           </div>
           {field("direccion", "Dirección", "Ej. Av. Principal 1234, Ciudad")}
@@ -189,7 +203,8 @@ export default function ClientesModule() {
             <thead>
               <tr className="bg-[#f8fafc]">
                 <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-6 py-3">Nombre del Cliente</th>
-                <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-4 py-3">Tipo</th>
+                <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-4 py-3">Naturaleza Legal</th>
+                <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-4 py-3">Categoría</th>
                 <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-4 py-3">Usuarios Asociados</th>
                 <th className="text-right text-xs font-semibold text-[#718096] uppercase tracking-wide px-6 py-3">Acciones</th>
               </tr>
@@ -218,6 +233,11 @@ export default function ClientesModule() {
                   <td className="px-4 py-4">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${c.tipo === "Jurídica" ? "bg-purple-100 text-purple-700" : "bg-sky-100 text-sky-700"}`}>
                       {c.tipo}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#eaf3ff] text-[#1a7eff]">
+                      {c.categoria}
                     </span>
                   </td>
                   <td className="px-4 py-4">

@@ -2,3 +2,8 @@
 Django>=5.2,<5.3
 mozilla-django-oidc>=4.0,<5.0
 python-dotenv>=1.0
+
+# Solo para generar la documentación del código (docs/). No hace falta para
+# levantar el sistema; sí para reconstruir docs/_build con:
+#   cd docs && ../backend/.venv/Scripts/python -m sphinx -b html . _build/html
+sphinx>=8.0

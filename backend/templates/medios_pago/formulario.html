@@ -1,0 +1,61 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Alta y edición de medios de pago. Sirve para las dos cosas: si la vista mandó
+"medio", estamos editando.
+
+Ojo con los nombres de los campos: la vista lee request.POST["numero"] y
+request.POST["banco"], que NO se llaman igual que los campos del modelo
+(numero_cuenta_o_tarjeta y banco_o_proveedor). Si se cambian acá hay que
+cambiarlos también en medios_pago/views.py.
+
+"tipos" es MedioPago.TIPO_CHOICES, o sea pares (valor, etiqueta).
+{% endcomment %}
+
+{% block titulo_pagina %}{{ titulo }} — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>{{ titulo }}</h1>
+  </div>
+
+  <form method="post"
+        action="{% if medio %}{% url 'editar_medio_pago' medio.pk %}{% else %}{% url 'crear_medio_pago' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="campo">
+      <label for="tipo">Tipo</label>
+      <select id="tipo" name="tipo" required>
+        <option value="">— Elegí un tipo —</option>
+        {% for valor, etiqueta in tipos %}
+          <option value="{{ valor }}" {% if medio.tipo == valor %}selected{% endif %}>{{ etiqueta }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="campo">
+      <label for="alias">Alias</label>
+      <input type="text" id="alias" name="alias" maxlength="50" required
+             value="{{ medio.alias|default:'' }}" placeholder="Mi Visa ITAU">
+      <p class="ayuda">Un nombre descriptivo, para reconocerlo de un vistazo.</p>
+    </div>
+
+    <div class="campo">
+      <label for="numero">Número o cuenta</label>
+      <input type="text" id="numero" name="numero" maxlength="50" required
+             value="{{ medio.numero_cuenta_o_tarjeta|default:'' }}">
+    </div>
+
+    <div class="campo">
+      <label for="banco">Banco o proveedor</label>
+      <input type="text" id="banco" name="banco" maxlength="100"
+             value="{{ medio.banco_o_proveedor|default:'' }}" placeholder="Banco Itaú">
+      <p class="ayuda">Opcional.</p>
+    </div>
+
+    <div class="botonera">
+      <button type="submit" class="boton">Guardar</button>
+      <a class="boton secundario" href="{% url 'listar_medios_pago' %}">Cancelar</a>
+    </div>
+  </form>
+{% endblock %}

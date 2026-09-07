@@ -1,0 +1,73 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Configuración de porcentajes de comisión por segmento de cliente.
+La vista manda "segmentos" ordenados de menor a mayor porcentaje.
+{% endcomment %}
+
+{% block titulo_pagina %}Comisiones — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>Porcentajes de comisión</h1>
+    <div style="display:flex; gap:12px">
+      <a class="boton secundario" href="{% url 'asignar_segmentos' %}">Asignar a clientes</a>
+      <a class="boton" href="{% url 'crear_segmento' %}">Nuevo segmento</a>
+    </div>
+  </div>
+
+  <p class="ayuda" style="margin-top:-12px; margin-bottom:20px">
+    Cada segmento de cliente tiene su porcentaje de comisión. Acá se configuran;
+    el cálculo sobre cada operación de compra o venta se hace en el módulo de
+    transacciones.
+  </p>
+
+  {% if segmentos %}
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Segmento</th>
+            <th class="numero">Comisión</th>
+            <th class="numero">Clientes</th>
+            <th>Descripción</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for segmento in segmentos %}
+            <tr>
+              <td><strong>{{ segmento.nombre }}</strong></td>
+              <td class="numero">{{ segmento.porcentaje_comision|floatformat:2 }} %</td>
+              <td class="numero">{{ segmento.cantidad_clientes }}</td>
+              <td>{{ segmento.descripcion|default:"—" }}</td>
+              <td>
+                {% if segmento.activo %}
+                  <span class="etiqueta activo">Activo</span>
+                {% else %}
+                  <span class="etiqueta inactivo">Inactivo</span>
+                {% endif %}
+              </td>
+              <td class="acciones">
+                {% if segmento.activo %}
+                  <a href="{% url 'editar_segmento' segmento.pk %}">Editar</a>
+                  {# Baja lógica, por POST: un GET que modifica datos lo puede
+                     disparar sola cualquier precarga del navegador. #}
+                  <form method="post" action="{% url 'eliminar_segmento' segmento.pk %}"
+                        style="display:inline"
+                        onsubmit="return confirm('¿Dar de baja el segmento «{{ segmento.nombre }}»?')">
+                    {% csrf_token %}
+                    <button type="submit" class="boton peligro">Dar de baja</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="vacio">Todavía no hay segmentos configurados.</p>
+  {% endif %}
+{% endblock %}
