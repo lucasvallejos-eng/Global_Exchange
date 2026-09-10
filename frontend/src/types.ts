@@ -5,7 +5,8 @@ export interface ClienteAsignado {
   id: string;
   razonSocial: string;
   tipoPersona: "Física" | "Jurídica";
-  tipoCliente: ClientCategory;
+  tipoCliente: ClientCategory | string | null;
+  descuentoCompra: number | null;
 }
 
 export interface User {

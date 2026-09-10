@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import MediosPagoModule from "./MediosPagoModule";
 
 const initialProfile = {
   username: "juan123",
@@ -215,6 +216,8 @@ export default function ConfiguracionDatosModule() {
           </div>
         </div>
       </div>
+
+      <MediosPagoModule />
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-[60] rounded-xl bg-[#0f172a] px-4 py-3 text-sm font-medium text-white shadow-lg">

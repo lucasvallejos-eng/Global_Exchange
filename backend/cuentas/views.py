@@ -9,6 +9,8 @@ from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from clientes.models import Cliente
+
 
 def portada(request):
     """
@@ -38,6 +40,19 @@ def api_me(request):
     get_token(request)
 
     roles = list(request.user.groups.values_list("name", flat=True))
+    clientes = [
+        {
+            "id": str(cliente.id),
+            "razonSocial": cliente.nombre,
+            "tipoPersona": cliente.tipo,
+            "tipoCliente": cliente.segmento.nombre if cliente.segmento else None,
+            "descuentoCompra": (
+                float(cliente.descuento_compra)
+                if cliente.descuento_compra is not None else None
+            ),
+        }
+        for cliente in Cliente.objects.filter(usuarios=request.user).select_related("segmento")
+    ]
     return JsonResponse(
         {
             "authenticated": True,
@@ -45,6 +60,7 @@ def api_me(request):
             "nombre": request.user.get_full_name() or request.user.username,
             "email": request.user.email,
             "roles": roles,
+            "clientesAsignados": clientes,
         }
     )
 

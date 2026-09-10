@@ -10,7 +10,7 @@ const formatPyg = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-export default function SimulacionModule({ userType }: { userType: ClientType }) {
+export default function SimulacionModule({ userType, descuentoCompra }: { userType: ClientType; descuentoCompra: number }) {
   const [tab, setTab] = useState<SimulacionType>("compra");
   const [amount, setAmount] = useState("1000");
   const [currency, setCurrency] = useState<string>("");
@@ -34,15 +34,15 @@ export default function SimulacionModule({ userType }: { userType: ClientType })
   const rate = useMemo(() => {
     if (!tasa) return 0;
     const mode = tab === "compra" ? "venta" : "compra";
-    return getAppliedRate(tasa, mode, userType);
-  }, [tasa, tab, userType]);
+    return getAppliedRate(tasa, mode, descuentoCompra);
+  }, [tasa, tab, descuentoCompra]);
 
   const numericAmount = Number.parseFloat(amount) || 0;
   const total = numericAmount * rate;
 
   const typeLabel = tab === "compra" ? "Compra" : "Venta";
   const resultLabel = tab === "compra" ? "Total a pagar" : "Total a recibir";
-  const variationLabel = userType === "Minorista" ? "sin variación" : userType === "Mayorista" ? "-2% en ventas / +2% en compras" : "-5% en ventas / +5% en compras";
+  const variationLabel = `${(descuentoCompra * 100).toFixed(2)}% de descuento en compras`;
 
   return (
     <div className="space-y-6">

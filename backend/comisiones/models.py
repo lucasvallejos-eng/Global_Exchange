@@ -11,9 +11,9 @@ class SegmentoCliente(models.Model):
     cálculo de la comisión sobre una operación de compra/venta corresponde al
     Sprint 3, según la guía de la cátedra.
 
-    El segmento se guarda aparte y todavía no se asocia al modelo ``Cliente``.
-    Esa relación se agrega cuando haga falta aplicar la comisión, para no
-    tocar el modelo de clientes antes de tiempo.
+    Cada cliente referencia uno de estos segmentos mediante ``Cliente.segmento``.
+    El porcentaje numérico se consulta desde esa relación al calcular una
+    operación; el nombre solo sirve como etiqueta visible.
     """
 
     nombre = models.CharField(
@@ -26,6 +26,13 @@ class SegmentoCliente(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         help_text="Porcentaje que se le cobra a este segmento, entre 0 y 100.",
+    )
+    descuento_compra = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+        help_text="Descuento aplicado a operaciones de compra, entre 0 y 1.",
     )
     descripcion = models.CharField(max_length=200, blank=True)
     activo = models.BooleanField(default=True)

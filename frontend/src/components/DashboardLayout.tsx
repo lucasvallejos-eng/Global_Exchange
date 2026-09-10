@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { User, Role, ROLE_LABELS, ClienteAsignado } from "../types";
 import ClientesModule from "./ClientesModule";
 import CompraDivisasModule from "./CompraDivisasModule";
@@ -77,36 +77,30 @@ const PLACEHOLDER_TEXT: Record<string, string> = {
   "monedas-historial": "APARTADO DE HISTORIAL DE MONEDAS",
 };
 
-const CLIENT_NAMES = ["María González", "Juan Pérez", "Roberto Silva", "Laura Martínez", "Andrea López"];
-
 export default function DashboardLayout({ user, onLogout }: Props) {
   const navItems = NAV_BY_ROLE[user.role];
   const [activeSection, setActiveSection] = useState(navItems[0]?.id ?? "");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [clientDropdown, setClientDropdown] = useState(false);
   const [manualClientType, setManualClientType] = useState<ClientType>("Minorista");
 
   const assignedClients: ClienteAsignado[] = useMemo(() => {
-    if (user.clientesAsignados && user.clientesAsignados.length > 0) {
-      return user.clientesAsignados;
-    }
-
-    return [{
-      id: "default-client",
-      razonSocial: user.name,
-      tipoPersona: "Física",
-      // El segmento comercial (Minorista/Mayorista/VIP) es un dato del
-      // cliente en el backend (SegmentoCliente), no algo que se derive del
-      // rol de Keycloak. Sin datos reales todavía, arranca en el nivel base.
-      tipoCliente: "Minorista",
-    }];
+    return user.clientesAsignados ?? [];
   }, [user]);
 
-  const [activeClientId, setActiveClientId] = useState<string>(assignedClients[0]?.id ?? "default-client");
+  const [activeClientId, setActiveClientId] = useState<string | null>(assignedClients[0]?.id ?? null);
+  useEffect(() => {
+    if (!assignedClients.some((client) => client.id === activeClientId)) {
+      setActiveClientId(assignedClients[0]?.id ?? null);
+    }
+  }, [assignedClients, activeClientId]);
   const activeClient = assignedClients.find((client) => client.id === activeClientId) ?? assignedClients[0];
-  const userType = activeClient?.tipoCliente ?? "Minorista";
-  const effectiveUserType = user.role === "cajero" ? manualClientType : userType;
-  const showClientContext = user.role === "cliente";
+  const userType = (activeClient?.tipoCliente ?? "Sin categoría") as ClientType;
+  const effectiveDiscount = user.role === "cajero"
+    ? CLIENT_TYPE_OPTIONS.indexOf(manualClientType) * 0.05 + 0.05
+    : activeClient?.descuentoCompra ?? 0;
+  // El cliente activo proviene de las asociaciones cargadas desde Django.
+  // No depender del rol permite mostrarlo también a usuarios con más de un rol.
+  const showClientContext = assignedClients.length > 0;
   const showManualClientType = user.role === "cajero";
 
   const renderContent = () => {
@@ -123,11 +117,11 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "compra-divisas") {
-      return <CompraDivisasModule userType={effectiveUserType} />;
+      return <CompraDivisasModule userType={userType} descuentoCompra={effectiveDiscount} />;
     }
 
     if (activeSection === "venta-divisas") {
-      return <VentaDivisasModule userType={effectiveUserType} />;
+      return <VentaDivisasModule userType={userType} descuentoCompra={effectiveDiscount} />;
     }
 
     if (activeSection === "cierre-caja") {
@@ -143,7 +137,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "medios-pago") {
-      return <MediosPagoModule />;
+      return <MediosPagoModule adminMode />;
     }
 
     if (activeSection === "facturas") {
@@ -155,7 +149,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "simulacion" || activeSection === "simulacion-venta") {
-      return <SimulacionModule userType={effectiveUserType} />;
+      return <SimulacionModule userType={userType} descuentoCompra={effectiveDiscount} />;
     }
 
     if (activeSection === "monedas-historial") {
@@ -163,7 +157,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "cotizaciones") {
-      return <CotizacionesModule userType={effectiveUserType} />;
+      return <CotizacionesModule userType={userType} descuentoCompra={effectiveDiscount} />;
     }
 
     const text = PLACEHOLDER_TEXT[activeSection];
@@ -279,34 +273,21 @@ export default function DashboardLayout({ user, onLogout }: Props) {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#1a7eff] rounded-full"/>
             </button>
 
-            {/* Client active switcher */}
-            {showClientContext && assignedClients.length > 0 && (
-              <div className="relative">
-                <button
-                  onClick={() => setClientDropdown(!clientDropdown)}
-                  className="flex items-center gap-2 border border-[#e2e8f0] rounded-xl px-3 py-2 text-sm font-medium text-[#374151] hover:bg-[#f8fafc] transition-colors"
+            {/* Cliente activo: opciones cargadas desde /api/me/. */}
+            {showClientContext && (
+              <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b]">Cliente</span>
+                <select
+                  value={activeClientId ?? ""}
+                  onChange={(event) => setActiveClientId(event.target.value)}
+                  className="max-w-[220px] bg-transparent text-sm font-semibold text-[#0f172a] outline-none"
+                  aria-label="Cliente activo"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                  <span className="max-w-[180px] truncate text-left">{activeClient?.razonSocial}</span>
-                  <span className="rounded-full bg-[#eef6ff] px-2 py-0.5 text-[10px] font-semibold text-[#1a7eff]">{userType}</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                </button>
-                {clientDropdown && (
-                  <div className="absolute right-0 mt-1 w-72 bg-white border border-[#e2e8f0] rounded-xl shadow-lg z-20 overflow-hidden">
-                    {assignedClients.map((client) => (
-                      <button
-                        key={client.id}
-                        onClick={() => { setActiveClientId(client.id); setClientDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 text-sm hover:bg-[#f0f7ff] transition-colors ${client.id === activeClientId ? "text-[#1a7eff] font-semibold bg-[#f0f7ff]" : "text-[#374151]"}`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="truncate">{client.razonSocial}</span>
-                          <span className="rounded-full bg-[#eef6ff] px-2 py-0.5 text-[10px] font-semibold text-[#1a7eff]">{client.tipoCliente}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  {assignedClients.map((client) => (
+                    <option key={client.id} value={client.id}>{client.razonSocial}</option>
+                  ))}
+                </select>
+                <span className="rounded-full bg-[#eef6ff] px-2 py-0.5 text-[10px] font-semibold text-[#1a7eff]">{userType}</span>
               </div>
             )}
 
@@ -329,10 +310,6 @@ export default function DashboardLayout({ user, onLogout }: Props) {
         </main>
       </div>
 
-      {/* Overlay for client dropdown */}
-      {clientDropdown && (
-        <div className="fixed inset-0 z-10" onClick={() => setClientDropdown(false)}/>
-      )}
     </div>
   );
 }

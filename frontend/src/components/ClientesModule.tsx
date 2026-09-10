@@ -32,7 +32,7 @@ export default function ClientesModule() {
 
   const usuarioLabel = (id: number) => {
     const u = usuarios.find(x => x.id === id);
-    return u ? `${u.nombre} (${u.username})` : String(id);
+    return u ? u.nombre : String(id);
   };
 
   const validate = () => {
@@ -162,7 +162,7 @@ export default function ClientesModule() {
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1">Usuarios a Asociar</label>
             <MultiSelect
-              options={usuarios.map(u => ({ value: String(u.id), label: `${u.nombre} (${u.username})` }))}
+              options={usuarios.map(u => ({ value: String(u.id), label: u.nombre }))}
               selected={form.usuarios.map(String)}
               onChange={values => setForm({ ...form, usuarios: values.map(Number) })}
               placeholder="Ninguno (opcional)"
