@@ -26,7 +26,9 @@ export default function CotizacionesModule({ userType, descuentoCompra }: { user
               {getClientTypeBadge(userType, descuentoCompra)}
             </div>
             <div className="rounded-full bg-[#edf4ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff]">
-              Última actualización: Hoy a las 09:30 hs
+              Última actualización: {monedas.length > 0 && monedas[0].ultimaActualizacion
+                ? new Date(monedas[0].ultimaActualizacion).toLocaleString("es-PY")
+                : "Sin actualizaciones"}
             </div>
           </div>
         </div>

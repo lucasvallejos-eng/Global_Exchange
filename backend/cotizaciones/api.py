@@ -9,16 +9,18 @@ Las pantallas de Django (``cotizaciones/views.py``) siguen sirviendo el CRUD
 por plantillas; esto es lo mismo en JSON.
 """
 import json
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from cuentas.decorators import rol_requerido
 from monedas.models import Moneda
 
-from .models import Cotizacion
+from .models import Cotizacion, HistorialCotizacion
 
 # Mismos roles que las pantallas de Django (ver cotizaciones/views.py).
 GESTIONAN_TASAS = ("administrador", "analista_cambiario")
@@ -37,6 +39,7 @@ def _a_dict(cotizacion):
         "precioVenta": float(cotizacion.precio_venta),
         "activa": cotizacion.activa,
         "fecha": cotizacion.fecha.isoformat(),
+        "ultimaActualizacion": cotizacion.moneda.fecha_actualizacion.isoformat(),
     }
 
 
@@ -52,6 +55,18 @@ def _decimal(valor):
         return Decimal(str(valor))
     except (InvalidOperation, ValueError, TypeError):
         return None
+
+
+def _bloqueo_por_tiempo(moneda):
+    transcurrido = timezone.now() - moneda.fecha_actualizacion
+    restante = timedelta(hours=1) - transcurrido
+    if restante.total_seconds() <= 0:
+        return None
+    minutos = max(1, int((restante.total_seconds() + 59) // 60))
+    return (
+        "No se puede actualizar la cotización. Debe transcurrir al menos "
+        f"1 hora desde el último cambio. Tiempo restante: {minutos} minutos."
+    )
 
 
 @require_http_methods(["GET", "POST"])
@@ -98,9 +113,25 @@ def _crear(request):
             status=400,
         )
 
+    if moneda.cotizaciones.filter(activa=True).exists():
+        bloqueo = _bloqueo_por_tiempo(moneda)
+        if bloqueo:
+            return JsonResponse({"error": bloqueo}, status=400)
+
     # La nueva pasa a ser la vigente; las anteriores quedan como histórico.
+    vigente = moneda.cotizaciones.filter(activa=True).order_by("-fecha").first()
     moneda.cotizaciones.filter(activa=True).update(activa=False)
     cotizacion.save()
+    if vigente:
+        HistorialCotizacion.objects.create(
+            moneda=moneda,
+            administrador=request.user,
+            precio_compra_anterior=vigente.precio_compra,
+            precio_compra_nuevo=cotizacion.precio_compra,
+            precio_venta_anterior=vigente.precio_venta,
+            precio_venta_nuevo=cotizacion.precio_venta,
+        )
+    moneda.save(update_fields=["fecha_actualizacion"])
     return JsonResponse(_a_dict(cotizacion), status=201)
 
 
@@ -120,6 +151,13 @@ def cotizaciones_detalle(request, pk):
         return JsonResponse({}, status=204)
 
     datos = _cuerpo(request)
+    cambia_precio = "precioCompra" in datos or "precioVenta" in datos
+    if cambia_precio:
+        bloqueo = _bloqueo_por_tiempo(cotizacion.moneda)
+        if bloqueo:
+            return JsonResponse({"error": bloqueo}, status=400)
+        precio_compra_anterior = cotizacion.precio_compra
+        precio_venta_anterior = cotizacion.precio_venta
     if "precioCompra" in datos:
         valor = _decimal(datos["precioCompra"])
         if valor is None:
@@ -142,4 +180,14 @@ def cotizaciones_detalle(request, pk):
         )
 
     cotizacion.save()
+    if cambia_precio:
+        HistorialCotizacion.objects.create(
+            moneda=cotizacion.moneda,
+            administrador=request.user,
+            precio_compra_anterior=precio_compra_anterior,
+            precio_compra_nuevo=cotizacion.precio_compra,
+            precio_venta_anterior=precio_venta_anterior,
+            precio_venta_nuevo=cotizacion.precio_venta,
+        )
+        cotizacion.moneda.save(update_fields=["fecha_actualizacion"])
     return JsonResponse(_a_dict(cotizacion))

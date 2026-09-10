@@ -6,6 +6,7 @@ class Moneda(models.Model):
     simbolo = models.CharField(max_length=5)               # Ej: "$"
     activo = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"

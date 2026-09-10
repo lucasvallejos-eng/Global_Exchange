@@ -117,7 +117,18 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "compra-divisas") {
-      return <CompraDivisasModule userType={userType} descuentoCompra={effectiveDiscount} />;
+      return (
+        <CompraDivisasModule
+          userType={userType}
+          descuentoCompra={effectiveDiscount}
+          onAddPaymentMethod={() => {
+            setActiveSection("configuracion");
+            window.setTimeout(() => {
+              document.getElementById("medios-pago-config")?.scrollIntoView({ behavior: "smooth" });
+            }, 0);
+          }}
+        />
+      );
     }
 
     if (activeSection === "venta-divisas") {

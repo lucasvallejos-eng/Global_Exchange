@@ -12,10 +12,18 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-export default function CompraDivisasModule({ userType, descuentoCompra }: { userType: ClientType; descuentoCompra: number }) {
+export default function CompraDivisasModule({
+  userType,
+  descuentoCompra,
+  onAddPaymentMethod,
+}: {
+  userType: ClientType;
+  descuentoCompra: number;
+  onAddPaymentMethod: () => void;
+}) {
   const [amount, setAmount] = useState("500");
   const [currency, setCurrency] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<string>("nuevo");
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [newPaymentType, setNewPaymentType] = useState<PaymentMethod>("tarjeta");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -28,7 +36,9 @@ export default function CompraDivisasModule({ userType, descuentoCompra }: { use
   }, []);
 
   useEffect(() => {
-    if (savedMethods.length > 0 && paymentMethod === "nuevo") setPaymentMethod(String(savedMethods[0].id));
+    if (savedMethods.length > 0 && !savedMethods.some((medio) => String(medio.id) === paymentMethod)) {
+      setPaymentMethod(String(savedMethods[0].id));
+    }
   }, [paymentMethod, savedMethods]);
 
   const [cardNumber, setCardNumber] = useState("");
@@ -57,7 +67,6 @@ export default function CompraDivisasModule({ userType, descuentoCompra }: { use
     transferencia: "Transferencia Bancaria",
     billetera: "Billetera Digital",
   };
-  const isNewPaymentMethod = paymentMethod === "nuevo";
   const selectedMethod = savedMethods.find((medio) => String(medio.id) === paymentMethod);
 
   const handleConfirm = () => {
@@ -224,32 +233,33 @@ export default function CompraDivisasModule({ userType, descuentoCompra }: { use
         </div>
 
         <div className="mt-6">
+          <button
+            type="button"
+            onClick={onAddPaymentMethod}
+            className="mb-3 rounded-xl border border-[#1a7eff] px-4 py-2.5 text-sm font-semibold text-[#1a7eff] transition hover:bg-[#eaf3ff]"
+          >
+            Agregar métodos de pagos
+          </button>
           <label className="block">
             <span className="mb-2 block text-sm font-medium text-[#374151]">Método de pago</span>
             <select
                 value={paymentMethod}
-                onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+                onChange={(event) => setPaymentMethod(event.target.value)}
+                disabled={savedMethods.length === 0}
                 className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
               >
+                {savedMethods.length === 0 && <option value="">No hay métodos guardados</option>}
                 {savedMethods.map((medio) => (
                   <option key={medio.id} value={medio.id}>{etiquetaMedioPago(medio)}</option>
                 ))}
-                <option value="nuevo">Agregar nuevo método de pago...</option>
               </select>
           </label>
+          {savedMethods.length === 0 && (
+            <p className="mt-2 text-xs text-[#64748b]">
+              Registra un método desde Configuración de Datos para continuar.
+            </p>
+          )}
         </div>
-
-        {isNewPaymentMethod && <div className="mt-6">
-          <label className="mb-4 block">
-            <span className="mb-2 block text-sm font-medium text-[#374151]">Tipo del nuevo método</span>
-            <select value={newPaymentType} onChange={(event) => setNewPaymentType(event.target.value as PaymentMethod)} className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm">
-              <option value="tarjeta">Tarjeta de crédito</option>
-              <option value="transferencia">Transferencia bancaria</option>
-              <option value="billetera">Billetera digital</option>
-            </select>
-          </label>
-          {renderPaymentFields()}
-        </div>}
 
         {successMessage && (
           <div className="mt-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
@@ -260,7 +270,7 @@ export default function CompraDivisasModule({ userType, descuentoCompra }: { use
         <div className="mt-8 flex justify-end">
           <button
             onClick={() => setIsModalOpen(true)}
-            disabled={savedMethods.length === 0 && !isNewPaymentMethod}
+            disabled={savedMethods.length === 0}
             className="rounded-xl bg-[#1a7eff] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#146be7] disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             Comprar
