@@ -2,11 +2,11 @@
 
 Sirve dos pantallas distintas con los mismos datos:
 
-* la de **cotizaciones vigentes**, que pide solo las activas;
-* la de **historial**, que pide todas las de una moneda ordenadas por fecha.
+* La de **cotizaciones vigentes**, que solicita solo las activas.
+* La de **historial**, que solicita todas las cotizaciones de una moneda ordenadas por fecha.
 
-Las pantallas de Django (``cotizaciones/views.py``) siguen sirviendo el CRUD
-por plantillas; esto es lo mismo en JSON.
+Las pantallas basadas en plantillas de Django (``cotizaciones/views.py``) mantienen el CRUD
+tradicional; este módulo expone la misma funcionalidad formateada en JSON.
 """
 import json
 from datetime import timedelta
@@ -29,6 +29,15 @@ CONSULTAN = ("administrador", "analista_cambiario", "cajero", "cliente")
 
 
 def _a_dict(cotizacion):
+    """Serializa un objeto Cotizacion a un diccionario JSON compatible con la maqueta.
+
+    Args:
+        cotizacion (Cotizacion): Instancia de cotización a serializar.
+
+    Returns:
+        dict: Diccionario estructurado con los atributos de la cotización, datos de la
+            moneda relacionada y marcas de tiempo formateadas en ISO 8601.
+    """
     return {
         "id": cotizacion.id,
         "monedaId": cotizacion.moneda_id,
@@ -44,6 +53,14 @@ def _a_dict(cotizacion):
 
 
 def _cuerpo(request):
+    """Decodifica el cuerpo en formato JSON de la solicitud HTTP entrante.
+
+    Args:
+        request (HttpRequest): Objeto de solicitud de Django.
+
+    Returns:
+        dict: Diccionario decodificado o un diccionario vacío ante un fallo de parseo.
+    """
     try:
         return json.loads(request.body or "{}")
     except json.JSONDecodeError:
@@ -51,6 +68,14 @@ def _cuerpo(request):
 
 
 def _decimal(valor):
+    """Convierte un valor numérico o cadena a un objeto Decimal de Python.
+
+    Args:
+        valor (int | float | str | None): Valor recibido a convertir.
+
+    Returns:
+        Decimal | None: Objeto Decimal o None si el argumento no representa un número válido.
+    """
     try:
         return Decimal(str(valor))
     except (InvalidOperation, ValueError, TypeError):
@@ -58,6 +83,18 @@ def _decimal(valor):
 
 
 def _bloqueo_por_tiempo(moneda):
+    """Calcula si aplica la restricción de bloqueo por tiempo en la actualización de cotizaciones.
+
+    Verifica si ha transcurrido menos de 1 hora desde la última modificación realizada
+    sobre la tasa de la moneda especificada.
+
+    Args:
+        moneda (Moneda): Instancia de la moneda a evaluar.
+
+    Returns:
+        str | None: Mensaje descriptivo con el tiempo restante de bloqueo o None si la
+        actualización ya está habilitada.
+    """
     transcurrido = timezone.now() - moneda.fecha_actualizacion
     restante = timedelta(hours=1) - transcurrido
     if restante.total_seconds() <= 0:
@@ -72,6 +109,20 @@ def _bloqueo_por_tiempo(moneda):
 @require_http_methods(["GET", "POST"])
 @rol_requerido(*CONSULTAN)
 def cotizaciones_lista(request):
+    """Endpoint para listar o registrar cotizaciones en formato JSON.
+
+    Permite consultar cotizaciones vigentes u históricas mediante filtros por parámetro GET
+    (``moneda`` y ``activas``), o registrar una nueva cotización enviando una petición POST.
+
+    Args:
+        request (HttpRequest): Objeto de la solicitud HTTP.
+
+    Returns:
+        JsonResponse: 
+            - Lista de cotizaciones serializadas (200 OK en GET).
+            - Cotización recién creada (201 Created en POST).
+            - Objeto con descripción del error de validación o bloqueo (400 Bad Request).
+    """
     if request.method == "GET":
         consulta = Cotizacion.objects.select_related("moneda")
 
@@ -91,6 +142,18 @@ def cotizaciones_lista(request):
 
 @rol_requerido(*GESTIONAN_TASAS)
 def _crear(request):
+    """Función auxiliar que ejecuta la lógica de alta de una cotización.
+
+    Valida la existencia de la moneda, los precios de compra/venta, la regla de negocio
+    RN10 (venta > compra) mediante ``full_clean()``, el bloqueo de 1 hora y genera
+    automáticamente una entrada en ``HistorialCotizacion``.
+
+    Args:
+        request (HttpRequest): Objeto de solicitud HTTP con payload JSON.
+
+    Returns:
+        JsonResponse: Cotización serializada (201 Created) o error estructurado (400 Bad Request).
+    """
     datos = _cuerpo(request)
 
     try:
@@ -138,6 +201,23 @@ def _crear(request):
 @require_http_methods(["GET", "PATCH", "DELETE"])
 @rol_requerido(*GESTIONAN_TASAS)
 def cotizaciones_detalle(request, pk):
+    """Endpoint para consultar, actualizar parcialmente o eliminar una cotización específica.
+
+    La actualización parcial (PATCH) aplica las validaciones del bloqueo temporal de 1 hora
+    si involucra cambios de precios, ejecuta ``full_clean()`` y registra el evento en
+    el historial de auditoría.
+
+    Args:
+        request (HttpRequest): Objeto de la solicitud HTTP.
+        pk (int): Identificador primario de la cotización.
+
+    Returns:
+        JsonResponse:
+            - Cotización consultada o actualizada (200 OK).
+            - Respuesta vacía tras una eliminación (204 No Content).
+            - Error por validación de datos o restricción de tiempo (400 Bad Request).
+            - Error por registro no encontrado (404 Not Found).
+    """
     try:
         cotizacion = Cotizacion.objects.select_related("moneda").get(pk=pk)
     except Cotizacion.DoesNotExist:

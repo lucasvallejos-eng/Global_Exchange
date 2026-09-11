@@ -21,6 +21,22 @@ from django.core.exceptions import PermissionDenied
 
 
 def rol_requerido(*roles_permitidos):
+    """Decorador para restringir el acceso a vistas según los roles del usuario.
+
+    Verifica que el usuario esté autenticado y posea al menos uno de los roles
+    especificados en la firma. Los roles se consultan directamente desde los
+    grupos de Django mapeados durante el login.
+
+    Args:
+        *roles_permitidos (str): Nombres de los roles autorizados para acceder a la vista.
+
+    Returns:
+        function: Función decoradora que envuelve a la vista objetivo.
+
+    Raises:
+        PermissionDenied: Si el usuario no está autenticado o no posee
+            ninguno de los roles requeridos.
+    """
     def decorador(vista):
         @wraps(vista)
         def envoltura(request, *args, **kwargs):

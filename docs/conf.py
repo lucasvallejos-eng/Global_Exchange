@@ -6,6 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+
 import os
 import sys
 
@@ -49,3 +50,43 @@ language = 'es'
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
+
+# --- Agregar esto a docs/conf.py ---
+
+DJANGO_INTERNAL_DESCRIPTORS = {
+    "DeferredAttribute",
+    "ForwardManyToOneDescriptor",
+    "ForwardOneToOneDescriptor",
+    "ManyToManyDescriptor",
+    "ReverseManyToOneDescriptor",
+    "ReverseOneToOneDescriptor",
+    "ManyToOneRel",
+    "ManyToManyRel",
+    "OneToOneRel",
+    "cached_property",
+}
+
+DJANGO_INTERNAL_NAMES = {
+    "DoesNotExist",
+    "MultipleObjectsReturned",
+}
+
+
+def skip_django_internals(app, what, name, obj, skip, options):
+    """
+    Evita que autodoc documente los descriptores/excepciones internas
+    de Django (en inglés) cuando no agregamos un docstring propio.
+    """
+    # Excepciones automáticas de cada modelo
+    if name in DJANGO_INTERNAL_NAMES:
+        return True
+
+    # Descriptores de campos/relaciones (FK, M2M, etc.)
+    if type(obj).__name__ in DJANGO_INTERNAL_DESCRIPTORS:
+        return True
+
+    return skip
+
+
+def setup(app):
+    app.connect("autodoc-skip-member", skip_django_internals)
