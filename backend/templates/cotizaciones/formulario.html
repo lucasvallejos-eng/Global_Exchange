@@ -1,0 +1,70 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Alta y edición de cotizaciones. Sirve para las dos cosas: si la vista mandó
+"cotizacion", estamos editando.
+
+El bloque "errores" muestra lo que devuelve full_clean() en la vista, que es
+donde se hace cumplir RN10 (la tasa de compra siempre menor que la de venta).
+La validación de verdad es la del servidor; lo de acá es solo para que el
+usuario vea qué pasó sin perder lo que había escrito.
+{% endcomment %}
+
+{% block titulo_pagina %}{{ titulo }} — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>{{ titulo }}</h1>
+  </div>
+
+  {% if errores %}
+    <div class="errores">
+      <ul>
+        {% for error in errores %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post"
+        action="{% if cotizacion %}{% url 'editar_cotizacion' cotizacion.pk %}{% else %}{% url 'crear_cotizacion' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="campo">
+      <label for="moneda">Moneda</label>
+      <select id="moneda" name="moneda" required>
+        <option value="">— Elegí una moneda —</option>
+        {% for moneda in monedas %}
+          <option value="{{ moneda.pk }}"
+            {% if enviado %}{% if enviado.moneda == moneda.pk|stringformat:"s" %}selected{% endif %}
+            {% elif cotizacion.moneda_id == moneda.pk %}selected{% endif %}>
+            {{ moneda.codigo }} — {{ moneda.nombre }}
+          </option>
+        {% endfor %}
+      </select>
+      {% if not monedas %}
+        <p class="ayuda">No hay monedas cargadas todavía:
+          <a href="{% url 'crear_moneda' %}">cargá una primero</a>.</p>
+      {% endif %}
+    </div>
+
+    <div class="campo">
+      <label for="precio_compra">Precio de compra</label>
+      <input type="number" id="precio_compra" name="precio_compra" step="0.01" min="0" required
+             value="{% if enviado %}{{ enviado.precio_compra }}{% else %}{{ cotizacion.precio_compra|default:'' }}{% endif %}">
+      <p class="ayuda">Lo que la casa de cambio paga por la divisa.</p>
+    </div>
+
+    <div class="campo">
+      <label for="precio_venta">Precio de venta</label>
+      <input type="number" id="precio_venta" name="precio_venta" step="0.01" min="0" required
+             value="{% if enviado %}{{ enviado.precio_venta }}{% else %}{{ cotizacion.precio_venta|default:'' }}{% endif %}">
+      <p class="ayuda">Lo que la casa de cambio cobra por la divisa.
+        <strong>Tiene que ser mayor que el precio de compra</strong> (RN10).</p>
+    </div>
+
+    <div class="botonera">
+      <button type="submit" class="boton">Guardar</button>
+      <a class="boton secundario" href="{% url 'listar_cotizaciones' %}">Cancelar</a>
+    </div>
+  </form>
+{% endblock %}

@@ -844,7 +844,8 @@
       "clientAuthenticatorType": "client-secret",
       "secret": "**********",
       "redirectUris": [
-        "http://localhost:8000/oidc/callback/"
+        "http://localhost:8000/oidc/callback/",
+        "http://localhost:8000/"
       ],
       "webOrigins": [
         "http://localhost:8000"
@@ -868,7 +869,8 @@
         "oauth2.jwt.authorization.grant.enabled": "false",
         "oauth2.device.authorization.grant.enabled": "false",
         "backchannel.logout.revoke.offline.tokens": "false",
-        "dpop.bound.access.tokens": "false"
+        "dpop.bound.access.tokens": "false",
+        "post.logout.redirect.uris": "+"
       },
       "authenticationFlowBindingOverrides": {},
       "fullScopeAllowed": true,

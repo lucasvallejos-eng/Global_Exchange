@@ -9,6 +9,8 @@ from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from clientes.models import Cliente
+
 
 def portada(request):
     """
@@ -38,6 +40,19 @@ def api_me(request):
     get_token(request)
 
     roles = list(request.user.groups.values_list("name", flat=True))
+    clientes = [
+        {
+            "id": str(cliente.id),
+            "razonSocial": cliente.nombre,
+            "tipoPersona": cliente.tipo,
+            "tipoCliente": cliente.segmento.nombre if cliente.segmento else None,
+            "descuentoCompra": (
+                float(cliente.descuento_compra)
+                if cliente.descuento_compra is not None else None
+            ),
+        }
+        for cliente in Cliente.objects.filter(usuarios=request.user).select_related("segmento")
+    ]
     return JsonResponse(
         {
             "authenticated": True,
@@ -45,6 +60,7 @@ def api_me(request):
             "nombre": request.user.get_full_name() or request.user.username,
             "email": request.user.email,
             "roles": roles,
+            "clientesAsignados": clientes,
         }
     )
 
@@ -63,10 +79,11 @@ def cerrar_sesion(request):
 
     if not id_token:
         # No había id_token guardado (p.ej. login vía ModelBackend) -> solo
-        # queda cerrar la sesión de Django.
-        return redirect("sesion_cerrada")
+        # queda cerrar la sesión de Django. "portada" ya manda a Keycloak
+        # cuando no hay usuario autenticado.
+        return redirect("portada")
 
-    post_logout_redirect_uri = request.build_absolute_uri(reverse("sesion_cerrada"))
+    post_logout_redirect_uri = request.build_absolute_uri(reverse("portada"))
     query = urlencode(
         {
             "id_token_hint": id_token,

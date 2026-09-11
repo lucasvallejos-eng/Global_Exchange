@@ -12,14 +12,13 @@ const PRIORIDAD_ROLES: Role[] = [
   "analista_cambiario",
   "cajero",
   "cliente",
-  "cliente_general",
 ];
 
 function elegirRol(roles: string[]): Role {
   for (const rol of PRIORIDAD_ROLES) {
     if (roles.includes(rol)) return rol;
   }
-  return "cliente";
+  return "cliente"; // fallback, no debería pasar: "cliente" es el rol por defecto en Keycloak
 }
 
 export default function App() {
@@ -27,7 +26,6 @@ export default function App() {
   const [usuario, setUsuario] = useState<User | null>(null);
 
   useEffect(() => {
-    // Preguntamos al backend quién está logueado (manda la cookie de sesión).
     fetch(`${BACKEND}/api/me/`, { credentials: "include" })
       .then(async (res) => {
         if (res.status === 200) {
@@ -36,6 +34,9 @@ export default function App() {
             name: data.nombre || data.username,
             email: data.email || "",
             role: elegirRol(data.roles || []),
+            // Django ya limita esta lista a los clientes asociados al usuario.
+            // No descartamos asociaciones por la etiqueta del segmento.
+            clientesAsignados: data.clientesAsignados || [],
           });
           setCargando(false);
         } else {
@@ -47,6 +48,20 @@ export default function App() {
         // Si el backend no responde, también mandamos al login.
         window.location.href = `${BACKEND}/`;
       });
+
+    // Solo para levantar el frontend sin autenticación:
+    // setUsuario({
+    //   name: "Juan Pérez",
+    //   email: "cliente@global.com",
+    //   role: "cliente",
+    //   clientesAsignados: [
+    //     { id: "CLI-101", razonSocial: "ABC SRL", tipoPersona: "Jurídica", tipoCliente: "Mayorista" },
+    //     { id: "CLI-102", razonSocial: "TIGO SA", tipoPersona: "Jurídica", tipoCliente: "VIP" },
+    //     { id: "CLI-103", razonSocial: "Horacio Cartes", tipoPersona: "Física", tipoCliente: "VIP" },
+    //     { id: "CLI-104", razonSocial: "Santi Peña", tipoPersona: "Física", tipoCliente: "Minorista" },
+    //   ],
+    // });
+    // setCargando(false);
   }, []);
 
   const cerrarSesion = () => {

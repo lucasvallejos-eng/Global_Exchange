@@ -1,6 +1,20 @@
-import { useState } from "react";
-import { User, Role, ROLE_LABELS } from "../types";
+import { useEffect, useMemo, useState } from "react";
+import { User, Role, ROLE_LABELS, ClienteAsignado } from "../types";
 import ClientesModule from "./ClientesModule";
+import CompraDivisasModule from "./CompraDivisasModule";
+import VentaDivisasModule from "./VentaDivisasModule";
+import AperturaCajaModule from "./AperturaCajaModule";
+import CierraCajaModule from "./CierraCajaModule";
+import MonedasModule from "./MonedasModule";
+import FacturaModule from "./FacturaModule";
+import SimulacionModule from "./SimulacionModule";
+import CotizacionesModule from "./CotizacionesModule";
+import PorcentajesModule from "./PorcentajesModule";
+import MediosPagoModule from "./MediosPagoModule";
+import MonedasHistorialModule from "./MonedasHistorialModule";
+import HistorialTransaccionesModule from "./HistorialTransaccionesModule";
+import ConfiguracionDatosModule from "./ConfiguracionDatosModule";
+import { CLIENT_TYPE_OPTIONS, ClientType } from "../lib/clientRates";
 
 interface Props {
   user: User;
@@ -23,22 +37,29 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   cliente: [
     { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
     { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5"/> },
+    { id: "cotizaciones", label: "Cotizaciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
     { id: "facturas", label: "Facturas", icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/> },
+    { id: "simulacion", label: "Simulación", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
+    { id: "monedas-historial", label: "Historial de Monedas", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
     { id: "historial", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
     { id: "configuracion", label: "Configuración de Datos", icon: <Icon path="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/> },
   ],
   cajero: [
+    { id: "apertura-caja", label: "Apertura de Caja", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6"/> },
     { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
     { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5"/> },
+    { id: "cierre-caja", label: "Cierre de Caja", icon: <Icon path="M6 2h12v20H6zM9 6h6M9 10h6M9 14h6"/> },
   ],
   analista_cambiario: [
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
+    { id: "historial-transacciones", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
   ],
   administrador: [
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
+    { id: "porcentajes", label: "Porcentajes", icon: <Icon path="M12 1v22M1 12h22"/> },
+    { id: "medios-pago", label: "Medios de Pago", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6"/> },
     { id: "clientes", label: "Clientes", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/> },
   ],
-  cliente_general: [],
 };
 
 const PLACEHOLDER_TEXT: Record<string, string> = {
@@ -48,21 +69,108 @@ const PLACEHOLDER_TEXT: Record<string, string> = {
   "historial": "APARTADO DE HISTORIAL DE TRANSACCIONES",
   "configuracion": "APARTADO DE CONFIGURACIÓN DE DATOS",
   "monedas": "APARTADO DE MONEDAS, DAR DE ALTA, BAJA Y CAMBIAR COTIZACIÓN",
+  "simulacion": "APARTADO DE SIMULACIÓN",
+  "apertura-caja": "APARTADO DE APERTURA DE CAJA",
+  "cierre-caja": "APARTADO DE CIERRE DE CAJA",
+  "historial-transacciones": "APARTADO DE HISTORIAL DE TRANSACCIONES",
+  //"simulacion-venta": "APARTADO DE SIMULACIÓN DE VENTA",
+  "monedas-historial": "APARTADO DE HISTORIAL DE MONEDAS",
 };
-
-const CLIENT_NAMES = ["María González", "Juan Pérez", "Roberto Silva", "Laura Martínez", "Andrea López"];
 
 export default function DashboardLayout({ user, onLogout }: Props) {
   const navItems = NAV_BY_ROLE[user.role];
   const [activeSection, setActiveSection] = useState(navItems[0]?.id ?? "");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [selectedClient, setSelectedClient] = useState(CLIENT_NAMES[0]);
-  const [clientDropdown, setClientDropdown] = useState(false);
+  const [manualClientType, setManualClientType] = useState<ClientType>("Minorista");
+
+  const assignedClients: ClienteAsignado[] = useMemo(() => {
+    return user.clientesAsignados ?? [];
+  }, [user]);
+
+  const [activeClientId, setActiveClientId] = useState<string | null>(assignedClients[0]?.id ?? null);
+  useEffect(() => {
+    if (!assignedClients.some((client) => client.id === activeClientId)) {
+      setActiveClientId(assignedClients[0]?.id ?? null);
+    }
+  }, [assignedClients, activeClientId]);
+  const activeClient = assignedClients.find((client) => client.id === activeClientId) ?? assignedClients[0];
+  const userType = (activeClient?.tipoCliente ?? "Sin categoría") as ClientType;
+  const effectiveDiscount = user.role === "cajero"
+    ? CLIENT_TYPE_OPTIONS.indexOf(manualClientType) * 0.05 + 0.05
+    : activeClient?.descuentoCompra ?? 0;
+  // El cliente activo proviene de las asociaciones cargadas desde Django.
+  // No depender del rol permite mostrarlo también a usuarios con más de un rol.
+  const showClientContext = assignedClients.length > 0;
+  const showManualClientType = user.role === "cajero";
 
   const renderContent = () => {
     if (activeSection === "clientes" && user.role === "administrador") {
       return <ClientesModule />;
     }
+
+    if (activeSection === "historial" || activeSection === "historial-transacciones") {
+      return <HistorialTransaccionesModule />;
+    }
+
+    if (activeSection === "apertura-caja") {
+      return <AperturaCajaModule />;
+    }
+
+    if (activeSection === "compra-divisas") {
+      return (
+        <CompraDivisasModule
+          userType={userType}
+          descuentoCompra={effectiveDiscount}
+          onAddPaymentMethod={() => {
+            setActiveSection("configuracion");
+            window.setTimeout(() => {
+              document.getElementById("medios-pago-config")?.scrollIntoView({ behavior: "smooth" });
+            }, 0);
+          }}
+        />
+      );
+    }
+
+    if (activeSection === "venta-divisas") {
+      return <VentaDivisasModule userType={userType} descuentoCompra={effectiveDiscount} />;
+    }
+
+    if (activeSection === "cierre-caja") {
+      return <CierraCajaModule />;
+    }
+
+    if (activeSection === "monedas") {
+      return <MonedasModule />;
+    }
+
+    if (activeSection === "porcentajes") {
+      return <PorcentajesModule />;
+    }
+
+    if (activeSection === "medios-pago") {
+      return <MediosPagoModule adminMode />;
+    }
+
+    if (activeSection === "facturas") {
+      return <FacturaModule />;
+    }
+
+    if (activeSection === "configuracion") {
+      return <ConfiguracionDatosModule />;
+    }
+
+    if (activeSection === "simulacion" || activeSection === "simulacion-venta") {
+      return <SimulacionModule userType={userType} descuentoCompra={effectiveDiscount} />;
+    }
+
+    if (activeSection === "monedas-historial") {
+      return <MonedasHistorialModule />;
+    }
+
+    if (activeSection === "cotizaciones") {
+      return <CotizacionesModule userType={userType} descuentoCompra={effectiveDiscount} />;
+    }
+
     const text = PLACEHOLDER_TEXT[activeSection];
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -148,36 +256,49 @@ export default function DashboardLayout({ user, onLogout }: Props) {
           </div>
 
           <div className="flex items-center gap-3">
+            {showManualClientType && (
+              <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b]">Tipo</span>
+                <select
+                  value={manualClientType}
+                  onChange={(e) => setManualClientType(e.target.value as ClientType)}
+                  className="bg-transparent text-sm font-semibold text-[#0f172a] outline-none"
+                >
+                  {CLIENT_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {showClientContext && (
+              <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b]">Tipo</span>
+                <span className="text-sm font-semibold text-[#0f172a]">{userType}</span>
+              </div>
+            )}
+
             {/* Notification bell */}
             <button className="relative p-2 rounded-lg hover:bg-[#f0f4f8] transition-colors text-[#6b7280]">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#1a7eff] rounded-full"/>
             </button>
 
-            {/* Client dropdown (only for cliente role) */}
-            {user.role === "cliente" && (
-              <div className="relative">
-                <button
-                  onClick={() => setClientDropdown(!clientDropdown)}
-                  className="flex items-center gap-2 border border-[#e2e8f0] rounded-xl px-3 py-2 text-sm font-medium text-[#374151] hover:bg-[#f8fafc] transition-colors"
+            {/* Cliente activo: opciones cargadas desde /api/me/. */}
+            {showClientContext && (
+              <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b]">Cliente</span>
+                <select
+                  value={activeClientId ?? ""}
+                  onChange={(event) => setActiveClientId(event.target.value)}
+                  className="max-w-[220px] bg-transparent text-sm font-semibold text-[#0f172a] outline-none"
+                  aria-label="Cliente activo"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                  {selectedClient}
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                </button>
-                {clientDropdown && (
-                  <div className="absolute right-0 mt-1 w-52 bg-white border border-[#e2e8f0] rounded-xl shadow-lg z-20 overflow-hidden">
-                    {CLIENT_NAMES.map(name => (
-                      <button
-                        key={name}
-                        onClick={() => { setSelectedClient(name); setClientDropdown(false); }}
-                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[#f0f7ff] transition-colors ${name === selectedClient ? "text-[#1a7eff] font-semibold bg-[#f0f7ff]" : "text-[#374151]"}`}
-                      >
-                        {name}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  {assignedClients.map((client) => (
+                    <option key={client.id} value={client.id}>{client.razonSocial}</option>
+                  ))}
+                </select>
+                <span className="rounded-full bg-[#eef6ff] px-2 py-0.5 text-[10px] font-semibold text-[#1a7eff]">{userType}</span>
               </div>
             )}
 
@@ -200,10 +321,6 @@ export default function DashboardLayout({ user, onLogout }: Props) {
         </main>
       </div>
 
-      {/* Overlay for client dropdown */}
-      {clientDropdown && (
-        <div className="fixed inset-0 z-10" onClick={() => setClientDropdown(false)}/>
-      )}
     </div>
   );
 }

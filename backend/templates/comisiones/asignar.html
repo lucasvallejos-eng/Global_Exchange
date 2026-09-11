@@ -1,0 +1,79 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Asignación de segmento a cada cliente. Un solo formulario con un desplegable
+por cliente: son pocos clientes y así se ve toda la asignación de una vez.
+El name de cada desplegable es "segmento_<id del cliente>", que es lo que
+lee la vista.
+{% endcomment %}
+
+{% block titulo_pagina %}Asignar segmentos — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>Segmento de cada cliente</h1>
+    <a class="boton secundario" href="{% url 'listar_segmentos' %}">Ver porcentajes</a>
+  </div>
+
+  <p class="ayuda" style="margin-top:-12px; margin-bottom:20px">
+    De acá sale el porcentaje de comisión que le corresponde a cada cliente.
+    Un cliente sin segmento no tiene comisión configurada.
+  </p>
+
+  {% if clientes %}
+    <form method="post" action="{% url 'asignar_segmentos' %}">
+      {% csrf_token %}
+      <div class="tabla-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Tipo</th>
+              <th>Segmento</th>
+              <th class="numero">Comisión</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cliente in clientes %}
+              <tr>
+                <td><strong>{{ cliente.nombre }}</strong></td>
+                <td>{{ cliente.get_tipo_display }}</td>
+                <td>
+                  <select name="segmento_{{ cliente.pk }}">
+                    <option value="">— Sin segmento —</option>
+                    {% for segmento in segmentos %}
+                      <option value="{{ segmento.pk }}"
+                        {% if cliente.segmento_id == segmento.pk %}selected{% endif %}>
+                        {{ segmento.nombre }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="numero">
+                  {% if cliente.porcentaje_comision is not None %}
+                    {{ cliente.porcentaje_comision|floatformat:2 }} %
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="botonera">
+        <button type="submit" class="boton">Guardar asignaciones</button>
+      </div>
+    </form>
+
+    {% if not segmentos %}
+      <p class="ayuda" style="margin-top:16px">
+        No hay segmentos activos:
+        <a href="{% url 'crear_segmento' %}">creá uno primero</a>.
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="vacio">Todavía no hay clientes cargados.</p>
+  {% endif %}
+{% endblock %}
