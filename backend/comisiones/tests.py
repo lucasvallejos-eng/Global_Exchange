@@ -19,6 +19,11 @@ class SegmentoClienteModeloTest(TestCase):
     """Validaciones del modelo de segmentos."""
 
     def test_porcentaje_dentro_del_rango_es_valido(self):
+        # La migración 0003 siembra Minorista/Mayorista/VIP de fábrica; se
+        # vacía la tabla para que este test siga probando sobre una tabla
+        # limpia, como cuando se escribió (no afecta a los demás tests: cada
+        # uno corre en su propia transacción, que se descarta al terminar).
+        SegmentoCliente.objects.all().delete()
         segmento = SegmentoCliente(nombre="VIP", porcentaje_comision=1.50)
         segmento.full_clean()
         segmento.save()
@@ -36,6 +41,7 @@ class SegmentoClienteModeloTest(TestCase):
 
     def test_rechaza_nombre_repetido_ignorando_mayusculas(self):
         """unique=True no distingue mayúsculas en SQLite, lo cubre clean()."""
+        SegmentoCliente.objects.all().delete()
         SegmentoCliente.objects.create(nombre="VIP", porcentaje_comision=1)
         repetido = SegmentoCliente(nombre="vip", porcentaje_comision=2)
         with self.assertRaises(ValidationError):
@@ -43,6 +49,7 @@ class SegmentoClienteModeloTest(TestCase):
 
     def test_editar_un_segmento_no_choca_consigo_mismo(self):
         """Al editar, el propio registro no debe contar como duplicado."""
+        SegmentoCliente.objects.all().delete()
         segmento = SegmentoCliente.objects.create(nombre="VIP", porcentaje_comision=1)
         segmento.porcentaje_comision = 2
         segmento.full_clean()  # no debe lanzar
@@ -75,6 +82,7 @@ class SegmentoClienteVistasTest(TestCase):
         self.assertEqual(respuesta.status_code, 403)
 
     def test_crear_segmento_valido(self):
+        SegmentoCliente.objects.all().delete()
         self._iniciar_sesion(self.admin)
         respuesta = self.client.post(reverse('crear_segmento'), {
             'nombre': 'Corporativo',
@@ -86,6 +94,7 @@ class SegmentoClienteVistasTest(TestCase):
 
     def test_crear_rechaza_porcentaje_fuera_de_rango(self):
         """La vista no debe guardar un porcentaje imposible."""
+        SegmentoCliente.objects.all().delete()
         self._iniciar_sesion(self.admin)
         respuesta = self.client.post(reverse('crear_segmento'), {
             'nombre': 'Imposible',
@@ -96,6 +105,7 @@ class SegmentoClienteVistasTest(TestCase):
 
     def test_baja_es_logica(self):
         """Dar de baja marca inactivo, no borra la fila."""
+        SegmentoCliente.objects.all().delete()
         self._iniciar_sesion(self.admin)
         segmento = SegmentoCliente.objects.create(nombre="VIP", porcentaje_comision=1)
 
@@ -110,6 +120,7 @@ class SegmentoAsignadoAClienteTest(TestCase):
     """La relación entre el cliente y su segmento, que es de donde sale la comisión."""
 
     def setUp(self):
+        SegmentoCliente.objects.all().delete()
         self.vip = SegmentoCliente.objects.create(nombre="VIP", porcentaje_comision="0.50")
         self.minorista = SegmentoCliente.objects.create(nombre="Minorista", porcentaje_comision="2.00")
         self.cliente = Cliente.objects.create(
@@ -201,6 +212,7 @@ class ClienteApiSegmentoTest(TestCase):
     """La API de clientes expone y acepta el segmento sin romper lo anterior."""
 
     def setUp(self):
+        SegmentoCliente.objects.all().delete()
         self.vip = SegmentoCliente.objects.create(nombre="VIP", porcentaje_comision="0.50")
         grupo_admin, _ = Group.objects.get_or_create(name="administrador")
         self.admin = User.objects.create_user(username="admin_api")
