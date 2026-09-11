@@ -10,12 +10,41 @@ from .models import Cotizacion, HistorialCotizacion
 
 @admin.register(Cotizacion)
 class CotizacionAdmin(admin.ModelAdmin):
+    """Configuración del panel de administración para la gestión de cotizaciones.
+
+    Permite consultar, filtrar y modificar las tasas de cambio activas e históricas.
+    Integra la validación del bloqueo temporal de 1 hora al modificar precios y genera
+    automáticamente un registro en el historial de auditoría al guardar los cambios.
+
+    Attributes:
+        list_display (tuple): Campos mostrados en la vista de lista del admin.
+        list_filter (tuple): Filtros laterales aplicables por estado activo y moneda.
+        search_fields (tuple): Campos habilitados para búsqueda por código o nombre de moneda.
+        date_hierarchy (str): Navegación jerárquica por fechas basadas en la creación.
+    """
     list_display = ("moneda", "precio_compra", "precio_venta", "activa", "fecha")
     list_filter = ("activa", "moneda")
     search_fields = ("moneda__codigo", "moneda__nombre")
     date_hierarchy = "fecha"
 
     def save_model(self, request, obj, form, change):
+        """Sobrescribe la lógica de guardado en el admin para aplicar reglas y auditoría.
+
+        Valida que haya transcurrido al menos 1 hora desde la última modificación sobre la
+        moneda si los precios de compra o venta sufrieron cambios. Al persistir con éxito,
+        registra la modificación en el modelo ``HistorialCotizacion`` asignando al usuario
+        administrador en sesión.
+
+        Args:
+            request (HttpRequest): Solicitud HTTP con la sesión del usuario administrador.
+            obj (Cotizacion): Instancia del modelo a crear o guardar.
+            form (ModelForm): Formulario de edición procesado por Django admin.
+            change (bool): True si el objeto ya existía (edición), False si es un alta nueva.
+
+        Raises:
+            ValidationError: Si se intenta modificar el precio de compra o venta antes de que
+                transcurra el lapso de 1 hora desde el último cambio registrado.
+        """
         anterior = None
         if change:
             anterior = Cotizacion.objects.get(pk=obj.pk)
@@ -52,6 +81,17 @@ class CotizacionAdmin(admin.ModelAdmin):
 
 @admin.register(HistorialCotizacion)
 class HistorialCotizacionAdmin(admin.ModelAdmin):
+    """Configuración del panel de administración para el historial de auditoría.
+
+    Expone el registro histórico inmutable de los cambios de tasas. Marca todos los
+    campos como de solo lectura (``readonly_fields``) para impedir alteraciones manuales.
+
+    Attributes:
+        list_display (tuple): Atributos visibles en el listado principal del historial.
+        list_filter (tuple): Filtros laterales por moneda y administrador responsable.
+        date_hierarchy (str): Jerarquía temporal de exploración basada en `fecha_registro`.
+        readonly_fields (list): Lista dinámica que deshabilita la edición de todos los campos.
+    """
     list_display = (
         "moneda",
         "administrador",

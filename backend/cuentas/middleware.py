@@ -10,11 +10,30 @@ from django.http import HttpResponse
 
 
 class CorsMaquetaMiddleware:
+    """Middleware para inyectar encabezados CORS en solicitudes dirigidas a la API."""
+
     def __init__(self, get_response):
+        """Inicializa el middleware registrando el llamable de la respuesta siguiente.
+
+        Args:
+            get_response (callable): Siguiente middleware o vista en la cadena de Django.
+        """
         self.get_response = get_response
         self.origen = settings.MAQUETA_URL.rstrip("/")
 
     def __call__(self, request):
+        """Procesa la solicitud entrante agregando las cabeceras CORS correspondientes.
+
+        Intercepta las peticiones *preflight* (HTTP OPTIONS) hacia `/api/` respondiendo
+        con estado 204 No Content. Para el resto de peticiones dirigidas a la API, inyecta
+        las cabeceras que habilitan credenciales, métodos autorizados y headers permitidos.
+
+        Args:
+            request (HttpRequest): Objeto de la solicitud HTTP entrante.
+
+        Returns:
+            HttpResponse: Respuesta HTTP procesada con las cabeceras CORS agregadas.
+        """
         if request.method == "OPTIONS" and request.path.startswith("/api/"):
             respuesta = HttpResponse(status=204)
         else:

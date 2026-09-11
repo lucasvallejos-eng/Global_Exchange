@@ -61,20 +61,32 @@ Monedas
    :undoc-members:
 
 
-Cotizaciones
-------------
+Cotizaciones y Auditoría
+------------------------
 
 El modelo hace cumplir RN10 (la tasa de compra siempre menor que la de venta)
-desde ``Cotizacion.clean()``. Las vistas llaman a ``full_clean()`` antes de
-guardar, porque ``objects.create()`` no dispara esa validación.
+desde ``Cotizacion.clean()``. Las vistas y la API llaman a ``full_clean()`` antes de
+guardar.
+
+Reglas de Negocio de Auditoría:
+* **Bloqueo temporal:** No se permite actualizar los precios de compra o venta de una cotización si transcurrió menos de 1 hora desde la última modificación.
+* **Historial de cambios:** Se registra automáticamente un evento en ``HistorialCotizacion`` almacenando el usuario administrador, los precios anteriores y los nuevos precios asignados.
 
 .. automodule:: cotizaciones.models
    :members:
-   :undoc-members:
+   
 
 .. automodule:: cotizaciones.views
    :members:
-   :undoc-members:
+   
+
+.. automodule:: cotizaciones.api
+   :members:
+   
+
+.. automodule:: cotizaciones.admin
+   :members:
+   
 
 
 Medios de pago
@@ -82,28 +94,31 @@ Medios de pago
 
 .. automodule:: medios_pago.models
    :members:
-   :undoc-members:
+   
 
 .. automodule:: medios_pago.views
    :members:
-   :undoc-members:
+   
 
 
 Comisiones por segmento de cliente
 ----------------------------------
 
-Acá vive solo la *configuración* de los porcentajes y la asignación de un
-segmento a cada cliente. El cálculo de la comisión sobre una operación de
-compra o venta corresponde al Sprint 3, y se apoya en
-``Cliente.porcentaje_comision``.
+Administración de la configuración de porcentajes de comisión y los descuentos aplicados a operaciones de compra por cada segmento de cliente (Minorista, Mayorista, VIP).
+
+Cada cliente hace referencia a su segmento a través de ``Cliente.segmento`` para consultar tanto el porcentaje de comisión como el descuento de compra aplicable.
 
 .. automodule:: comisiones.models
    :members:
-   :undoc-members:
+   
 
 .. automodule:: comisiones.views
    :members:
-   :undoc-members:
+   
+
+.. automodule:: comisiones.api
+   :members:
+   
 
 
 Tasas y simulador
@@ -111,7 +126,7 @@ Tasas y simulador
 
 .. automodule:: tasas.views
    :members:
-   :undoc-members:
+   
 
 
 Índices

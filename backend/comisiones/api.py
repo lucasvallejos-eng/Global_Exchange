@@ -23,6 +23,16 @@ from .models import SegmentoCliente
 
 
 def _a_dict(segmento):
+    """Serializa un objeto SegmentoCliente a un diccionario JSON.
+
+    Args:
+        segmento (SegmentoCliente): Instancia del segmento de cliente a serializar.
+
+    Returns:
+        dict: Diccionario estructurado con los datos del segmento de cliente,
+            incluyendo comisiones, descuentos y el total de clientes asociados
+            si fue anotado en la consulta.
+    """
     return {
         "id": segmento.id,
         "nombre": segmento.nombre,
@@ -35,6 +45,14 @@ def _a_dict(segmento):
 
 
 def _cuerpo(request):
+    """Decodifica el cuerpo en formato JSON de la solicitud HTTP entrante.
+
+    Args:
+        request (HttpRequest): Objeto de solicitud de Django.
+
+    Returns:
+        dict: Diccionario decodificado o un diccionario vacío ante un fallo de parseo.
+    """
     try:
         return json.loads(request.body or "{}")
     except json.JSONDecodeError:
@@ -42,12 +60,34 @@ def _cuerpo(request):
 
 
 def _mensaje(error):
+    """Formatea los mensajes de una excepción de validación en una sola cadena.
+
+    Args:
+        error (ValidationError): Excepción devuelta por Django al validar modelos/formularios.
+
+    Returns:
+        str: Cadena con los mensajes de error concatenados por punto y coma.
+    """
     return "; ".join(m for lista in error.message_dict.values() for m in lista)
 
 
 @require_http_methods(["GET", "POST"])
 @rol_requerido("administrador")
 def segmentos_lista(request):
+    """Endpoint para listar o registrar segmentos de clientes en formato JSON.
+
+    Permite obtener el listado completo de segmentos anotados con la cantidad de clientes
+    asociados (GET), o crear un nuevo segmento de cliente validando los datos requeridos (POST).
+
+    Args:
+        request (HttpRequest): Objeto de la solicitud HTTP.
+
+    Returns:
+        JsonResponse: 
+            - Lista de segmentos serializados (200 OK en GET).
+            - Segmento recién creado (201 Created en POST).
+            - Objeto con la descripción del error de validación o tipo numérico (400 Bad Request).
+    """
     if request.method == "GET":
         segmentos = SegmentoCliente.objects.annotate(cantidad_clientes=Count("clientes"))
         return JsonResponse([_a_dict(s) for s in segmentos], safe=False)
@@ -77,6 +117,23 @@ def segmentos_lista(request):
 @require_http_methods(["GET", "PATCH", "DELETE"])
 @rol_requerido("administrador")
 def segmentos_detalle(request, pk):
+    """Endpoint para consultar, actualizar parcialmente o borrar un segmento de cliente específico.
+
+    En la actualización parcial (PATCH) valida el formato numérico de las comisiones y descuentos,
+    ejecuta `full_clean()` y persiste las modificaciones. En la eliminación (DELETE) verifica que el
+    segmento no posea clientes asociados debido a la restricción `PROTECT`.
+
+    Args:
+        request (HttpRequest): Objeto de la solicitud HTTP.
+        pk (int): Identificador primario del segmento de cliente.
+
+    Returns:
+        JsonResponse:
+            - Segmento consultado o actualizado (200 OK).
+            - Respuesta vacía tras una eliminación (204 No Content).
+            - Error por validación de datos o por intentar borrar un segmento en uso (400 Bad Request).
+            - Error por registro no encontrado (404 Not Found).
+    """
     try:
         segmento = SegmentoCliente.objects.get(pk=pk)
     except SegmentoCliente.DoesNotExist:

@@ -14,19 +14,45 @@ from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 
 class BackendOIDCKeycloak(OIDCAuthenticationBackend):
-    """Crea/actualiza el usuario local a partir de los claims de Keycloak."""
+    """Sincroniza el usuario local de Django y sus permisos a partir de los claims de Keycloak."""
 
     def create_user(self, claims):
+        """Crea un nuevo usuario en Django y asigna sus datos iniciales desde Keycloak.
+
+        Args:
+            claims (dict): Diccionario con las notificaciones/claims retornadas por el IdP.
+
+        Returns:
+            User: Objeto de usuario creado y actualizado.
+        """
         usuario = super().create_user(claims)
         self._sincronizar(usuario, claims)
         return usuario
 
     def update_user(self, usuario, claims):
+        """Actualiza la información de un usuario existente tras cada inicio de sesión.
+
+        Args:
+            usuario (User): Instancia actual del usuario en la base de datos de Django.
+            claims (dict): Diccionario con las notificaciones/claims retornadas por el IdP.
+
+        Returns:
+            User: Objeto de usuario con la información de sesión sincronizada.
+        """
         usuario = super().update_user(usuario, claims)
         self._sincronizar(usuario, claims)
         return usuario
 
     def _sincronizar(self, usuario, claims):
+        """Actualiza el perfil del usuario (nombre, apellido, is_staff) y sus grupos.
+
+        Sobrescribe los grupos asignados en Django según la lista de roles que provee
+        Keycloak en la clave 'roles'.
+
+        Args:
+            usuario (User): Instancia del usuario que se va a modificar.
+            claims (dict): Claim plano enviado por Keycloak con los atributos y roles del usuario.
+        """
         # Datos básicos del perfil.
         usuario.first_name = claims.get("given_name", "") or ""
         usuario.last_name = claims.get("family_name", "") or ""
