@@ -13,10 +13,12 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
+from django.utils import timezone
+from datetime import timedelta
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from cotizaciones.models import Cotizacion
+from cotizaciones.models import Cotizacion, HistorialCotizacion
 from cuentas.decorators import rol_requerido
 
 from .models import Moneda
@@ -40,6 +42,9 @@ def _a_dict(moneda):
         "activo": moneda.activo,
         "precioCompra": float(cotizacion.precio_compra) if cotizacion else None,
         "precioVenta": float(cotizacion.precio_venta) if cotizacion else None,
+        "ultimaActualizacion": (
+            moneda.fecha_actualizacion.isoformat() if cotizacion else None
+        ),
     }
 
 
@@ -60,7 +65,7 @@ def _decimal(valor):
         return None
 
 
-def _guardar_cotizacion(moneda, compra, venta):
+def _guardar_cotizacion(moneda, compra, venta, administrador=None, aplicar_bloqueo=True):
     """Crea una cotización nueva si vinieron ambos precios.
 
     Devuelve el mensaje de error si no cumple RN10 (venta > compra), o None si
@@ -69,6 +74,15 @@ def _guardar_cotizacion(moneda, compra, venta):
     """
     if compra is None or venta is None:
         return None
+    vigente = moneda.cotizaciones.filter(activa=True).order_by("-fecha").first()
+    if aplicar_bloqueo and vigente:
+        restante = timedelta(hours=1) - (timezone.now() - moneda.fecha_actualizacion)
+        if restante.total_seconds() > 0:
+            minutos = max(1, int((restante.total_seconds() + 59) // 60))
+            return (
+                "No se puede actualizar la cotización. Debe transcurrir al menos "
+                f"1 hora desde el último cambio. Tiempo restante: {minutos} minutos."
+            )
 
     nueva = Cotizacion(moneda=moneda, precio_compra=compra, precio_venta=venta, activa=True)
     try:
@@ -79,6 +93,16 @@ def _guardar_cotizacion(moneda, compra, venta):
     # La vigente pasa a ser la nueva: las anteriores quedan como histórico.
     moneda.cotizaciones.filter(activa=True).update(activa=False)
     nueva.save()
+    if vigente and administrador:
+        HistorialCotizacion.objects.create(
+            moneda=moneda,
+            administrador=administrador,
+            precio_compra_anterior=vigente.precio_compra,
+            precio_compra_nuevo=nueva.precio_compra,
+            precio_venta_anterior=vigente.precio_venta,
+            precio_venta_nuevo=nueva.precio_venta,
+        )
+    moneda.save(update_fields=["fecha_actualizacion"])
     return None
 
 
@@ -108,7 +132,13 @@ def _crear(request):
         activo=bool(datos.get("activo", True)),
     )
 
-    error = _guardar_cotizacion(moneda, _decimal(datos.get("precioCompra")), _decimal(datos.get("precioVenta")))
+    error = _guardar_cotizacion(
+        moneda,
+        _decimal(datos.get("precioCompra")),
+        _decimal(datos.get("precioVenta")),
+        request.user,
+        aplicar_bloqueo=False,
+    )
     if error:
         # Sin cotización válida la moneda no sirve: se deshace el alta.
         moneda.delete()
@@ -143,7 +173,12 @@ def _actualizar(request, moneda):
         moneda.activo = bool(datos["activo"])
     moneda.save()
 
-    error = _guardar_cotizacion(moneda, _decimal(datos.get("precioCompra")), _decimal(datos.get("precioVenta")))
+    error = _guardar_cotizacion(
+        moneda,
+        _decimal(datos.get("precioCompra")),
+        _decimal(datos.get("precioVenta")),
+        request.user,
+    )
     if error:
         return JsonResponse({"error": error}, status=400)
 

@@ -27,6 +27,7 @@ def _a_dict(segmento):
         "id": segmento.id,
         "nombre": segmento.nombre,
         "porcentajeComision": float(segmento.porcentaje_comision),
+        "descuentoCompra": float(segmento.descuento_compra),
         "descripcion": segmento.descripcion,
         "activo": segmento.activo,
         "cantidadClientes": getattr(segmento, "cantidad_clientes", None),
@@ -59,6 +60,7 @@ def segmentos_lista(request):
     )
     try:
         segmento.porcentaje_comision = Decimal(str(datos.get("porcentajeComision", "0")))
+        segmento.descuento_compra = Decimal(str(datos.get("descuentoCompra", "0")))
     except (InvalidOperation, ValueError):
         return JsonResponse({"error": "El porcentaje debe ser un número."}, status=400)
 
@@ -105,6 +107,11 @@ def segmentos_detalle(request, pk):
             segmento.porcentaje_comision = Decimal(str(datos["porcentajeComision"]))
         except (InvalidOperation, ValueError):
             return JsonResponse({"error": "El porcentaje debe ser un número."}, status=400)
+    if "descuentoCompra" in datos:
+        try:
+            segmento.descuento_compra = Decimal(str(datos["descuentoCompra"]))
+        except (InvalidOperation, ValueError):
+            return JsonResponse({"error": "El descuento de compra debe ser un número."}, status=400)
 
     try:
         segmento.full_clean()

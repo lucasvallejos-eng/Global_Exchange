@@ -34,6 +34,9 @@ export default function App() {
             name: data.nombre || data.username,
             email: data.email || "",
             role: elegirRol(data.roles || []),
+            // Django ya limita esta lista a los clientes asociados al usuario.
+            // No descartamos asociaciones por la etiqueta del segmento.
+            clientesAsignados: data.clientesAsignados || [],
           });
           setCargando(false);
         } else {

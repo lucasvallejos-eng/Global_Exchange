@@ -55,3 +55,10 @@ class Cliente(models.Model):
         if self.segmento is None:
             return None
         return Decimal(self.segmento.porcentaje_comision)
+
+    @property
+    def descuento_compra(self):
+        """Devuelve el descuento numérico configurado para este cliente."""
+        if self.segmento is None:
+            return None
+        return Decimal(self.segmento.descuento_compra)

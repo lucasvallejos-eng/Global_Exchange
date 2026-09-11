@@ -1,35 +1,25 @@
-"""API JSON de medios de pago para la maqueta.
-
-Espeja lo que ya hace ``medios_pago/views.py`` con plantillas, incluida la
-regla de visibilidad: un **cliente** ve solo los suyos; administrador y cajero
-ven todos.
-
-La maqueta original listaba un catálogo inventado ("Transferencia Bancaria",
-"TC", "Billetera Digital") que no existe como tabla. Lo que sí existe son los
-medios de pago cargados por cada usuario, con su tipo tomado de
-``MedioPago.TIPO_CHOICES``; eso es lo que se expone acá.
-"""
+"""API JSON de métodos de pago con CRUD por usuario y control administrativo."""
 import json
+import secrets
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from cuentas.decorators import rol_requerido
 
-from .models import MedioPago
+from .models import (
+    BilleteraDigital,
+    MedioPago,
+    TarjetaCredito,
+    TipoMedioPago,
+    TransferenciaBancaria,
+)
 
-
-def _a_dict(medio):
-    return {
-        "id": medio.id,
-        "tipo": medio.tipo,
-        "tipoTexto": medio.get_tipo_display() if medio.tipo else "",
-        "alias": medio.alias,
-        "numero": medio.numero_cuenta_o_tarjeta,
-        "banco": medio.banco_o_proveedor or "",
-        "activo": medio.activo,
-        "usuario": medio.usuario.get_username(),
-    }
+TIPOS = {
+    "TARJETA_CREDITO": ("Tarjeta de Crédito", TarjetaCredito),
+    "TRANSFERENCIA": ("Transferencia Bancaria", TransferenciaBancaria),
+    "BILLETERA_DIGITAL": ("Billetera Digital", BilleteraDigital),
+}
 
 
 def _cuerpo(request):
@@ -39,51 +29,155 @@ def _cuerpo(request):
         return {}
 
 
+def _administrador(usuario):
+    return usuario.groups.filter(name="administrador").exists()
+
+
+def _tipos_activos():
+    return TipoMedioPago.objects.filter(activo=True).values_list("clave", flat=True)
+
+
+def _bool_value(value):
+    return value if isinstance(value, bool) else str(value).lower() == "true"
+
+
 def _visibles_para(usuario):
-    """Un cliente ve solo sus medios; administrador y cajero ven todos."""
-    if usuario.groups.filter(name="cliente").exists() and not usuario.groups.filter(
-        name__in=("administrador", "cajero")
-    ).exists():
-        return MedioPago.objects.filter(usuario=usuario)
-    return MedioPago.objects.all()
+    if _administrador(usuario):
+        return MedioPago.objects.all()
+    return MedioPago.objects.filter(usuario=usuario, tipo__in=_tipos_activos())
+
+
+def _tokenizar(valor):
+    valor = str(valor or "").strip()
+    return f"tok_{secrets.token_urlsafe(18)}_{valor[-4:]}" if valor else ""
+
+
+def _upsert_child(model, medio, defaults):
+    try:
+        detalle = model.objects.get(mediopago_ptr_id=medio.pk)
+        for campo, valor in defaults.items():
+            setattr(detalle, campo, valor)
+        detalle.save(update_fields=list(defaults))
+    except model.DoesNotExist:
+        detalle = model(mediopago_ptr_id=medio.pk, **defaults)
+        detalle.save_base(raw=True, force_insert=True)
+    return detalle
+
+
+def _guardar_detalle(medio, datos):
+    if medio.tipo == "TARJETA_CREDITO":
+        _upsert_child(
+            TarjetaCredito, medio, {
+                "nombre_titular": datos.get("nombreTitular", ""),
+                "alias_tarjeta": datos.get("aliasTarjeta") or medio.alias,
+                "numero_tarjeta": _tokenizar(datos.get("numeroTarjeta")),
+                "fecha_vencimiento": datos.get("fechaVencimiento", ""),
+                "codigo_seguridad": _tokenizar(datos.get("codigoSeguridad")),
+            }
+        )
+    elif medio.tipo == "TRANSFERENCIA":
+        _upsert_child(TransferenciaBancaria, medio, {
+                "numero_cuenta_origen": datos.get("numeroCuentaOrigen", ""),
+                "banco_origen": datos.get("bancoOrigen", ""),
+                "titular_origen": datos.get("titularOrigen", ""),
+                "numero_cuenta_destino": datos.get("numeroCuentaDestino", ""),
+                "banco_destino": datos.get("bancoDestino", ""),
+                "titular_destino": datos.get("titularDestino", ""),
+        })
+    elif medio.tipo == "BILLETERA_DIGITAL":
+        _upsert_child(BilleteraDigital, medio, {
+                "plataforma": datos.get("plataforma", ""),
+                "identificador_cuenta": datos.get("identificadorCuenta", ""),
+                "titular": datos.get("titular", ""),
+        })
+
+
+def _a_dict(medio):
+    detalle = {}
+    if medio.tipo == "TARJETA_CREDITO" and hasattr(medio, "tarjetacredito"):
+        item = medio.tarjetacredito
+        detalle = {
+            "nombreTitular": item.nombre_titular,
+            "aliasTarjeta": item.alias_tarjeta,
+            "numeroTarjeta": item.numero_tarjeta[-4:].rjust(len(item.numero_tarjeta), "*"),
+            "fechaVencimiento": item.fecha_vencimiento,
+        }
+    elif medio.tipo == "TRANSFERENCIA" and hasattr(medio, "transferenciabancaria"):
+        item = medio.transferenciabancaria
+        detalle = {
+            "numeroCuentaOrigen": item.numero_cuenta_origen,
+            "bancoOrigen": item.banco_origen,
+            "titularOrigen": item.titular_origen,
+            "numeroCuentaDestino": item.numero_cuenta_destino,
+            "bancoDestino": item.banco_destino,
+            "titularDestino": item.titular_destino,
+        }
+    elif medio.tipo == "BILLETERA_DIGITAL" and hasattr(medio, "billeteradigital"):
+        item = medio.billeteradigital
+        detalle = {
+            "plataforma": item.plataforma,
+            "identificadorCuenta": item.identificador_cuenta,
+            "titular": item.titular,
+        }
+    return {
+        "id": medio.id,
+        "tipo": medio.tipo,
+        "tipoTexto": TIPOS.get(medio.tipo, ("Sin tipo", None))[0],
+        "alias": medio.alias,
+        "activo": medio.activo,
+        "usuario": medio.usuario.get_username(),
+        "detalle": detalle,
+    }
 
 
 @require_http_methods(["GET", "POST"])
 @rol_requerido("cliente", "administrador", "cajero")
 def medios_lista(request):
     if request.method == "GET":
+        tipos = TipoMedioPago.objects.all()
+        if not _administrador(request.user):
+            tipos = tipos.filter(activo=True)
         medios = _visibles_para(request.user).select_related("usuario")
-        return JsonResponse(
-            {
-                "tipos": [{"valor": v, "texto": t} for v, t in MedioPago.TIPO_CHOICES],
-                "medios": [_a_dict(m) for m in medios],
-            }
-        )
-    return _crear(request)
+        return JsonResponse({
+            "tipos": [
+                {"valor": tipo.clave, "texto": tipo.nombre, "activo": tipo.activo}
+                for tipo in tipos
+            ],
+            "medios": [_a_dict(medio) for medio in medios],
+        })
 
-
-@rol_requerido("cliente", "administrador")
-def _crear(request):
+    if not (_administrador(request.user) or request.user.groups.filter(name="cliente").exists()):
+        return JsonResponse({"error": "No autorizado."}, status=403)
     datos = _cuerpo(request)
+    tipo = datos.get("tipo")
     alias = (datos.get("alias") or "").strip()
-    tipo = (datos.get("tipo") or "").strip()
-
+    if tipo not in set(_tipos_activos()):
+        return JsonResponse({"error": "Debe seleccionar un tipo válido y activo."}, status=400)
     if not alias:
         return JsonResponse({"error": "El nombre es obligatorio."}, status=400)
-    if tipo and tipo not in dict(MedioPago.TIPO_CHOICES):
-        return JsonResponse({"error": f"Tipo no válido: {tipo}."}, status=400)
-    if MedioPago.objects.filter(usuario=request.user, alias__iexact=alias).exists():
-        return JsonResponse({"error": f'Ya tenés un medio de pago llamado "{alias}".'}, status=400)
-
     medio = MedioPago.objects.create(
         usuario=request.user,
         tipo=tipo,
         alias=alias,
-        numero_cuenta_o_tarjeta=(datos.get("numero") or "").strip(),
-        banco_o_proveedor=(datos.get("banco") or "").strip() or None,
-        activo=bool(datos.get("activo", True)),
+        activo=True,
     )
+    _guardar_detalle(medio, datos)
     return JsonResponse(_a_dict(medio), status=201)
+
+
+@require_http_methods(["PATCH"])
+@rol_requerido("administrador")
+def tipo_detalle(request, clave):
+    try:
+        tipo = TipoMedioPago.objects.get(clave=clave)
+    except TipoMedioPago.DoesNotExist:
+        return JsonResponse({"error": "No existe esa categoría."}, status=404)
+    datos = _cuerpo(request)
+    if "activo" not in datos:
+        return JsonResponse({"error": "Debe indicar el nuevo estado."}, status=400)
+    tipo.activo = _bool_value(datos["activo"])
+    tipo.save(update_fields=["activo"])
+    return JsonResponse({"valor": tipo.clave, "texto": tipo.nombre, "activo": tipo.activo})
 
 
 @require_http_methods(["GET", "PATCH", "DELETE"])
@@ -96,7 +190,6 @@ def medios_detalle(request, pk):
 
     if request.method == "GET":
         return JsonResponse(_a_dict(medio))
-
     if request.method == "DELETE":
         medio.delete()
         return JsonResponse({}, status=204)
@@ -104,16 +197,18 @@ def medios_detalle(request, pk):
     datos = _cuerpo(request)
     if "alias" in datos:
         medio.alias = (datos["alias"] or "").strip()
-    if "tipo" in datos:
-        if datos["tipo"] and datos["tipo"] not in dict(MedioPago.TIPO_CHOICES):
-            return JsonResponse({"error": f"Tipo no válido: {datos['tipo']}."}, status=400)
-        medio.tipo = datos["tipo"] or ""
-    if "numero" in datos:
-        medio.numero_cuenta_o_tarjeta = (datos["numero"] or "").strip()
-    if "banco" in datos:
-        medio.banco_o_proveedor = (datos["banco"] or "").strip() or None
+    if "tipo" in datos and datos["tipo"] in TIPOS:
+        medio.tipo = datos["tipo"]
     if "activo" in datos:
-        medio.activo = bool(datos["activo"])
-
+        if not _administrador(request.user):
+            return JsonResponse({"error": "Solo un administrador puede cambiar el estado."}, status=403)
+        medio.activo = _bool_value(datos["activo"])
     medio.save()
+    if any(key in datos for key in (
+        "nombreTitular", "aliasTarjeta", "numeroTarjeta", "fechaVencimiento",
+        "codigoSeguridad", "numeroCuentaOrigen", "bancoOrigen", "titularOrigen",
+        "numeroCuentaDestino", "bancoDestino", "titularDestino", "plataforma",
+        "identificadorCuenta", "titular",
+    )):
+        _guardar_detalle(medio, datos)
     return JsonResponse(_a_dict(medio))

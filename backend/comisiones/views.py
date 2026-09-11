@@ -23,6 +23,7 @@ def _contexto_formulario(request, segmento=None, errores=None):
         contexto['enviado'] = {
             'nombre': request.POST.get('nombre'),
             'porcentaje_comision': request.POST.get('porcentaje_comision'),
+            'descuento_compra': request.POST.get('descuento_compra'),
             'descripcion': request.POST.get('descripcion'),
         }
     return contexto
@@ -48,6 +49,7 @@ def crear_segmento(request):
         segmento = SegmentoCliente(
             nombre=request.POST.get('nombre'),
             porcentaje_comision=request.POST.get('porcentaje_comision'),
+            descuento_compra=request.POST.get('descuento_compra', 0),
             descripcion=request.POST.get('descripcion', ''),
         )
         # full_clean() corre los validadores del modelo (rango 0-100) y el
@@ -72,6 +74,7 @@ def editar_segmento(request, pk):
     if request.method == 'POST':
         segmento.nombre = request.POST.get('nombre')
         segmento.porcentaje_comision = request.POST.get('porcentaje_comision')
+        segmento.descuento_compra = request.POST.get('descuento_compra', 0)
         segmento.descripcion = request.POST.get('descripcion', '')
         try:
             segmento.full_clean()

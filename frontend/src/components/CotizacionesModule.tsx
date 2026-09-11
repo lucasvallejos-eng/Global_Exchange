@@ -8,7 +8,7 @@ const formatPyg = (value: number) =>
     maximumFractionDigits: value < 100 ? 2 : 0,
   }).format(value);
 
-export default function CotizacionesModule({ userType }: { userType: ClientType }) {
+export default function CotizacionesModule({ userType, descuentoCompra }: { userType: ClientType; descuentoCompra: number }) {
   const [selectedCode, setSelectedCode] = useState<string>("");
   // Las cotizaciones salen de la base, no de una tabla escrita a mano.
   const { monedas, cargando, error } = useTasas();
@@ -23,10 +23,12 @@ export default function CotizacionesModule({ userType }: { userType: ClientType 
           </div>
           <div className="flex items-center gap-3">
             <div className="rounded-full bg-[#edf4ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff]">
-              {getClientTypeBadge(userType)}
+              {getClientTypeBadge(userType, descuentoCompra)}
             </div>
             <div className="rounded-full bg-[#edf4ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff]">
-              Última actualización: Hoy a las 09:30 hs
+              Última actualización: {monedas.length > 0 && monedas[0].ultimaActualizacion
+                ? new Date(monedas[0].ultimaActualizacion).toLocaleString("es-PY")
+                : "Sin actualizaciones"}
             </div>
           </div>
         </div>
@@ -65,8 +67,8 @@ export default function CotizacionesModule({ userType }: { userType: ClientType 
 
               {monedas.map((currency) => {
                 const tasa = { compra: currency.precioCompra, venta: currency.precioVenta };
-                const venta = getAppliedRate(tasa, "venta", userType);
-                const compra = getAppliedRate(tasa, "compra", userType);
+                const venta = getAppliedRate(tasa, "venta", descuentoCompra);
+                const compra = getAppliedRate(tasa, "compra", descuentoCompra);
 
                 return (
                   <tr

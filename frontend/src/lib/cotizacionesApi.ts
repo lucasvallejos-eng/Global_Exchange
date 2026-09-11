@@ -12,6 +12,7 @@ export type Cotizacion = {
   precioVenta: number;
   activa: boolean;
   fecha: string;
+  ultimaActualizacion: string | null;
 };
 
 export type CotizacionEntrada = {
