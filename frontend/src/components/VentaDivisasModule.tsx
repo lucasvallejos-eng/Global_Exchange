@@ -3,6 +3,7 @@ import { ClientType, getAppliedRate } from "../lib/clientRates";
 import { useTasas } from "../lib/useTasas";
 import { etiquetaMedioPago, listarMediosPago, type MedioPago } from "../lib/mediosPagoApi";
 import { cancelarOperacion, crearOperacion, pagarOperacion, type Operacion } from "../lib/operacionesApi";
+import AlertaCancelacionModal from "./AlertaCancelacionModal";
 
 type AccountType = "Cuenta Corriente" | "Caja de Ahorro" | "Billetera Digital";
 type TransferTarget = "propia" | "tercero";
@@ -37,6 +38,8 @@ export default function VentaDivisasModule({
   // La operación ya creada en el backend (pendiente), con el cálculo real.
   const [operacion, setOperacion] = useState<Operacion | null>(null);
   const [procesando, setProcesando] = useState(false);
+  // Operación que se canceló sola porque cambió la cotización (IS2GE-71).
+  const [alerta, setAlerta] = useState<Operacion | null>(null);
   const [savedMethods, setSavedMethods] = useState<MedioPago[]>([]);
   const [paymentMethod, setPaymentMethod] = useState("nuevo");
 
@@ -112,6 +115,8 @@ export default function VentaDivisasModule({
       const resultado = await pagarOperacion(operacion.id);
       if (resultado.estado === "PAGADA") {
         setSuccessMessage(`Venta #${resultado.id} confirmada: vas a recibir ${formatCurrency(resultado.totalGuaranies)} PYG.`);
+      } else if (resultado.canceladaPorCotizacion) {
+        setAlerta(resultado);
       } else {
         setErrorMessage(resultado.motivoCancelacion ?? "La operación fue cancelada.");
       }
@@ -370,6 +375,18 @@ export default function VentaDivisasModule({
             </div>
           </div>
         </div>
+      )}
+
+      {alerta && (
+        <AlertaCancelacionModal
+          operacion={alerta}
+          procesando={procesando}
+          onReintentar={() => {
+            setAlerta(null);
+            void handleVender();
+          }}
+          onCerrar={() => setAlerta(null)}
+        />
       )}
     </div>
   );

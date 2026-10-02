@@ -107,6 +107,23 @@ def calcular(tipo, monto_divisa, cotizacion, segmento):
     }
 
 
+def recotizar(transaccion):
+    """Cuánto saldría hoy la misma operación, con la cotización vigente.
+
+    Lo usa la alerta de cancelación: cuando una operación se cancela porque
+    cambió la cotización, el cliente ve el total nuevo antes de decidir si
+    vuelve a operar. No guarda nada.
+
+    Returns:
+        dict | None: el mismo formato que ``calcular``, o ``None`` si la
+        moneda ya no tiene cotización vigente.
+    """
+    vigente = cotizacion_vigente(transaccion.moneda)
+    if vigente is None:
+        return None
+    return calcular(transaccion.tipo, transaccion.monto_divisa, vigente, transaccion.cliente.segmento)
+
+
 def clientes_habilitados(usuario):
     """Los clientes a nombre de los cuales este usuario puede operar (RN02)."""
     return Cliente.objects.filter(usuarios=usuario).select_related("segmento")
