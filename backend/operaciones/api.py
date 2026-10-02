@@ -13,7 +13,7 @@ no se puede hacer: pagar dos veces, operar a nombre de un cliente ajeno, etc.
 import json
 from decimal import Decimal, InvalidOperation
 
-from django.http import JsonResponse
+from django.http import HttpResponseNotAllowed, JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from clientes.models import Cliente
@@ -24,6 +24,7 @@ from monedas.models import Moneda
 from . import servicios
 from .models import Transaccion
 from .servicios import OperacionInvalida
+from .views import filtros_de
 
 TODOS_LOS_ROLES = ("administrador", "analista_cambiario", "cajero", "cliente")
 
@@ -76,6 +77,31 @@ def _transaccion_visible(request, pk):
     if t is None or not servicios.puede_ver(request.user, t):
         return None
     return t
+
+
+@rol_requerido(*TODOS_LOS_ROLES)
+def operaciones(request):
+    """``GET`` devuelve el historial; ``POST`` crea una operación."""
+    if request.method == "GET":
+        return historial(request)
+    if request.method == "POST":
+        return crear(request)
+    return HttpResponseNotAllowed(["GET", "POST"])
+
+
+def historial(request):
+    """Historial de operaciones, solo consulta.
+
+    Acepta los mismos filtros que la pantalla de Django, por la URL:
+    ``estado``, ``tipo``, ``moneda`` (código), ``cliente`` (id), ``desde`` y
+    ``hasta`` (``AAAA-MM-DD``). Cada uno ve lo que puede ver, igual que en la
+    pantalla: el cliente las de sus clientes; administrador, analista y cajero,
+    todas.
+    """
+    visibles = servicios.transacciones_visibles(request.user)
+    resultado = servicios.filtrar_historial(visibles, **filtros_de(request.GET))
+    lista = [transaccion_a_dict(t) for t in resultado]
+    return JsonResponse({"operaciones": lista, "total": len(lista)})
 
 
 @require_POST

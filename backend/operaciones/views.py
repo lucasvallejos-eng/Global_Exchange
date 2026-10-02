@@ -6,10 +6,13 @@ Las vistas solo leen el formulario y muestran el resultado. Todas las reglas
 """
 from decimal import Decimal, InvalidOperation
 
+from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
+from clientes.models import Cliente
 from cuentas.decorators import rol_requerido
 from medios_pago.models import MedioPago
 from monedas.models import Moneda
@@ -94,6 +97,59 @@ def operar(request):
 
     return render(request, "operaciones/operar.html",
                   _contexto_operar(request, errores=errores, enviado=enviado))
+
+
+OPERACIONES_POR_PAGINA = 20
+
+
+def filtros_de(parametros):
+    """Lee los filtros del historial de la URL. Lo que no se entiende se
+    ignora (una fecha mal escrita no filtra, en vez de dar un error)."""
+    def fecha(nombre):
+        try:
+            return parse_date(parametros.get(nombre) or "")
+        except ValueError:  # bien formada pero inexistente, como 2026-02-31
+            return None
+
+    cliente = parametros.get("cliente") or ""
+    return {
+        "estado": parametros.get("estado") or None,
+        "tipo": parametros.get("tipo") or None,
+        "moneda": parametros.get("moneda") or None,
+        "cliente": int(cliente) if cliente.isdigit() else None,
+        "desde": fecha("desde"),
+        "hasta": fecha("hasta"),
+    }
+
+
+@rol_requerido(*TODOS_LOS_ROLES)
+def historial(request):
+    """Historial de operaciones: **solo consulta**, como pide el alcance.
+
+    Cada uno ve lo que puede ver (``servicios.transacciones_visibles``): el
+    cliente, las de sus clientes; administrador, analista y cajero, todas. Se
+    filtra por estado, tipo, moneda, cliente y rango de fechas, y se pagina.
+    Desde acá no se modifica nada: cada fila lleva al detalle.
+    """
+    visibles = servicios.transacciones_visibles(request.user)
+    filtros = filtros_de(request.GET)
+    operaciones = servicios.filtrar_historial(visibles, **filtros)
+    pagina = Paginator(operaciones, OPERACIONES_POR_PAGINA).get_page(request.GET.get("pagina"))
+
+    # Para que los enlaces de página mantengan los filtros aplicados.
+    sin_pagina = request.GET.copy()
+    sin_pagina.pop("pagina", None)
+
+    return render(request, "operaciones/historial.html", {
+        "pagina": pagina,
+        "filtros": request.GET,
+        "parametros": sin_pagina.urlencode(),
+        "estados": Transaccion.Estado.choices,
+        "tipos": Transaccion.Tipo.choices,
+        # En los desplegables, solo lo que aparece en operaciones visibles.
+        "monedas": Moneda.objects.filter(pk__in=visibles.values("moneda")).order_by("codigo"),
+        "clientes": Cliente.objects.filter(pk__in=visibles.values("cliente")).order_by("nombre"),
+    })
 
 
 def _transaccion_visible(request, pk):

@@ -172,6 +172,46 @@ def puede_ver(usuario, transaccion):
     return usuario.groups.filter(name__in=VEN_TODAS).exists()
 
 
+def transacciones_visibles(usuario):
+    """Las operaciones que el usuario puede ver en el historial.
+
+    Es la misma regla que ``puede_ver``, pero para una lista: los roles de
+    ``VEN_TODAS`` ven todas, y el resto solo las de los clientes a los que
+    está asociado (los mismos a nombre de quienes puede operar).
+    """
+    operaciones = Transaccion.objects.select_related("cliente", "moneda")
+    if usuario.groups.filter(name__in=VEN_TODAS).exists():
+        return operaciones
+    return operaciones.filter(cliente__usuarios=usuario)
+
+
+def filtrar_historial(operaciones, estado=None, tipo=None, moneda=None,
+                      cliente=None, desde=None, hasta=None):
+    """Aplica los filtros del historial. Los que llegan vacíos no filtran.
+
+    Args:
+        estado, tipo: valores de ``Transaccion.Estado`` y ``Transaccion.Tipo``;
+            uno que no existe se ignora en vez de devolver una lista vacía.
+        moneda (str): código, por ejemplo ``"USD"``.
+        cliente (int): id del cliente.
+        desde, hasta (date): rango de fechas, incluidos los dos extremos. Se
+            compara por día en la zona horaria del proyecto (Asunción).
+    """
+    if estado in Transaccion.Estado.values:
+        operaciones = operaciones.filter(estado=estado)
+    if tipo in Transaccion.Tipo.values:
+        operaciones = operaciones.filter(tipo=tipo)
+    if moneda:
+        operaciones = operaciones.filter(moneda__codigo=moneda)
+    if cliente:
+        operaciones = operaciones.filter(cliente_id=cliente)
+    if desde:
+        operaciones = operaciones.filter(fecha_creacion__date__gte=desde)
+    if hasta:
+        operaciones = operaciones.filter(fecha_creacion__date__lte=hasta)
+    return operaciones
+
+
 def pagar(transaccion, usuario):
     """Intenta pagar una operación pendiente.
 

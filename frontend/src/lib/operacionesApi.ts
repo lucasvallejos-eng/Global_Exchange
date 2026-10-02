@@ -61,3 +61,26 @@ export function cancelarOperacion(id: number): Promise<Operacion> {
 export function obtenerOperacion(id: number): Promise<Operacion> {
   return get<Operacion>(`/api/operaciones/${id}/`);
 }
+
+/** Filtros del historial. Los vacíos no filtran. Fechas en formato AAAA-MM-DD. */
+export interface FiltrosHistorial {
+  estado?: EstadoOperacion | "";
+  tipo?: TipoOperacion | "";
+  moneda?: string;
+  desde?: string;
+  hasta?: string;
+}
+
+/**
+ * Historial de operaciones (solo consulta). El backend ya devuelve solo las
+ * que el usuario puede ver: las de sus clientes, o todas si es administrador,
+ * analista o cajero.
+ */
+export function listarOperaciones(filtros: FiltrosHistorial = {}): Promise<{ operaciones: Operacion[]; total: number }> {
+  const parametros = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor) parametros.set(clave, valor);
+  }
+  const consulta = parametros.toString();
+  return get(`/api/operaciones/${consulta ? `?${consulta}` : ""}`);
+}
