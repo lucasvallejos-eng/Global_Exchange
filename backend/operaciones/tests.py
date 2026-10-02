@@ -1,9 +1,12 @@
 """Pruebas de las operaciones de compra y venta (Sprint 3)."""
+import time
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase
+from django.urls import reverse
+from django.utils.formats import number_format
 
 from clientes.models import Cliente
 from comisiones.models import SegmentoCliente
@@ -242,3 +245,115 @@ class PagoYCancelacionTest(BaseOperacionesTest):
         t = servicios.pagar(self.crear(), self.usuario)
         with self.assertRaises(OperacionInvalida):
             servicios.cancelar(t, self.usuario)
+
+
+class PantallasOperacionTest(BaseOperacionesTest):
+    """Las pantallas de Django: alta, detalle, pago y permisos."""
+
+    def setUp(self):
+        super().setUp()
+        self.entrar(self.usuario)
+
+    def entrar(self, usuario):
+        """Inicia sesión como lo haría Keycloak. Sin un token "vigente" en la
+        sesión, el middleware de renovación de mozilla-django-oidc redirige
+        al login en vez de llegar a la vista."""
+        self.client.force_login(usuario)
+        sesion = self.client.session
+        sesion["oidc_id_token_expiration"] = time.time() + 3600
+        sesion.save()
+
+    def datos(self, **cambios):
+        datos = {"cliente": self.cliente.pk, "tipo": "COMPRA",
+                 "moneda": self.usd.pk, "monto": "100"}
+        datos.update(cambios)
+        return datos
+
+    def test_sin_cliente_asociado_se_explica_rn02(self):
+        self.entrar(self.otro_usuario)
+        respuesta = self.client.get(reverse("operar"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "no está asociado a ningún cliente")
+        self.assertNotContains(respuesta, 'name="monto"')
+
+    def test_el_formulario_ofrece_solo_sus_clientes(self):
+        Cliente.objects.create(nombre="Ajena S.A.", tipo=Cliente.Tipo.JURIDICA,
+                               direccion="x", cuenta_acreditar="x", correo="a@b.com")
+        respuesta = self.client.get(reverse("operar"))
+        self.assertContains(respuesta, "Clara Cliente")
+        self.assertNotContains(respuesta, "Ajena S.A.")
+
+    def test_crear_lleva_a_la_confirmacion_sin_cobrar(self):
+        respuesta = self.client.post(reverse("operar"), self.datos())
+        t = Transaccion.objects.get()
+        self.assertRedirects(respuesta, reverse("detalle_operacion", args=[t.pk]))
+        self.assertEqual(t.estado, Transaccion.Estado.PENDIENTE)
+
+        detalle = self.client.get(reverse("detalle_operacion", args=[t.pk]))
+        self.assertContains(detalle, "Confirmar pago")
+        # El separador de miles depende del idioma configurado; se usa el
+        # mismo formateador que la plantilla en vez de suponer uno.
+        self.assertContains(detalle, number_format(Decimal("710030"), 0, force_grouping=True))
+
+    def test_monto_que_no_es_numero(self):
+        respuesta = self.client.post(reverse("operar"), self.datos(monto="cien"))
+        self.assertContains(respuesta, "tiene que ser un número")
+        self.assertFalse(Transaccion.objects.exists())
+
+    def test_no_se_opera_con_un_cliente_ajeno_aunque_se_mande_su_id(self):
+        ajena = Cliente.objects.create(nombre="Ajena S.A.", tipo=Cliente.Tipo.JURIDICA,
+                                       direccion="x", cuenta_acreditar="x", correo="a@b.com")
+        respuesta = self.client.post(reverse("operar"), self.datos(cliente=ajena.pk))
+        self.assertContains(respuesta, "Elegí uno de tus clientes")
+        self.assertFalse(Transaccion.objects.exists())
+
+    def test_pagar_desde_la_pantalla(self):
+        t = self.crear()
+        respuesta = self.client.post(reverse("pagar_operacion", args=[t.pk]))
+        self.assertRedirects(respuesta, reverse("detalle_operacion", args=[t.pk]))
+        t.refresh_from_db()
+        self.assertEqual(t.estado, Transaccion.Estado.PAGADA)
+
+    def test_si_cambio_la_cotizacion_la_pantalla_muestra_la_cancelacion(self):
+        t = self.crear()
+        self.cotizacion.precio_venta = Decimal("7600")
+        self.cotizacion.save()
+
+        respuesta = self.client.post(reverse("pagar_operacion", args=[t.pk]), follow=True)
+        t.refresh_from_db()
+        self.assertEqual(t.estado, Transaccion.Estado.CANCELADA)
+        self.assertContains(respuesta, "cambió antes del pago")
+        self.assertNotContains(respuesta, "Confirmar pago")
+
+    def test_pagar_dos_veces_muestra_el_error(self):
+        t = servicios.pagar(self.crear(), self.usuario)
+        respuesta = self.client.post(reverse("pagar_operacion", args=[t.pk]), follow=True)
+        self.assertContains(respuesta, "solo se puede pagar una operación pendiente")
+
+    def test_pagar_exige_post(self):
+        t = self.crear()
+        self.assertEqual(self.client.get(reverse("pagar_operacion", args=[t.pk])).status_code, 405)
+
+    def test_otro_cliente_no_ve_la_operacion(self):
+        t = self.crear()
+        self.entrar(self.otro_usuario)
+        self.assertEqual(self.client.get(reverse("detalle_operacion", args=[t.pk])).status_code, 404)
+        self.assertEqual(self.client.post(reverse("pagar_operacion", args=[t.pk])).status_code, 404)
+
+    def test_el_administrador_la_ve_pero_no_la_paga(self):
+        t = self.crear()
+        admin = Usuario.objects.create_user(username="admin")
+        admin.groups.add(Group.objects.get_or_create(name="administrador")[0])
+        self.entrar(admin)
+
+        detalle = self.client.get(reverse("detalle_operacion", args=[t.pk]))
+        self.assertEqual(detalle.status_code, 200)
+        self.assertNotContains(detalle, "Confirmar pago")
+
+        self.client.post(reverse("pagar_operacion", args=[t.pk]))
+        t.refresh_from_db()
+        self.assertEqual(t.estado, Transaccion.Estado.PENDIENTE)
+
+    def test_sin_sesion_no_se_entra(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse("operar")).status_code, 403)
