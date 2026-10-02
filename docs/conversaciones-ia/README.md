@@ -23,3 +23,4 @@ AAAA-MM-DD-tema-corto.md
 | Fecha | Archivo | Tema |
 |---|---|---|
 | 2026-09-03 | [2026-09-03-hito4-preparacion.md](2026-09-03-hito4-preparacion.md) | Diagnóstico y correcciones para la entrega del Hito 4 |
+| 2026-10-02 | [2026-10-02-hito5-operaciones.md](2026-10-02-hito5-operaciones.md) | Operaciones de compra/venta, cancelación, historial y producción (Hito 5) |
