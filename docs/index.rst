@@ -126,7 +126,28 @@ Tasas y simulador
 
 .. automodule:: tasas.views
    :members:
-   
+
+
+
+Operaciones de compra y venta
+-----------------------------
+
+El alcance del Sprint 3: la operación de compra o venta con su cálculo de
+comisión y tasa aplicada, y la cancelación automática cuando la cotización
+cambia antes del pago. Las reglas viven en ``operaciones.servicios``; las
+pantallas de Django y la API de la maqueta solo las llaman.
+
+.. automodule:: operaciones.models
+   :members:
+
+.. automodule:: operaciones.servicios
+   :members:
+
+.. automodule:: operaciones.views
+   :members:
+
+.. automodule:: operaciones.api
+   :members:
 
 
 Índices
