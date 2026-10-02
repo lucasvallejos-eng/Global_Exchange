@@ -40,6 +40,32 @@ export interface NuevaOperacion {
   medioPagoId?: number | null;
 }
 
+/**
+ * Cálculo de una operación que todavía no existe (lo que muestra el modal de
+ * confirmación). Mismas claves que `Operacion`, sin id ni estado.
+ */
+export type Presupuesto = Pick<
+  Operacion,
+  | "tipo" | "cliente" | "moneda" | "montoDivisa" | "tasaBase" | "descuentoCompra"
+  | "tasaAplicada" | "montoGuaranies" | "porcentajeComision" | "comision"
+  | "totalGuaranies" | "medioPago"
+>;
+
+/** Calcula la operación con la cotización vigente, sin guardar nada. */
+export function cotizarOperacion(datos: NuevaOperacion): Promise<Presupuesto> {
+  return post<Presupuesto>("/api/operaciones/cotizar/", datos);
+}
+
+/**
+ * Registra la operación confirmada en el modal. `tasaBase` es la del
+ * presupuesto que se mostró: si la cotización cambió desde entonces, el
+ * backend la registra "CANCELADA" con `canceladaPorCotizacion` en vez de
+ * cobrarla. No es un error: hay que mirar el estado de la respuesta.
+ */
+export function confirmarOperacion(datos: NuevaOperacion & { tasaBase: number }): Promise<Operacion> {
+  return post<Operacion>("/api/operaciones/confirmar/", datos);
+}
+
 /** Crea la operación pendiente de pago y devuelve el cálculo del backend. */
 export function crearOperacion(datos: NuevaOperacion): Promise<Operacion> {
   return post<Operacion>("/api/operaciones/", datos);

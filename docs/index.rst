@@ -69,7 +69,6 @@ desde ``Cotizacion.clean()``. Las vistas y la API llaman a ``full_clean()`` ante
 guardar.
 
 Reglas de Negocio de Auditoría:
-* **Bloqueo temporal:** No se permite actualizar los precios de compra o venta de una cotización si transcurrió menos de 1 hora desde la última modificación.
 * **Historial de cambios:** Se registra automáticamente un evento en ``HistorialCotizacion`` almacenando el usuario administrador, los precios anteriores y los nuevos precios asignados.
 
 .. automodule:: cotizaciones.models

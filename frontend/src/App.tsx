@@ -30,7 +30,9 @@ export default function App() {
           const data = await res.json();
           setUsuario({
             name: data.nombre || data.username,
+            username: data.username,
             email: data.email || "",
+            cuentaUrl: data.cuentaUrl,
             role: elegirRol(data.roles || []),
             // Django ya limita esta lista a los clientes asociados al usuario.
             // No descartamos asociaciones por la etiqueta del segmento.

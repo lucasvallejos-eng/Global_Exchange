@@ -112,6 +112,26 @@ def crear(request):
     Espera ``{"clienteId", "tipo": "COMPRA"|"VENTA", "moneda": "USD",
     "monto", "medioPagoId"?}`` y devuelve la operación con el cálculo hecho.
     """
+    entrada = _entrada_operacion(request)
+    if isinstance(entrada, JsonResponse):
+        return entrada
+    datos, cliente, moneda, monto, medio_pago = entrada
+    try:
+        t = servicios.crear_operacion(
+            request.user, cliente, datos.get("tipo"), moneda, monto, medio_pago
+        )
+    except OperacionInvalida as error:
+        return _error(str(error))
+    return JsonResponse(transaccion_a_dict(t), status=201)
+
+
+def _entrada_operacion(request):
+    """Lee y resuelve los datos de una operación que manda la maqueta.
+
+    Returns:
+        tuple | JsonResponse: ``(datos, cliente, moneda, monto, medio_pago)``,
+        o la respuesta de error si falta algo.
+    """
     try:
         datos = json.loads(request.body or "{}")
     except json.JSONDecodeError:
@@ -131,10 +151,64 @@ def crear(request):
     medio_pago = None
     if datos.get("medioPagoId"):
         medio_pago = MedioPago.objects.filter(pk=datos["medioPagoId"]).first()
+    return datos, cliente, moneda, monto, medio_pago
 
+
+@require_POST
+@rol_requerido(*TODOS_LOS_ROLES)
+def cotizar(request):
+    """Calcula la operación sin guardarla (lo que muestra el modal de la maqueta).
+
+    Recibe lo mismo que ``crear`` y devuelve el cálculo con las mismas claves
+    que una operación, pero sin ``id`` ni ``estado``: todavía no existe.
+    """
+    entrada = _entrada_operacion(request)
+    if isinstance(entrada, JsonResponse):
+        return entrada
+    datos, cliente, moneda, monto, medio_pago = entrada
     try:
-        t = servicios.crear_operacion(
+        calculo = servicios.cotizar(
             request.user, cliente, datos.get("tipo"), moneda, monto, medio_pago
+        )
+    except OperacionInvalida as error:
+        return _error(str(error))
+    return JsonResponse({
+        "tipo": datos.get("tipo"),
+        "cliente": {"id": cliente.pk, "nombre": cliente.nombre},
+        "moneda": moneda.codigo,
+        "montoDivisa": _numero(monto),
+        "tasaBase": _numero(calculo["tasa_base"]),
+        "descuentoCompra": _numero(calculo["descuento_compra"]),
+        "tasaAplicada": _numero(calculo["tasa_aplicada"]),
+        "montoGuaranies": _numero(calculo["monto_guaranies"]),
+        "porcentajeComision": _numero(calculo["porcentaje_comision"]),
+        "comision": _numero(calculo["comision"]),
+        "totalGuaranies": _numero(calculo["total_guaranies"]),
+        "medioPago": servicios._descripcion_medio_pago(medio_pago) if medio_pago else None,
+    })
+
+
+@require_POST
+@rol_requerido(*TODOS_LOS_ROLES)
+def confirmar(request):
+    """Registra la operación que el cliente confirmó en el modal.
+
+    Recibe lo mismo que ``cotizar`` más ``tasaBase`` (la del cálculo que se le
+    mostró). Devuelve la operación ya ``PAGADA``, o ``CANCELADA`` con
+    ``canceladaPorCotizacion = true`` si la cotización cambió mientras tanto
+    (código 201 en los dos casos: la operación quedó registrada).
+    """
+    entrada = _entrada_operacion(request)
+    if isinstance(entrada, JsonResponse):
+        return entrada
+    datos, cliente, moneda, monto, medio_pago = entrada
+    try:
+        tasa_base = Decimal(str(datos.get("tasaBase")))
+    except (InvalidOperation, ValueError):
+        return _error("Falta la tasa del cálculo que se confirmó.")
+    try:
+        t = servicios.confirmar_operacion(
+            request.user, cliente, datos.get("tipo"), moneda, monto, tasa_base, medio_pago
         )
     except OperacionInvalida as error:
         return _error(str(error))

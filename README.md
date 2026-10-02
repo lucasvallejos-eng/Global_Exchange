@@ -35,6 +35,11 @@ Global_Exchange/
 
 ## Puesta en marcha (primera vez)
 
+> **Atajo:** una vez hecha la configuración de abajo (los `.env`, el `.venv` y
+> Docker), `levantar_todo.py` levanta las tres piezas con un solo comando o con
+> el Play de PyCharm / VS Code. Ver la guía en
+> [`docs/conversaciones-ia/2026-10-02-fixes-pre-tag.md`](docs/conversaciones-ia/2026-10-02-fixes-pre-tag.md#guía-levantar_todopy-en-cada-sistema-e-ide).
+
 Se levantan **3 piezas, en este orden**. Cada comando en su propia terminal.
 
 ### 1) Keycloak (identidad) — puerto 8080
