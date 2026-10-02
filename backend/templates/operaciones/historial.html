@@ -1,0 +1,141 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Historial de operaciones. Solo consulta: no hay botones que modifiquen nada,
+cada fila lleva al detalle. Los filtros van por GET para que un historial
+filtrado se pueda recargar, paginar o compartir sin perder el filtro.
+{% endcomment %}
+
+{% block titulo_pagina %}Historial — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <style>
+    .filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; margin-bottom: 24px; }
+    .filtros .campo { margin: 0; }
+    .filtros label { font-size: 12px; }
+    .filtros .botonera { margin: 0; }
+    .etiqueta.pendiente { background: #fef3c7; color: #92400e; }
+    .etiqueta.cancelada, .etiqueta.anulada { background: #fee2e2; color: #991b1b; }
+    .etiqueta.pagada { background: #dcfce7; color: var(--verde); }
+    .paginas { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 20px; font-size: 14px; }
+    .paginas a { color: var(--azul); font-weight: 600; text-decoration: none; }
+  </style>
+
+  <div class="cabecera">
+    <h1>Historial de operaciones</h1>
+    <a class="boton" href="{% url 'operar' %}">Nueva operación</a>
+  </div>
+
+  <form method="get" class="filtros">
+    <div class="campo">
+      <label for="estado">Estado</label>
+      <select id="estado" name="estado">
+        <option value="">Todos</option>
+        {% for valor, nombre in estados %}
+          <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      <label for="tipo">Tipo</label>
+      <select id="tipo" name="tipo">
+        <option value="">Compras y ventas</option>
+        {% for valor, nombre in tipos %}
+          <option value="{{ valor }}" {% if filtros.tipo == valor %}selected{% endif %}>{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      <label for="moneda">Moneda</label>
+      <select id="moneda" name="moneda">
+        <option value="">Todas</option>
+        {% for moneda in monedas %}
+          <option value="{{ moneda.codigo }}" {% if filtros.moneda == moneda.codigo %}selected{% endif %}>{{ moneda.codigo }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if clientes|length > 1 %}
+      <div class="campo">
+        <label for="cliente">Cliente</label>
+        <select id="cliente" name="cliente">
+          <option value="">Todos</option>
+          {% for cliente in clientes %}
+            <option value="{{ cliente.pk }}" {% if filtros.cliente == cliente.pk|stringformat:"s" %}selected{% endif %}>{{ cliente.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    <div class="campo">
+      <label for="desde">Desde</label>
+      <input type="date" id="desde" name="desde" value="{{ filtros.desde|default:'' }}">
+    </div>
+    <div class="campo">
+      <label for="hasta">Hasta</label>
+      <input type="date" id="hasta" name="hasta" value="{{ filtros.hasta|default:'' }}">
+    </div>
+    <div class="botonera">
+      <button type="submit" class="boton">Filtrar</button>
+      {% if parametros %}<a class="boton secundario" href="{% url 'historial_operaciones' %}">Limpiar</a>{% endif %}
+    </div>
+  </form>
+
+  {% if pagina.object_list %}
+    <p class="ayuda" style="margin:0 0 12px">
+      {{ pagina.paginator.count }} operaci{{ pagina.paginator.count|pluralize:"ón,ones" }}
+      {% if parametros %}con estos filtros{% endif %}.
+    </p>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Fecha</th>
+            <th>Cliente</th>
+            <th>Operación</th>
+            <th class="numero">Monto</th>
+            <th class="numero">Tasa aplicada</th>
+            <th class="numero">Comisión</th>
+            <th class="numero">Total PYG</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in pagina.object_list %}
+            <tr>
+              <td>{{ t.pk }}</td>
+              <td style="white-space:nowrap">{{ t.fecha_creacion|date:"d/m/Y H:i" }}</td>
+              <td>{{ t.cliente.nombre }}</td>
+              <td>{{ t.get_tipo_display }}</td>
+              <td class="numero">{{ t.monto_divisa|floatformat:"2g" }} {{ t.moneda.codigo }}</td>
+              <td class="numero">{{ t.tasa_aplicada|floatformat:"2g" }}</td>
+              <td class="numero">{{ t.comision|floatformat:"0g" }}</td>
+              <td class="numero">{{ t.total_guaranies|floatformat:"0g" }}</td>
+              <td>
+                <span class="etiqueta {{ t.estado|lower }}">{{ t.get_estado_display }}</span>
+                {% if t.cancelada_por_cotizacion %}<br><span class="ayuda">por cotización</span>{% endif %}
+              </td>
+              <td class="acciones"><a href="{% url 'detalle_operacion' t.pk %}">Ver</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pagina.has_other_pages %}
+      <div class="paginas">
+        {% if pagina.has_previous %}
+          <a href="?{% if parametros %}{{ parametros }}&amp;{% endif %}pagina={{ pagina.previous_page_number }}">← Anterior</a>
+        {% endif %}
+        <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        {% if pagina.has_next %}
+          <a href="?{% if parametros %}{{ parametros }}&amp;{% endif %}pagina={{ pagina.next_page_number }}">Siguiente →</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="vacio">
+      {% if parametros %}Ninguna operación coincide con estos filtros.{% else %}Todavía no hay operaciones.{% endif %}
+    </p>
+  {% endif %}
+{% endblock %}

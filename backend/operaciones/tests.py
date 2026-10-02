@@ -378,7 +378,7 @@ class ApiOperacionesTest(BaseOperacionesTest):
         return cuerpo
 
     def test_crear_devuelve_el_calculo(self):
-        respuesta = self.post_json("api_operaciones_crear", self.cuerpo())
+        respuesta = self.post_json("api_operaciones", self.cuerpo())
         self.assertEqual(respuesta.status_code, 201)
         datos = respuesta.json()
         self.assertEqual(datos["estado"], "PENDIENTE")
@@ -389,12 +389,12 @@ class ApiOperacionesTest(BaseOperacionesTest):
     def test_crear_con_cliente_ajeno_es_400(self):
         ajena = Cliente.objects.create(nombre="Ajena", tipo=Cliente.Tipo.JURIDICA,
                                        direccion="x", cuenta_acreditar="x", correo="a@b.com")
-        respuesta = self.post_json("api_operaciones_crear", self.cuerpo(clienteId=ajena.pk))
+        respuesta = self.post_json("api_operaciones", self.cuerpo(clienteId=ajena.pk))
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn("asociado", respuesta.json()["error"])
 
     def test_crear_con_monto_invalido_es_400(self):
-        respuesta = self.post_json("api_operaciones_crear", self.cuerpo(monto="cien"))
+        respuesta = self.post_json("api_operaciones", self.cuerpo(monto="cien"))
         self.assertEqual(respuesta.status_code, 400)
 
     def test_pagar(self):
