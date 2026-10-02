@@ -7,7 +7,8 @@
       "nombre": "Dólar estadounidense",
       "simbolo": "$",
       "activo": true,
-      "fecha_creacion": "2026-09-01T09:00:00Z"
+      "fecha_creacion": "2026-09-01T09:00:00Z",
+      "fecha_actualizacion": "2026-09-01T09:00:00Z"
     }
   },
   {
@@ -18,7 +19,8 @@
       "nombre": "Euro",
       "simbolo": "€",
       "activo": true,
-      "fecha_creacion": "2026-09-01T09:00:00Z"
+      "fecha_creacion": "2026-09-01T09:00:00Z",
+      "fecha_actualizacion": "2026-09-01T09:00:00Z"
     }
   },
   {
@@ -29,7 +31,8 @@
       "nombre": "Real brasileño",
       "simbolo": "R$",
       "activo": true,
-      "fecha_creacion": "2026-09-01T09:00:00Z"
+      "fecha_creacion": "2026-09-01T09:00:00Z",
+      "fecha_actualizacion": "2026-09-01T09:00:00Z"
     }
   },
   {
@@ -63,39 +66,6 @@
       "precio_venta": "1360.00",
       "fecha": "2026-09-04T09:00:00Z",
       "activa": true
-    }
-  },
-  {
-    "model": "comisiones.segmentocliente",
-    "pk": 1,
-    "fields": {
-      "nombre": "Minorista",
-      "porcentaje_comision": "0.20",
-      "descripcion": "Cliente ocasional, sin volumen mínimo.",
-      "activo": true,
-      "fecha_creacion": "2026-09-01T09:00:00Z"
-    }
-  },
-  {
-    "model": "comisiones.segmentocliente",
-    "pk": 2,
-    "fields": {
-      "nombre": "VIP",
-      "porcentaje_comision": "0.50",
-      "descripcion": "Cliente frecuente, volumen medio.",
-      "activo": true,
-      "fecha_creacion": "2026-09-01T09:00:00Z"
-    }
-  },
-  {
-    "model": "comisiones.segmentocliente",
-    "pk": 3,
-    "fields": {
-      "nombre": "Corporativo",
-      "porcentaje_comision": "1.00",
-      "descripcion": "Empresas con alto volumen de operaciones.",
-      "activo": true,
-      "fecha_creacion": "2026-09-01T09:00:00Z"
     }
   },
   {

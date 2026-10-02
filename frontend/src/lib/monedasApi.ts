@@ -1,7 +1,7 @@
 // Cliente de la API de monedas. Habla con el backend Django (app `monedas`),
 // que es la fuente de verdad: la maqueta ya no guarda monedas en memoria.
 
-const BACKEND = "http://localhost:8000";
+import { BACKEND } from "./api";
 
 export type Moneda = {
   id: number;

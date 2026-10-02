@@ -1,7 +1,11 @@
 // Utilidades comunes para hablar con el backend Django.
 // Las tenían repetidas clientesApi.ts y monedasApi.ts; acá viven una sola vez.
 
-export const BACKEND = "http://localhost:8000";
+// Dirección del backend Django. En desarrollo es localhost:8000; para
+// producción se define VITE_BACKEND_URL al construir (ver frontend/Dockerfile),
+// porque el navegador de quien abre la página no puede llegar a "localhost"
+// del servidor.
+export const BACKEND = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
 
 export function leerCookie(nombre: string): string {
   const match = document.cookie.match(new RegExp(`(?:^|; )${nombre}=([^;]*)`));

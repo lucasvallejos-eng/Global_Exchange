@@ -1,0 +1,90 @@
+# Ambiente de producción de Global Exchange (criterio AMB del Hito 5).
+# Levanta todo junto en un servidor con Docker: Keycloak (con su PostgreSQL),
+# el backend Django (gunicorn) y la maqueta (nginx).
+#
+#   cp .env.prod.example .env.prod      # completar los valores
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Paso a paso, y qué configurar en Keycloak la primera vez:
+# docs/despliegue-produccion.md
+name: global-exchange-prod
+
+services:
+  keycloak-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env.prod}
+    volumes:
+      - keycloak-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    restart: unless-stopped
+    # "start" es el modo producción (el de desarrollo es "start-dev"): exige
+    # declarar con qué dirección lo ve el navegador (KC_HOSTNAME).
+    command: start --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?falta KC_BOOTSTRAP_ADMIN_PASSWORD en .env.prod}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: ${URL_KEYCLOAK:?falta URL_KEYCLOAK en .env.prod}
+      # Deja que el backend le hable por la red interna (http://keycloak:8080)
+      # aunque el navegador lo vea por URL_KEYCLOAK.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # HTTP sin cifrar adentro de Docker. Con IP pública, poner HTTPS adelante
+      # (ver la guía de despliegue).
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${PUERTO_KEYCLOAK:-8080}:8080"
+    volumes:
+      - ./keycloak/realm-export:/opt/keycloak/data/import:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?falta DJANGO_SECRET_KEY en .env.prod}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?falta DJANGO_ALLOWED_HOSTS en .env.prod}
+      DJANGO_HTTPS: ${DJANGO_HTTPS:-0}
+      DJANGO_DB_PATH: /datos/db.sqlite3
+      KEYCLOAK_ISSUER: ${URL_KEYCLOAK}/realms/GlobalExchange
+      KEYCLOAK_ISSUER_INTERNO: http://keycloak:8080/realms/GlobalExchange
+      KEYCLOAK_WEB_CLIENT_SECRET: ${KEYCLOAK_WEB_CLIENT_SECRET:?falta KEYCLOAK_WEB_CLIENT_SECRET en .env.prod}
+      MAQUETA_URL: ${URL_MAQUETA:?falta URL_MAQUETA en .env.prod}/
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+    ports:
+      - "${PUERTO_BACKEND:-8000}:8000"
+    volumes:
+      # La base SQLite vive en un volumen: sobrevive a reconstruir la imagen.
+      - datos-django:/datos
+    depends_on:
+      - keycloak
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_BACKEND_URL: ${URL_BACKEND:?falta URL_BACKEND en .env.prod}
+    restart: unless-stopped
+    ports:
+      - "${PUERTO_MAQUETA:-8443}:80"
+
+volumes:
+  keycloak-db:
+  datos-django:
