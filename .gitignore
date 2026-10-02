@@ -5,6 +5,7 @@ build/
 .cache/
 .env*
 !.env.example
+!.env.prod.example
 .venv/
 **/.venv/
 __pycache__/
@@ -39,3 +40,6 @@ package-lock.json
 #   cd docs && ../backend/.venv/Scripts/python -m sphinx -b html . _build/html
 # así que no tiene sentido versionarlo.
 /docs/_build/
+
+# Estáticos que junta collectstatic para producción (se regeneran al construir).
+/backend/staticfiles/

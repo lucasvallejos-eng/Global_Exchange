@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Role, User } from "./types";
 import DashboardLayout from "./components/DashboardLayout";
-
-// Backend Django que maneja el login con Keycloak.
-const BACKEND = "http://localhost:8000";
+import { BACKEND } from "./lib/api";
 
 // Si el usuario tiene varios roles, este orden decide cuál manda para el menú
 // (el de mayor privilegio primero).

@@ -1,6 +1,6 @@
 import { Client, UsuarioAsociable } from "../types";
 
-const BACKEND = "http://localhost:8000";
+import { BACKEND } from "./api";
 
 function leerCookie(nombre: string): string {
   const match = document.cookie.match(new RegExp(`(?:^|; )${nombre}=([^;]*)`));
