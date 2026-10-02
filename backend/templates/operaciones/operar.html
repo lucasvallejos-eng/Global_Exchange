@@ -1,0 +1,102 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Alta de una operación de compra o venta. Al enviar se crea pendiente de pago y
+se pasa a la confirmación (detalle.html), donde recién se paga.
+{% endcomment %}
+
+{% block titulo_pagina %}Operar — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <div class="cabecera">
+    <h1>Comprar o vender divisa</h1>
+    <a class="boton secundario" href="{% url 'simulador' %}">Simular antes</a>
+  </div>
+
+  {% if not clientes %}
+    {% comment %}RN02: sin un cliente asociado solo se pueden consultar tasas.{% endcomment %}
+    <div class="errores">
+      Tu usuario no está asociado a ningún cliente, así que por ahora solo
+      podés consultar las tasas. Pedile a un administrador que te asocie a
+      tu cliente para poder operar.
+    </div>
+    <a class="boton" href="{% url 'ver_tasas' %}">Ver tasas</a>
+  {% else %}
+
+    {% if errores %}
+      <div class="errores">
+        <ul>{% for error in errores %}<li>{{ error }}</li>{% endfor %}</ul>
+      </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'operar' %}">
+      {% csrf_token %}
+
+      <div class="campo">
+        <label for="cliente">A nombre de</label>
+        <select id="cliente" name="cliente" required>
+          {% for cliente in clientes %}
+            <option value="{{ cliente.pk }}"
+              {% if enviado.cliente == cliente.pk|stringformat:"s" %}selected{% endif %}>
+              {{ cliente.nombre }}{% if cliente.segmento %} — segmento {{ cliente.segmento.nombre }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <p class="ayuda">El segmento del cliente define el descuento y la comisión.</p>
+      </div>
+
+      <div class="campo">
+        <label for="tipo">¿Qué querés hacer?</label>
+        <select id="tipo" name="tipo" required>
+          <option value="COMPRA" {% if enviado.tipo == 'COMPRA' %}selected{% endif %}>
+            Comprar divisa (pago en guaraníes)
+          </option>
+          <option value="VENTA" {% if enviado.tipo == 'VENTA' %}selected{% endif %}>
+            Vender divisa (recibo guaraníes)
+          </option>
+        </select>
+      </div>
+
+      <div class="campo">
+        <label for="moneda">Moneda</label>
+        <select id="moneda" name="moneda" required>
+          <option value="">— Elegí una moneda —</option>
+          {% for item in monedas %}
+            <option value="{{ item.moneda.pk }}"
+              {% if enviado.moneda == item.moneda.pk|stringformat:"s" %}selected{% endif %}>
+              {{ item.moneda.codigo }} — compra {{ item.cotizacion.precio_compra|floatformat:"0g" }} /
+              venta {{ item.cotizacion.precio_venta|floatformat:"0g" }}
+            </option>
+          {% endfor %}
+        </select>
+        {% if not monedas %}
+          <p class="ayuda">No hay ninguna moneda con cotización vigente.</p>
+        {% endif %}
+      </div>
+
+      <div class="campo">
+        <label for="monto">Monto en la divisa</label>
+        <input type="number" id="monto" name="monto" step="0.01" min="0.01" required
+               value="{{ enviado.monto|default:'' }}" placeholder="100">
+      </div>
+
+      <div class="campo">
+        <label for="medio_pago">Medio de pago <span style="font-weight:400">(opcional)</span></label>
+        <select id="medio_pago" name="medio_pago">
+          <option value="">— Sin especificar —</option>
+          {% for medio in medios_pago %}
+            <option value="{{ medio.pk }}"
+              {% if enviado.medio_pago == medio.pk|stringformat:"s" %}selected{% endif %}>
+              {{ medio.alias }}{% if medio.tipo %} ({{ medio.get_tipo_display }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="botonera">
+        <button type="submit" class="boton">Continuar</button>
+        <span class="ayuda" style="margin:0">Todavía no se cobra nada: en el paso siguiente ves el detalle y confirmás.</span>
+      </div>
+    </form>
+  {% endif %}
+{% endblock %}

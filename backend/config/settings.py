@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "comisiones",
     # Consulta de tasas y simulador de conversión (solo lectura)
     "tasas",
+    "operaciones",
 ]
 
 MIDDLEWARE = [
