@@ -17,6 +17,19 @@ pueden verla (administrador, analista, cajero) solo la consultan.
     .etiqueta.pendiente { background: #fef3c7; color: #92400e; }
     .etiqueta.cancelada, .etiqueta.anulada { background: #fee2e2; color: #991b1b; }
     .etiqueta.pagada { background: #dcfce7; color: var(--verde); }
+    .alerta-cotizacion {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-left: 4px solid #d97706;
+      border-radius: 0 10px 10px 0;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      font-size: 14px;
+      color: #78350f;
+    }
+    .alerta-cotizacion p { margin: 0 0 8px; }
+    .alerta-cotizacion .alerta-titulo { font-size: 16px; font-weight: 700; }
+    .alerta-cotizacion .boton { margin-top: 8px; }
   </style>
 
   <div class="cabecera">
@@ -28,7 +41,38 @@ pueden verla (administrador, analista, cajero) solo la consultan.
     <div class="errores">{{ error }}</div>
   {% endif %}
 
-  {% if t.estado == 'CANCELADA' %}
+  {% if t.cancelada_por_cotizacion %}
+    {% comment %}
+      Alerta de cancelación por cambio de cotización. Es distinta de la
+      cancelación manual: el cliente no hizo nada, así que hay que decirle qué
+      pasó, que no se le cobró, y darle el camino para volver a operar.
+    {% endcomment %}
+    <div class="alerta-cotizacion" role="alert">
+      <p class="alerta-titulo">La cotización cambió antes del pago y la operación se canceló.</p>
+      <p>No se te cobró nada.</p>
+      {% if t.tasa_base_nueva %}
+        <p>
+          El {% if t.tipo == 'COMPRA' %}precio de venta{% else %}precio de compra{% endif %}
+          de {{ t.moneda.codigo }} pasó de <strong>{{ t.tasa_base|floatformat:"2g" }}</strong>
+          a <strong>{{ t.tasa_base_nueva|floatformat:"2g" }}</strong> PYG.
+        </p>
+      {% else %}
+        <p>{{ t.moneda.codigo }} se quedó sin cotización vigente: por ahora no se puede operar con esta moneda.</p>
+      {% endif %}
+      {% if recotizacion %}
+        <p>
+          Con la cotización actual, la misma operación
+          {% if t.tipo == 'COMPRA' %}te costaría{% else %}te daría{% endif %}
+          <strong>{{ recotizacion.total_guaranies|floatformat:"0g" }} PYG</strong>{% if diferencia %}
+          ({{ diferencia|floatformat:"0g" }} PYG {% if diferencia_es_mayor %}más{% else %}menos{% endif %}){% endif %}.
+        </p>
+        <a class="boton"
+           href="{% url 'operar' %}?tipo={{ t.tipo }}&amp;moneda={{ t.moneda.pk }}&amp;monto={{ t.monto_divisa|stringformat:'s'|urlencode }}&amp;cliente={{ t.cliente.pk }}">
+          Volver a operar con la cotización actual
+        </a>
+      {% endif %}
+    </div>
+  {% elif t.estado == 'CANCELADA' %}
     <div class="errores">{{ t.motivo_cancelacion }}</div>
   {% endif %}
 

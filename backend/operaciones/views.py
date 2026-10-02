@@ -114,11 +114,26 @@ def detalle_operacion(request, pk):
     """El detalle de una operación, y los botones para pagarla o cancelarla
     mientras esté pendiente."""
     transaccion = _transaccion_visible(request, pk)
-    return render(request, "operaciones/detalle.html", {
+    puede_gestionar = servicios.puede_gestionar(request.user, transaccion)
+    contexto = {
         "t": transaccion,
-        "puede_gestionar": servicios.puede_gestionar(request.user, transaccion),
+        "puede_gestionar": puede_gestionar,
         "error": request.session.pop("error_operacion", None),
-    })
+    }
+
+    # Alerta de cancelación: si la cotización cambió, se le muestra al
+    # cliente cuánto saldría ahora la misma operación, para que decida si
+    # vuelve a operar. Solo a quien puede operar: el resto solo consulta.
+    if transaccion.cancelada_por_cotizacion and puede_gestionar:
+        recotizacion = servicios.recotizar(transaccion)
+        if recotizacion:
+            diferencia = recotizacion["total_guaranies"] - transaccion.total_guaranies
+            contexto.update({
+                "recotizacion": recotizacion,
+                "diferencia": abs(diferencia),
+                "diferencia_es_mayor": diferencia > 0,
+            })
+    return render(request, "operaciones/detalle.html", contexto)
 
 
 @require_POST
