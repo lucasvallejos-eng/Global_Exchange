@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ClientType, getAppliedRate } from "../lib/clientRates";
 import { useTasas } from "../lib/useTasas";
 import { etiquetaMedioPago, listarMediosPago, type MedioPago } from "../lib/mediosPagoApi";
-import { cancelarOperacion, crearOperacion, pagarOperacion, type Operacion } from "../lib/operacionesApi";
+import { confirmarOperacion, cotizarOperacion, type NuevaOperacion, type Operacion, type Presupuesto } from "../lib/operacionesApi";
 import AlertaCancelacionModal from "./AlertaCancelacionModal";
 
 
@@ -33,8 +33,12 @@ export default function CompraDivisasModule({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // La operación ya creada en el backend (pendiente), con el cálculo real.
-  const [operacion, setOperacion] = useState<Operacion | null>(null);
+  // Cálculo del backend que muestra el modal. La operación todavía no existe:
+  // se registra recién al confirmar, así que cerrar el modal o recargar la
+  // página no deja nada pendiente en el historial.
+  const [operacion, setOperacion] = useState<Presupuesto | null>(null);
+  // Los datos con los que se pidió ese cálculo, para confirmar exactamente eso.
+  const [pedido, setPedido] = useState<NuevaOperacion | null>(null);
   const [procesando, setProcesando] = useState(false);
   // Operación que se canceló sola porque cambió la cotización (IS2GE-71).
   const [alerta, setAlerta] = useState<Operacion | null>(null);
@@ -83,38 +87,38 @@ export default function CompraDivisasModule({
   const mensajeDeError = (error: unknown, porDefecto: string) =>
     error instanceof Error ? error.message : porDefecto;
 
-  // "Comprar" crea la operación pendiente en el backend, que es quien calcula
-  // la tasa aplicada y la comisión. El modal muestra ese cálculo, no la
-  // vista previa de arriba.
+  // "Comprar" le pide al backend el cálculo (tasa aplicada, comisión, total)
+  // sin guardar nada. El modal muestra ese cálculo, no la vista previa de arriba.
   const handleComprar = async () => {
     if (!clienteId) return;
     setSuccessMessage(null);
     setErrorMessage(null);
     setProcesando(true);
+    const datos: NuevaOperacion = {
+      clienteId,
+      tipo: "COMPRA",
+      moneda: currency,
+      monto: numericAmount,
+      medioPagoId: selectedMethod?.id ?? null,
+    };
     try {
-      const nueva = await crearOperacion({
-        clienteId,
-        tipo: "COMPRA",
-        moneda: currency,
-        monto: numericAmount,
-        medioPagoId: selectedMethod?.id ?? null,
-      });
-      setOperacion(nueva);
+      setOperacion(await cotizarOperacion(datos));
+      setPedido(datos);
       setIsModalOpen(true);
     } catch (error) {
-      setErrorMessage(mensajeDeError(error, "No se pudo crear la operación."));
+      setErrorMessage(mensajeDeError(error, "No se pudo calcular la operación."));
     } finally {
       setProcesando(false);
     }
   };
 
-  // Al pagar, el backend vuelve a mirar la cotización: si cambió, cancela la
-  // operación en vez de cobrarla.
   const handleConfirm = async () => {
-    if (!operacion) return;
+    if (!operacion || !pedido) return;
     setProcesando(true);
     try {
-      const resultado = await pagarOperacion(operacion.id);
+      // Recién acá se registra la operación. Si la cotización cambió desde el
+      // cálculo, el backend la registra cancelada en vez de cobrarla.
+      const resultado = await confirmarOperacion({ ...pedido, tasaBase: operacion.tasaBase });
       if (resultado.estado === "PAGADA") {
         setSuccessMessage(`Operación #${resultado.id} pagada: ${formatCurrency(resultado.totalGuaranies)} PYG.`);
       } else if (resultado.canceladaPorCotizacion) {
@@ -128,14 +132,15 @@ export default function CompraDivisasModule({
       setProcesando(false);
       setIsModalOpen(false);
       setOperacion(null);
+      setPedido(null);
     }
   };
 
-  // Cerrar el modal sin pagar cancela la operación, para que no quede
-  // pendiente para siempre.
-  const handleCancelar = async () => {
-    if (operacion) await cancelarOperacion(operacion.id).catch(() => undefined);
+  // Cerrar el modal sin confirmar: la operación nunca se registró, así que no
+  // hay nada que cancelar en el backend.
+  const handleCancelar = () => {
     setOperacion(null);
+    setPedido(null);
     setIsModalOpen(false);
   };
 
@@ -397,7 +402,7 @@ export default function CompraDivisasModule({
 
             <div className="mt-6 flex justify-end gap-3">
               <button
-                onClick={() => void handleCancelar()}
+                onClick={handleCancelar}
                 disabled={procesando}
                 className="rounded-xl border border-[#dbe3ee] bg-white px-4 py-2.5 text-sm font-semibold text-[#374151] hover:bg-[#f8fafc]"
               >

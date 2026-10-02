@@ -429,3 +429,55 @@ class ApiOperacionesTest(BaseOperacionesTest):
         self.entrar(self.otro_usuario)
         self.assertEqual(self.client.get(reverse("api_operaciones_detalle", args=[t.pk])).status_code, 404)
         self.assertEqual(self.post_json("api_operaciones_pagar", args=[t.pk]).status_code, 404)
+
+
+class ApiCotizarYConfirmarTest(BaseOperacionesTest):
+    """Flujo de la maqueta: el modal calcula sin guardar y la operación se
+    registra recién al confirmar."""
+
+    # Mismos ayudantes que ApiOperacionesTest, sin heredar (y repetir) sus pruebas.
+    post_json = ApiOperacionesTest.post_json
+    cuerpo = ApiOperacionesTest.cuerpo
+
+    def setUp(self):
+        super().setUp()
+        self.entrar(self.usuario)
+
+    def test_cotizar_no_guarda_nada(self):
+        respuesta = self.post_json("api_operaciones_cotizar", self.cuerpo())
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["tasaBase"], 7400.0)
+        self.assertEqual(datos["totalGuaranies"], 710030.0)
+        self.assertNotIn("id", datos)
+        self.assertFalse(Transaccion.objects.exists())
+
+    def test_cotizar_valida_igual_que_crear(self):
+        ajena = Cliente.objects.create(nombre="Ajena", tipo=Cliente.Tipo.JURIDICA,
+                                       direccion="x", cuenta_acreditar="x", correo="a@b.com")
+        respuesta = self.post_json("api_operaciones_cotizar", self.cuerpo(clienteId=ajena.pk))
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_confirmar_registra_la_operacion_pagada(self):
+        respuesta = self.post_json("api_operaciones_confirmar", self.cuerpo(tasaBase=7400))
+        self.assertEqual(respuesta.status_code, 201)
+        datos = respuesta.json()
+        self.assertEqual(datos["estado"], "PAGADA")
+        self.assertEqual(datos["totalGuaranies"], 710030.0)
+        self.assertEqual(Transaccion.objects.count(), 1)
+
+    def test_confirmar_con_cotizacion_cambiada_la_registra_cancelada(self):
+        self.cotizacion.precio_venta = Decimal("7450")
+        self.cotizacion.save()
+        datos = self.post_json("api_operaciones_confirmar", self.cuerpo(tasaBase=7400)).json()
+        self.assertEqual(datos["estado"], "CANCELADA")
+        self.assertTrue(datos["canceladaPorCotizacion"])
+        # Queda con el cálculo que el cliente vio, y el precio nuevo aparte.
+        self.assertEqual(datos["tasaBase"], 7400.0)
+        self.assertEqual(datos["totalGuaranies"], 710030.0)
+        self.assertEqual(datos["tasaBaseNueva"], 7450.0)
+
+    def test_confirmar_sin_tasa_es_400(self):
+        respuesta = self.post_json("api_operaciones_confirmar", self.cuerpo())
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertFalse(Transaccion.objects.exists())

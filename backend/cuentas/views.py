@@ -59,6 +59,9 @@ def api_me(request):
             "username": request.user.username,
             "nombre": request.user.get_full_name() or request.user.username,
             "email": request.user.email,
+            # Datos y contraseña los administra Keycloak: la maqueta manda acá
+            # al usuario en vez de tener su propio formulario.
+            "cuentaUrl": f"{settings.KEYCLOAK_ISSUER}/account",
             "roles": roles,
             "clientesAsignados": clientes,
         }

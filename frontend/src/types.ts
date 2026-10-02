@@ -11,7 +11,10 @@ export interface ClienteAsignado {
 
 export interface User {
   name: string;
+  username?: string;
   email: string;
+  // Consola de cuenta de Keycloak (datos personales y contraseña).
+  cuentaUrl?: string;
   role: Role;
   avatar?: string;
   clientesAsignados?: ClienteAsignado[];
@@ -28,11 +31,15 @@ export interface Client {
   id: number;
   nombre: string;
   tipo: "Jurídica" | "Física";
-  categoria: "Minorista" | "Mayorista" | "VIP";
+  // Id del segmento (app `comisiones`) del que salen la comisión y el
+  // descuento del cliente; null si todavía no tiene uno asignado.
+  segmento: number | null;
   direccion: string;
   cuentaAcreditar: string;
   correo: string;
   usuarios: number[];
+  // Lo calcula el backend a partir del segmento; solo se muestra.
+  porcentajeComision?: string | null;
 }
 
 export const DEMO_USERS: Record<string, User> = {

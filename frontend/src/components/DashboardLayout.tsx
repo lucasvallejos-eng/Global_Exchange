@@ -157,7 +157,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "configuracion") {
-      return <ConfiguracionDatosModule />;
+      return <ConfiguracionDatosModule user={user} />;
     }
 
     if (activeSection === "simulacion" || activeSection === "simulacion-venta") {

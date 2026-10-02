@@ -9,12 +9,22 @@ Los roles llegan en el claim plano `roles` del token (lo produce el mapper
 de Django**, así el control de acceso del lado del servidor usa el sistema de
 permisos estándar de Django.
 """
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 
 class BackendOIDCKeycloak(OIDCAuthenticationBackend):
     """Sincroniza el usuario local de Django y sus permisos a partir de los claims de Keycloak."""
+
+    def get_username(self, claims):
+        """Usa el nombre de usuario de Keycloak (``preferred_username``).
+
+        Por defecto mozilla-django-oidc guarda un hash del ``sub``, y eso es lo
+        que terminaba apareciendo en pantalla (p. ej. en medios de pago). Si el
+        claim no viene, se vuelve al comportamiento por defecto.
+        """
+        return claims.get("preferred_username") or super().get_username(claims)
 
     def create_user(self, claims):
         """Crea un nuevo usuario en Django y asigna sus datos iniciales desde Keycloak.
@@ -56,6 +66,18 @@ class BackendOIDCKeycloak(OIDCAuthenticationBackend):
         # Datos básicos del perfil.
         usuario.first_name = claims.get("given_name", "") or ""
         usuario.last_name = claims.get("family_name", "") or ""
+        usuario.email = claims.get("email", "") or usuario.email
+
+        # Los usuarios creados antes de get_username() quedaron con el hash
+        # como nombre: se corrige en el próximo login, salvo que el nombre ya
+        # lo tenga otro usuario (username es único).
+        nombre = claims.get("preferred_username")
+        if (
+            nombre
+            and usuario.username != nombre
+            and not get_user_model().objects.filter(username=nombre).exclude(pk=usuario.pk).exists()
+        ):
+            usuario.username = nombre
 
         # Roles de Keycloak (claim plano "roles").
         roles = claims.get("roles", []) or []

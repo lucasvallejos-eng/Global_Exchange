@@ -78,9 +78,17 @@ def calcular(tipo, monto_divisa, cotizacion, segmento):
         ``monto_guaranies``, ``porcentaje_comision``, ``comision`` y
         ``total_guaranies``, todos ``Decimal``.
     """
-    monto_divisa = Decimal(monto_divisa)
-    tasa_base = Decimal(tasa_base_de(cotizacion, tipo))
+    return _calcular(tipo, monto_divisa, Decimal(tasa_base_de(cotizacion, tipo)), segmento)
 
+
+def _calcular(tipo, monto_divisa, tasa_base, segmento):
+    """El cálculo de ``calcular`` a partir de una tasa base ya elegida.
+
+    Se separa para poder recalcular con la tasa que el cliente vio en la
+    confirmación aunque la cotización ya haya cambiado (ver
+    ``confirmar_operacion``).
+    """
+    monto_divisa = Decimal(monto_divisa)
     descuento = Decimal("0")
     if segmento is not None and tipo == Transaccion.Tipo.COMPRA:
         descuento = Decimal(segmento.descuento_compra)
@@ -135,8 +143,8 @@ def _descripcion_medio_pago(medio):
     return medio.alias
 
 
-def crear_operacion(usuario, cliente, tipo, moneda, monto_divisa, medio_pago=None):
-    """Crea una operación pendiente de pago, con la cotización de este momento.
+def _validar(usuario, cliente, tipo, moneda, monto_divisa, medio_pago):
+    """Valida que se pueda operar y devuelve la cotización vigente.
 
     Raises:
         OperacionInvalida: si el usuario no está asociado al cliente (RN02), el
@@ -160,7 +168,16 @@ def crear_operacion(usuario, cliente, tipo, moneda, monto_divisa, medio_pago=Non
 
     if medio_pago is not None and (medio_pago.usuario_id != usuario.pk or not medio_pago.activo):
         raise OperacionInvalida("Ese medio de pago no está disponible para tu usuario.")
+    return cotizacion
 
+
+def crear_operacion(usuario, cliente, tipo, moneda, monto_divisa, medio_pago=None):
+    """Crea una operación pendiente de pago, con la cotización de este momento.
+
+    Raises:
+        OperacionInvalida: ver ``_validar``.
+    """
+    cotizacion = _validar(usuario, cliente, tipo, moneda, monto_divisa, medio_pago)
     calculo = calcular(tipo, monto_divisa, cotizacion, cliente.segmento)
     return Transaccion.objects.create(
         cliente=cliente,
@@ -173,6 +190,68 @@ def crear_operacion(usuario, cliente, tipo, moneda, monto_divisa, medio_pago=Non
         medio_pago_descripcion=_descripcion_medio_pago(medio_pago) if medio_pago else "",
         **calculo,
     )
+
+
+def cotizar(usuario, cliente, tipo, moneda, monto_divisa, medio_pago=None):
+    """Calcula la operación con la cotización vigente, **sin guardarla**.
+
+    Es lo que muestra la maqueta en el modal de confirmación: así tocar
+    "Comprar" o "Vender" y no confirmar (cerrar el modal, recargar la página)
+    no deja operaciones pendientes en el historial.
+
+    Raises:
+        OperacionInvalida: ver ``_validar``.
+    """
+    cotizacion = _validar(usuario, cliente, tipo, moneda, monto_divisa, medio_pago)
+    return calcular(tipo, monto_divisa, cotizacion, cliente.segmento)
+
+
+def confirmar_operacion(usuario, cliente, tipo, moneda, monto_divisa, tasa_base_vista,
+                        medio_pago=None):
+    """Registra la operación que el cliente confirmó, ya pagada.
+
+    ``tasa_base_vista`` es la tasa base del cálculo que se le mostró (el de
+    ``cotizar``). Si la cotización cambió desde entonces, la operación no se
+    cobra: queda registrada como cancelada por cambio de cotización, con el
+    cálculo que el cliente vio, igual que ``pagar`` con una pendiente.
+
+    Returns:
+        Transaccion: en estado ``PAGADA`` o ``CANCELADA``.
+
+    Raises:
+        OperacionInvalida: ver ``_validar``.
+    """
+    with transaccion_bd.atomic():
+        cotizacion = _validar(usuario, cliente, tipo, moneda, monto_divisa, medio_pago)
+        tasa_vista = Decimal(tasa_base_vista)
+        precio_actual = Decimal(tasa_base_de(cotizacion, tipo))
+        ahora = timezone.now()
+        datos = {
+            "cliente": cliente,
+            "usuario": usuario,
+            "tipo": tipo,
+            "moneda": moneda,
+            "monto_divisa": Decimal(monto_divisa),
+            "cotizacion": cotizacion,
+            "medio_pago": medio_pago,
+            "medio_pago_descripcion": _descripcion_medio_pago(medio_pago) if medio_pago else "",
+            **_calcular(tipo, monto_divisa, tasa_vista, cliente.segmento),
+        }
+        if precio_actual == tasa_vista:
+            return Transaccion.objects.create(
+                **datos, estado=Transaccion.Estado.PAGADA, fecha_pago=ahora
+            )
+        return Transaccion.objects.create(
+            **datos,
+            estado=Transaccion.Estado.CANCELADA,
+            cancelada_por_cotizacion=True,
+            tasa_base_nueva=precio_actual,
+            fecha_cancelacion=ahora,
+            motivo_cancelacion=(
+                f"La cotización de {moneda.codigo} cambió antes del pago: "
+                f"pasó de {tasa_vista} a {precio_actual}."
+            ),
+        )
 
 
 def puede_gestionar(usuario, transaccion):
