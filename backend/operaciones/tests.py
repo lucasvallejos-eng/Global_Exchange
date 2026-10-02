@@ -1,4 +1,5 @@
 """Pruebas de las operaciones de compra y venta (Sprint 3)."""
+import json
 import time
 from decimal import Decimal
 
@@ -49,6 +50,15 @@ class BaseOperacionesTest(TestCase):
         self.cotizacion = Cotizacion.objects.create(
             moneda=self.usd, precio_compra=Decimal("7300"), precio_venta=Decimal("7400")
         )
+
+    def entrar(self, usuario):
+        """Inicia sesión como lo haría Keycloak. Sin un token "vigente" en la
+        sesión, el middleware de renovación de mozilla-django-oidc redirige
+        al login en vez de llegar a la vista."""
+        self.client.force_login(usuario)
+        sesion = self.client.session
+        sesion["oidc_id_token_expiration"] = time.time() + 3600
+        sesion.save()
 
     def crear(self, tipo=Transaccion.Tipo.COMPRA, monto="100", **extra):
         return servicios.crear_operacion(
@@ -254,14 +264,6 @@ class PantallasOperacionTest(BaseOperacionesTest):
         super().setUp()
         self.entrar(self.usuario)
 
-    def entrar(self, usuario):
-        """Inicia sesión como lo haría Keycloak. Sin un token "vigente" en la
-        sesión, el middleware de renovación de mozilla-django-oidc redirige
-        al login en vez de llegar a la vista."""
-        self.client.force_login(usuario)
-        sesion = self.client.session
-        sesion["oidc_id_token_expiration"] = time.time() + 3600
-        sesion.save()
 
     def datos(self, **cambios):
         datos = {"cliente": self.cliente.pk, "tipo": "COMPRA",
@@ -357,3 +359,73 @@ class PantallasOperacionTest(BaseOperacionesTest):
     def test_sin_sesion_no_se_entra(self):
         self.client.logout()
         self.assertEqual(self.client.get(reverse("operar")).status_code, 403)
+
+
+class ApiOperacionesTest(BaseOperacionesTest):
+    """La API que usa la maqueta: el mismo flujo, en JSON."""
+
+    def setUp(self):
+        super().setUp()
+        self.entrar(self.usuario)
+
+    def post_json(self, nombre, datos=None, args=None):
+        return self.client.post(reverse(nombre, args=args), data=json.dumps(datos or {}),
+                                content_type="application/json")
+
+    def cuerpo(self, **cambios):
+        cuerpo = {"clienteId": self.cliente.pk, "tipo": "COMPRA", "moneda": "USD", "monto": 100}
+        cuerpo.update(cambios)
+        return cuerpo
+
+    def test_crear_devuelve_el_calculo(self):
+        respuesta = self.post_json("api_operaciones_crear", self.cuerpo())
+        self.assertEqual(respuesta.status_code, 201)
+        datos = respuesta.json()
+        self.assertEqual(datos["estado"], "PENDIENTE")
+        self.assertEqual(datos["tasaAplicada"], 7030.0)
+        self.assertEqual(datos["comision"], 7030.0)
+        self.assertEqual(datos["totalGuaranies"], 710030.0)
+
+    def test_crear_con_cliente_ajeno_es_400(self):
+        ajena = Cliente.objects.create(nombre="Ajena", tipo=Cliente.Tipo.JURIDICA,
+                                       direccion="x", cuenta_acreditar="x", correo="a@b.com")
+        respuesta = self.post_json("api_operaciones_crear", self.cuerpo(clienteId=ajena.pk))
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("asociado", respuesta.json()["error"])
+
+    def test_crear_con_monto_invalido_es_400(self):
+        respuesta = self.post_json("api_operaciones_crear", self.cuerpo(monto="cien"))
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_pagar(self):
+        t = self.crear()
+        datos = self.post_json("api_operaciones_pagar", args=[t.pk]).json()
+        self.assertEqual(datos["estado"], "PAGADA")
+        self.assertIsNotNone(datos["fechaPago"])
+
+    def test_la_cancelacion_por_cotizacion_no_es_un_error(self):
+        t = self.crear()
+        self.cotizacion.precio_venta = Decimal("7600")
+        self.cotizacion.save()
+        respuesta = self.post_json("api_operaciones_pagar", args=[t.pk])
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["estado"], "CANCELADA")
+        self.assertTrue(datos["canceladaPorCotizacion"])
+        self.assertEqual(datos["tasaBaseNueva"], 7600.0)
+
+    def test_pagar_dos_veces_es_400(self):
+        t = servicios.pagar(self.crear(), self.usuario)
+        self.assertEqual(self.post_json("api_operaciones_pagar", args=[t.pk]).status_code, 400)
+
+    def test_cancelar(self):
+        t = self.crear()
+        datos = self.post_json("api_operaciones_cancelar", args=[t.pk]).json()
+        self.assertEqual(datos["estado"], "CANCELADA")
+        self.assertFalse(datos["canceladaPorCotizacion"])
+
+    def test_operacion_ajena_es_404(self):
+        t = self.crear()
+        self.entrar(self.otro_usuario)
+        self.assertEqual(self.client.get(reverse("api_operaciones_detalle", args=[t.pk])).status_code, 404)
+        self.assertEqual(self.post_json("api_operaciones_pagar", args=[t.pk]).status_code, 404)

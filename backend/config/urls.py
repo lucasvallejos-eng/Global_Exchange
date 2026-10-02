@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/", include("comisiones.api_urls")),
     path("api/", include("medios_pago.api_urls")),
     path("api/", include("cotizaciones.api_urls")),
+    path("api/", include("operaciones.api_urls")),
     # Cerrar sesión (acepta GET) y página tras cerrar sesión.
     path("logout/", views.cerrar_sesion, name="cerrar_sesion"),
     path("sesion-cerrada/", views.sesion_cerrada, name="sesion_cerrada"),

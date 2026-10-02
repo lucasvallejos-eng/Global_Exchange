@@ -20,15 +20,6 @@ from .servicios import OperacionInvalida
 
 TODOS_LOS_ROLES = ("administrador", "analista_cambiario", "cajero", "cliente")
 
-# Pueden mirar cualquier operación (no pagarla ni cancelarla): el
-# analista_cambiario por la ERS ("ver ganancias"), el administrador y el
-# cajero porque atienden a los clientes.
-VEN_TODAS = ("administrador", "analista_cambiario", "cajero")
-
-
-def _tiene_algun_rol(usuario, roles):
-    return usuario.groups.filter(name__in=roles).exists()
-
 
 def _monedas_operables():
     """Monedas activas que tienen cotización vigente, con esa cotización."""
@@ -113,11 +104,9 @@ def _transaccion_visible(request, pk):
     transaccion = get_object_or_404(
         Transaccion.objects.select_related("cliente", "moneda", "usuario"), pk=pk
     )
-    if servicios.puede_gestionar(request.user, transaccion):
-        return transaccion
-    if _tiene_algun_rol(request.user, VEN_TODAS):
-        return transaccion
-    raise Http404
+    if not servicios.puede_ver(request.user, transaccion):
+        raise Http404
+    return transaccion
 
 
 @rol_requerido(*TODOS_LOS_ROLES)

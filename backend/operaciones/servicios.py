@@ -33,6 +33,11 @@ from .models import Transaccion
 GUARANI = Decimal("1")
 CUATRO_DECIMALES = Decimal("0.0001")
 
+# Pueden mirar cualquier operación (no pagarla ni cancelarla): el
+# analista_cambiario por la ERS ("ver ganancias"), el administrador y el
+# cajero porque atienden a los clientes.
+VEN_TODAS = ("administrador", "analista_cambiario", "cajero")
+
 
 class OperacionInvalida(Exception):
     """La operación no se puede hacer. El mensaje se le muestra al usuario."""
@@ -157,6 +162,14 @@ def puede_gestionar(usuario, transaccion):
     """Si el usuario puede pagar o cancelar la operación: tiene que estar
     asociado al cliente, igual que para crearla (RN02)."""
     return clientes_habilitados(usuario).filter(pk=transaccion.cliente_id).exists()
+
+
+def puede_ver(usuario, transaccion):
+    """Si el usuario puede consultar la operación: quien opera a nombre del
+    cliente, o alguno de los roles de ``VEN_TODAS``."""
+    if puede_gestionar(usuario, transaccion):
+        return True
+    return usuario.groups.filter(name__in=VEN_TODAS).exists()
 
 
 def pagar(transaccion, usuario):
