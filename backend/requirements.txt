@@ -1,35 +1,9 @@
-alabaster==1.0.0
-asgiref==3.12.1
-babel==2.18.0
-certifi==2026.7.22
-cffi==2.1.1
-charset-normalizer==3.5.1
-colorama==0.4.6
-cryptography==50.0.1
-Django==5.2.17
-docutils==0.22.4
-idna==3.20
-imagesize==2.0.1
-Jinja2==3.1.6
-josepy==2.2.0
-MarkupSafe==3.0.3
-mozilla-django-oidc==4.0.1
-packaging==26.3
-pycparser==3.0
-Pygments==2.21.0
-python-dotenv==1.2.3
-requests==2.34.2
-roman-numerals==4.1.0
-snowballstemmer==3.1.1
-Sphinx==9.1.0
-sphinx_rtd_theme==3.1.0
-sphinxcontrib-applehelp==2.0.0
-sphinxcontrib-devhelp==2.0.0
-sphinxcontrib-htmlhelp==2.1.0
-sphinxcontrib-jquery==4.1
-sphinxcontrib-jsmath==1.0.1
-sphinxcontrib-qthelp==2.0.0
-sphinxcontrib-serializinghtml==2.0.0
-sqlparse==0.6.0
-tzdata==2026.4
-urllib3==2.8.0
+# Backend Global Exchange — dependencias (solo lo necesario para Keycloak).
+Django>=5.2,<5.3
+mozilla-django-oidc>=4.0,<5.0
+python-dotenv>=1.0
+
+# Solo para generar la documentación del código (docs/). No hace falta para
+# levantar el sistema; sí para reconstruir docs/_build con:
+#   cd docs && ../backend/.venv/Scripts/python -m sphinx -b html . _build/html
+sphinx>=8.0
