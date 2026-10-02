@@ -35,6 +35,11 @@ Global_Exchange/
 
 ## Puesta en marcha (primera vez)
 
+> **Atajo:** una vez hecha la configuración de abajo (los `.env`, el `.venv` y
+> Docker), `levantar_todo.py` levanta las tres piezas con un solo comando o con
+> el Play de PyCharm / VS Code. Ver la guía en
+> [`docs/conversaciones-ia/2026-10-02-fixes-pre-tag.md`](docs/conversaciones-ia/2026-10-02-fixes-pre-tag.md#guía-levantar_todopy-en-cada-sistema-e-ide).
+
 Se levantan **3 piezas, en este orden**. Cada comando en su propia terminal.
 
 ### 1) Keycloak (identidad) — puerto 8080
@@ -81,14 +86,20 @@ no se exportan). Para no cargar todo a mano antes de una demo:
 
 ```bash
 cd backend
-.venv\Scripts\python manage.py loaddata fixtures/demo_hito4.json
+.venv\Scripts\python manage.py loaddata fixtures/demo.json
 cd ..\keycloak
 ..\backend\.venv\Scripts\python crear_usuarios_prueba.py
 ```
 
-Esto deja 3 monedas con cotización, 3 segmentos de comisión, 2 clientes de
-ejemplo, y los usuarios `admin.test` / `analista.test` / `cajero.test` /
-`cliente.test` (contraseña `Prueba2026!` para los cuatro), uno por rol.
+Esto deja 3 monedas con cotización y 2 clientes de ejemplo, y los usuarios
+`admin.test` / `analista.test` / `cajero.test` / `cliente.test` (contraseña
+`Prueba2026!` para los cuatro), uno por rol. Los segmentos de comisión
+(Minorista, Mayorista, VIP) no vienen en el fixture: los crea solos la
+migración de `comisiones`.
+
+Para **operar** (RN02), el usuario tiene que estar asociado a un cliente: se
+asocia desde la pantalla de clientes, después de que inició sesión al menos una
+vez (Django crea su usuario en el primer login).
 
 > **Si la base ya tiene datos cargados**, `loaddata` va a fallar con un
 > `IntegrityError` (el fixture fija los mismos IDs de siempre, por ejemplo
@@ -99,6 +110,12 @@ ejemplo, y los usuarios `admin.test` / `analista.test` / `cajero.test` /
 
 Abrí **http://localhost:8000** y seguí el flujo. También podés abrir la maqueta
 directo en http://localhost:8443 (si no hay sesión, te manda al login).
+
+### Producción
+
+Todo el sistema se levanta junto con `docker-compose.prod.yml` (Keycloak en
+modo producción, Django con gunicorn, la maqueta con nginx). Paso a paso en
+[`docs/despliegue-produccion.md`](docs/despliegue-produccion.md).
 
 ---
 

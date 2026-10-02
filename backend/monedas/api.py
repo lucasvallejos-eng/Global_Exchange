@@ -13,8 +13,6 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
-from django.utils import timezone
-from datetime import timedelta
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -65,7 +63,7 @@ def _decimal(valor):
         return None
 
 
-def _guardar_cotizacion(moneda, compra, venta, administrador=None, aplicar_bloqueo=True):
+def _guardar_cotizacion(moneda, compra, venta, administrador=None):
     """Crea una cotización nueva si vinieron ambos precios.
 
     Devuelve el mensaje de error si no cumple RN10 (venta > compra), o None si
@@ -75,14 +73,10 @@ def _guardar_cotizacion(moneda, compra, venta, administrador=None, aplicar_bloqu
     if compra is None or venta is None:
         return None
     vigente = moneda.cotizaciones.filter(activa=True).order_by("-fecha").first()
-    if aplicar_bloqueo and vigente:
-        restante = timedelta(hours=1) - (timezone.now() - moneda.fecha_actualizacion)
-        if restante.total_seconds() > 0:
-            minutos = max(1, int((restante.total_seconds() + 59) // 60))
-            return (
-                "No se puede actualizar la cotización. Debe transcurrir al menos "
-                f"1 hora desde el último cambio. Tiempo restante: {minutos} minutos."
-            )
+    # Si los precios no cambian (p. ej. solo se editó el nombre o el estado)
+    # no hay cotización nueva que registrar.
+    if vigente and vigente.precio_compra == compra and vigente.precio_venta == venta:
+        return None
 
     nueva = Cotizacion(moneda=moneda, precio_compra=compra, precio_venta=venta, activa=True)
     try:
@@ -137,7 +131,6 @@ def _crear(request):
         _decimal(datos.get("precioCompra")),
         _decimal(datos.get("precioVenta")),
         request.user,
-        aplicar_bloqueo=False,
     )
     if error:
         # Sin cotización válida la moneda no sirve: se deshace el alta.

@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Role, User } from "./types";
 import DashboardLayout from "./components/DashboardLayout";
-
-// Backend Django que maneja el login con Keycloak.
-const BACKEND = "http://localhost:8000";
+import { BACKEND } from "./lib/api";
 
 // Si el usuario tiene varios roles, este orden decide cuál manda para el menú
 // (el de mayor privilegio primero).
@@ -32,7 +30,9 @@ export default function App() {
           const data = await res.json();
           setUsuario({
             name: data.nombre || data.username,
+            username: data.username,
             email: data.email || "",
+            cuentaUrl: data.cuentaUrl,
             role: elegirRol(data.roles || []),
             // Django ya limita esta lista a los clientes asociados al usuario.
             // No descartamos asociaciones por la etiqueta del segmento.

@@ -124,7 +124,7 @@ export default function MediosPagoModule({ adminMode = false }: Props) {
       <div className="overflow-x-auto rounded-2xl border border-[#e2e8f0]">
         <table className="min-w-full text-left text-sm"><thead className="bg-[#f8fafc]"><tr><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Alias</th><th className="px-4 py-3">Usuario</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Acciones</th></tr></thead>
           <tbody>{medios.map((medio) => <tr key={medio.id} className="border-t border-[#edf2f7]">
-            <td className="px-4 py-3">{medio.tipo}</td><td className="px-4 py-3 font-medium">{medio.alias}</td><td className="px-4 py-3">{medio.usuario}</td>
+            <td className="px-4 py-3">{medio.tipoTexto}</td><td className="px-4 py-3 font-medium">{medio.alias}</td><td className="px-4 py-3">{medio.usuario}</td>
             <td className="px-4 py-3"><button onClick={() => adminMode && cambiarEstado(medio)} disabled={!adminMode} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${medio.activo ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"}`}>{medio.activo ? "Activo" : "Inactivo"}</button></td>
             <td className="px-4 py-3">{!adminMode && <><button onClick={() => abrir(medio)} className="mr-2 text-xs font-semibold text-[#1a7eff]">Modificar</button><button onClick={() => void eliminar(medio)} className="text-xs font-semibold text-red-600">Eliminar</button></>}</td>
           </tr>)}</tbody>

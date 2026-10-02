@@ -1,0 +1,12 @@
+# Dependencias extra para el ambiente de producción (criterio AMB del Hito 5).
+# Las instala la imagen de Docker (backend/Dockerfile); para desarrollar no
+# hacen falta, alcanza con requirements.txt.
+-r requirements.txt
+
+# Servidor web de producción. "manage.py runserver" es solo para desarrollo:
+# la propia documentación de Django dice que no se use en producción.
+gunicorn>=23.0,<24.0
+
+# Sirve los archivos estáticos (estilos del panel /admin/) con DEBUG apagado,
+# sin tener que agregar otro servidor web adelante.
+whitenoise>=6.7,<7.0

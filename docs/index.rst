@@ -69,7 +69,6 @@ desde ``Cotizacion.clean()``. Las vistas y la API llaman a ``full_clean()`` ante
 guardar.
 
 Reglas de Negocio de Auditoría:
-* **Bloqueo temporal:** No se permite actualizar los precios de compra o venta de una cotización si transcurrió menos de 1 hora desde la última modificación.
 * **Historial de cambios:** Se registra automáticamente un evento en ``HistorialCotizacion`` almacenando el usuario administrador, los precios anteriores y los nuevos precios asignados.
 
 .. automodule:: cotizaciones.models
@@ -126,7 +125,28 @@ Tasas y simulador
 
 .. automodule:: tasas.views
    :members:
-   
+
+
+
+Operaciones de compra y venta
+-----------------------------
+
+El alcance del Sprint 3: la operación de compra o venta con su cálculo de
+comisión y tasa aplicada, y la cancelación automática cuando la cotización
+cambia antes del pago. Las reglas viven en ``operaciones.servicios``; las
+pantallas de Django y la API de la maqueta solo las llaman.
+
+.. automodule:: operaciones.models
+   :members:
+
+.. automodule:: operaciones.servicios
+   :members:
+
+.. automodule:: operaciones.views
+   :members:
+
+.. automodule:: operaciones.api
+   :members:
 
 
 Índices

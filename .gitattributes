@@ -144,3 +144,7 @@
 *.stl                filter=lfs diff=lfs merge=lfs -text
 *.nc                 filter=lfs diff=lfs merge=lfs -text
 *.mat                filter=lfs diff=lfs merge=lfs -text
+
+# Scripts de shell siempre con fin de línea Unix: con CRLF (lo que deja Git
+# en Windows) sh no los puede ejecutar dentro de los contenedores Linux.
+*.sh text eol=lf

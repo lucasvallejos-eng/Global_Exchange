@@ -1,0 +1,11 @@
+# Lo que NO entra en la imagen de producción.
+# .env y la base local quedan afuera a propósito: los secretos llegan por
+# variables de entorno y los datos viven en un volumen, no en la imagen.
+.env
+.env.*
+db.sqlite3
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+staticfiles/

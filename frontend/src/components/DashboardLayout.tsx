@@ -121,6 +121,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
         <CompraDivisasModule
           userType={userType}
           descuentoCompra={effectiveDiscount}
+          clienteId={activeClient?.id ?? null}
           onAddPaymentMethod={() => {
             setActiveSection("configuracion");
             window.setTimeout(() => {
@@ -132,7 +133,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "venta-divisas") {
-      return <VentaDivisasModule userType={userType} descuentoCompra={effectiveDiscount} />;
+      return <VentaDivisasModule userType={userType} descuentoCompra={effectiveDiscount} clienteId={activeClient?.id ?? null} />;
     }
 
     if (activeSection === "cierre-caja") {
@@ -156,7 +157,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "configuracion") {
-      return <ConfiguracionDatosModule />;
+      return <ConfiguracionDatosModule user={user} />;
     }
 
     if (activeSection === "simulacion" || activeSection === "simulacion-venta") {

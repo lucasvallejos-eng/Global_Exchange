@@ -168,6 +168,12 @@ Cuál de los enlaces del menú se ve resaltado se deduce de la URL actual
       <a href="{% url 'inicio' %}">Inicio</a>
       <a href="{% url 'ver_tasas' %}" {% if request.path == '/tasas/' %}class="activo"{% endif %}>Tasas</a>
       <a href="{% url 'simulador' %}" {% if '/simulador/' in request.path %}class="activo"{% endif %}>Simulador</a>
+      {% comment %}
+        Lo ven todos: la pantalla misma le explica RN02 a quien no tiene un
+        cliente asociado, así que nadie se encuentra con un 403.
+      {% endcomment %}
+      <a href="{% url 'operar' %}" {% if '/operaciones/nueva/' in request.path %}class="activo"{% endif %}>Operar</a>
+      <a href="{% url 'historial_operaciones' %}" {% if request.path == '/operaciones/' %}class="activo"{% endif %}>Historial</a>
       {% if user|tiene_rol:"administrador" %}
         <a href="{% url 'listar_monedas' %}" {% if '/monedas/' in request.path %}class="activo"{% endif %}>Monedas</a>
       {% endif %}

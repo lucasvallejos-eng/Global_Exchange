@@ -11,7 +11,10 @@ export interface ClienteAsignado {
 
 export interface User {
   name: string;
+  username?: string;
   email: string;
+  // Consola de cuenta de Keycloak (datos personales y contraseña).
+  cuentaUrl?: string;
   role: Role;
   avatar?: string;
   clientesAsignados?: ClienteAsignado[];
@@ -28,11 +31,15 @@ export interface Client {
   id: number;
   nombre: string;
   tipo: "Jurídica" | "Física";
-  categoria: "Minorista" | "Mayorista" | "VIP";
+  // Id del segmento (app `comisiones`) del que salen la comisión y el
+  // descuento del cliente; null si todavía no tiene uno asignado.
+  segmento: number | null;
   direccion: string;
   cuentaAcreditar: string;
   correo: string;
   usuarios: number[];
+  // Lo calcula el backend a partir del segmento; solo se muestra.
+  porcentajeComision?: string | null;
 }
 
 export const DEMO_USERS: Record<string, User> = {
@@ -41,10 +48,10 @@ export const DEMO_USERS: Record<string, User> = {
     email: "cliente@global.com",
     role: "cliente",
     clientesAsignados: [
-      { id: "CLI-101", razonSocial: "ABC SRL", tipoPersona: "Jurídica", tipoCliente: "Mayorista" },
-      { id: "CLI-102", razonSocial: "TIGO SA", tipoPersona: "Jurídica", tipoCliente: "VIP" },
-      { id: "CLI-103", razonSocial: "Horacio Cartes", tipoPersona: "Física", tipoCliente: "VIP" },
-      { id: "CLI-104", razonSocial: "Santi Peña", tipoPersona: "Física", tipoCliente: "Minorista" },
+      { id: "CLI-101", razonSocial: "ABC SRL", tipoPersona: "Jurídica", tipoCliente: "Mayorista", descuentoCompra: 0.1 },
+      { id: "CLI-102", razonSocial: "TIGO SA", tipoPersona: "Jurídica", tipoCliente: "VIP", descuentoCompra: 0.15 },
+      { id: "CLI-103", razonSocial: "Horacio Cartes", tipoPersona: "Física", tipoCliente: "VIP", descuentoCompra: 0.15 },
+      { id: "CLI-104", razonSocial: "Santi Peña", tipoPersona: "Física", tipoCliente: "Minorista", descuentoCompra: 0.05 },
     ],
   },
   "cajero@global.com": { name: "Cajero Demo", email: "cajero@global.com", role: "cajero" },

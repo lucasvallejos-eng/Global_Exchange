@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { Client, UsuarioAsociable } from "../types";
 import { createClient, deleteClient, listClients, listUsuariosAsociables, updateClient } from "../lib/clientesApi";
+import { listarSegmentos, type Segmento } from "../lib/comisionesApi";
 import MultiSelect from "./MultiSelect";
 
-const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", categoria: "Minorista", direccion: "", cuentaAcreditar: "", correo: "", usuarios: [] };
+const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", segmento: null, direccion: "", cuentaAcreditar: "", correo: "", usuarios: [] };
 
 export default function ClientesModule() {
   const [clients, setClients] = useState<Client[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAsociable[]>([]);
+  // Segmentos reales de la base (app `comisiones`): de acá salen la comisión
+  // y el descuento de cada cliente.
+  const [segmentos, setSegmentos] = useState<Segmento[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Omit<Client, "id">>(EMPTY);
   const [editId, setEditId] = useState<Client["id"] | null>(null);
@@ -16,10 +20,11 @@ export default function ClientesModule() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listClients(), listUsuariosAsociables()])
-      .then(([clientesRes, usuariosRes]) => {
+    Promise.all([listClients(), listUsuariosAsociables(), listarSegmentos()])
+      .then(([clientesRes, usuariosRes, segmentosRes]) => {
         setClients(clientesRes);
         setUsuarios(usuariosRes);
+        setSegmentos(segmentosRes);
       })
       .catch(() => showToast("No se pudo conectar con el backend."))
       .finally(() => setLoading(false));
@@ -34,6 +39,9 @@ export default function ClientesModule() {
     const u = usuarios.find(x => x.id === id);
     return u ? u.nombre : String(id);
   };
+
+  const segmentoLabel = (id: number | null) =>
+    id === null ? null : segmentos.find(s => s.id === id)?.nombre ?? null;
 
   const validate = () => {
     const e: Partial<Record<keyof Client, string>> = {};
@@ -67,7 +75,7 @@ export default function ClientesModule() {
   };
 
   const handleEdit = (c: Client) => {
-    setForm({ nombre: c.nombre, tipo: c.tipo, categoria: c.categoria, direccion: c.direccion, cuentaAcreditar: c.cuentaAcreditar, correo: c.correo, usuarios: c.usuarios });
+    setForm({ nombre: c.nombre, tipo: c.tipo, segmento: c.segmento, direccion: c.direccion, cuentaAcreditar: c.cuentaAcreditar, correo: c.correo, usuarios: c.usuarios });
     setEditId(c.id);
     setErrors({});
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -144,16 +152,21 @@ export default function ClientesModule() {
           </div>
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1">
-              Categoría<span className="text-red-500 ml-0.5">*</span>
+              Segmento
             </label>
             <select
-              value={form.categoria}
-              onChange={e => setForm({ ...form, categoria: e.target.value as Client["categoria"] })}
+              value={form.segmento ?? ""}
+              onChange={e => setForm({ ...form, segmento: e.target.value ? Number(e.target.value) : null })}
               className="w-full px-3 py-2.5 rounded-lg border border-[#e2e8f0] text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7eff] transition bg-white"
             >
-              <option value="Minorista">Minorista</option>
-              <option value="Mayorista">Mayorista</option>
-              <option value="VIP">VIP</option>
+              <option value="">Sin segmento</option>
+              {segmentos
+                .filter(s => s.activo || s.id === form.segmento)
+                .map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre} (comisión {s.porcentajeComision}%)
+                  </option>
+                ))}
             </select>
           </div>
           {field("direccion", "Dirección", "Ej. Av. Principal 1234, Ciudad")}
@@ -204,7 +217,7 @@ export default function ClientesModule() {
               <tr className="bg-[#f8fafc]">
                 <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-6 py-3">Nombre del Cliente</th>
                 <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-4 py-3">Naturaleza Legal</th>
-                <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-4 py-3">Categoría</th>
+                <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-4 py-3">Segmento</th>
                 <th className="text-left text-xs font-semibold text-[#718096] uppercase tracking-wide px-4 py-3">Usuarios Asociados</th>
                 <th className="text-right text-xs font-semibold text-[#718096] uppercase tracking-wide px-6 py-3">Acciones</th>
               </tr>
@@ -212,14 +225,14 @@ export default function ClientesModule() {
             <tbody className="divide-y divide-[#f1f5f9]">
               {loading && (
                 <tr>
-                  <td colSpan={4} className="text-center text-sm text-[#9ca3af] py-12">
+                  <td colSpan={5} className="text-center text-sm text-[#9ca3af] py-12">
                     Cargando clientes...
                   </td>
                 </tr>
               )}
               {!loading && clients.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="text-center text-sm text-[#9ca3af] py-12">
+                  <td colSpan={5} className="text-center text-sm text-[#9ca3af] py-12">
                     No hay clientes registrados.
                   </td>
                 </tr>
@@ -236,9 +249,15 @@ export default function ClientesModule() {
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#eaf3ff] text-[#1a7eff]">
-                      {c.categoria}
-                    </span>
+                    {segmentoLabel(c.segmento)
+                      ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#eaf3ff] text-[#1a7eff]">
+                          {segmentoLabel(c.segmento)}
+                          {c.porcentajeComision != null && ` · ${Number(c.porcentajeComision)}%`}
+                        </span>
+                      )
+                      : <span className="text-xs text-[#9ca3af]">Sin segmento</span>
+                    }
                   </td>
                   <td className="px-4 py-4">
                     {c.usuarios.length > 0

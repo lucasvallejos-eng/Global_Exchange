@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { ClientType, getAppliedRate } from "../lib/clientRates";
 import { useTasas } from "../lib/useTasas";
 import { etiquetaMedioPago, listarMediosPago, type MedioPago } from "../lib/mediosPagoApi";
+import { confirmarOperacion, cotizarOperacion, type NuevaOperacion, type Operacion, type Presupuesto } from "../lib/operacionesApi";
+import AlertaCancelacionModal from "./AlertaCancelacionModal";
 
 
 type PaymentMethod = "tarjeta" | "transferencia" | "billetera";
@@ -15,10 +17,13 @@ const formatCurrency = (value: number) =>
 export default function CompraDivisasModule({
   userType,
   descuentoCompra,
+  clienteId,
   onAddPaymentMethod,
 }: {
   userType: ClientType;
   descuentoCompra: number;
+  // Cliente a nombre del cual se opera (RN02). null si el usuario no tiene ninguno.
+  clienteId: string | null;
   onAddPaymentMethod: () => void;
 }) {
   const [amount, setAmount] = useState("500");
@@ -27,6 +32,16 @@ export default function CompraDivisasModule({
   const [newPaymentType, setNewPaymentType] = useState<PaymentMethod>("tarjeta");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Cálculo del backend que muestra el modal. La operación todavía no existe:
+  // se registra recién al confirmar, así que cerrar el modal o recargar la
+  // página no deja nada pendiente en el historial.
+  const [operacion, setOperacion] = useState<Presupuesto | null>(null);
+  // Los datos con los que se pidió ese cálculo, para confirmar exactamente eso.
+  const [pedido, setPedido] = useState<NuevaOperacion | null>(null);
+  const [procesando, setProcesando] = useState(false);
+  // Operación que se canceló sola porque cambió la cotización (IS2GE-71).
+  const [alerta, setAlerta] = useState<Operacion | null>(null);
 
   const [savedMethods, setSavedMethods] = useState<MedioPago[]>([]);
 
@@ -69,8 +84,63 @@ export default function CompraDivisasModule({
   };
   const selectedMethod = savedMethods.find((medio) => String(medio.id) === paymentMethod);
 
-  const handleConfirm = () => {
-    setSuccessMessage("Transacción confirmada correctamente.");
+  const mensajeDeError = (error: unknown, porDefecto: string) =>
+    error instanceof Error ? error.message : porDefecto;
+
+  // "Comprar" le pide al backend el cálculo (tasa aplicada, comisión, total)
+  // sin guardar nada. El modal muestra ese cálculo, no la vista previa de arriba.
+  const handleComprar = async () => {
+    if (!clienteId) return;
+    setSuccessMessage(null);
+    setErrorMessage(null);
+    setProcesando(true);
+    const datos: NuevaOperacion = {
+      clienteId,
+      tipo: "COMPRA",
+      moneda: currency,
+      monto: numericAmount,
+      medioPagoId: selectedMethod?.id ?? null,
+    };
+    try {
+      setOperacion(await cotizarOperacion(datos));
+      setPedido(datos);
+      setIsModalOpen(true);
+    } catch (error) {
+      setErrorMessage(mensajeDeError(error, "No se pudo calcular la operación."));
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!operacion || !pedido) return;
+    setProcesando(true);
+    try {
+      // Recién acá se registra la operación. Si la cotización cambió desde el
+      // cálculo, el backend la registra cancelada en vez de cobrarla.
+      const resultado = await confirmarOperacion({ ...pedido, tasaBase: operacion.tasaBase });
+      if (resultado.estado === "PAGADA") {
+        setSuccessMessage(`Operación #${resultado.id} pagada: ${formatCurrency(resultado.totalGuaranies)} PYG.`);
+      } else if (resultado.canceladaPorCotizacion) {
+        setAlerta(resultado);
+      } else {
+        setErrorMessage(resultado.motivoCancelacion ?? "La operación fue cancelada.");
+      }
+    } catch (error) {
+      setErrorMessage(mensajeDeError(error, "No se pudo completar el pago."));
+    } finally {
+      setProcesando(false);
+      setIsModalOpen(false);
+      setOperacion(null);
+      setPedido(null);
+    }
+  };
+
+  // Cerrar el modal sin confirmar: la operación nunca se registró, así que no
+  // hay nada que cancelar en el backend.
+  const handleCancelar = () => {
+    setOperacion(null);
+    setPedido(null);
     setIsModalOpen(false);
   };
 
@@ -267,18 +337,30 @@ export default function CompraDivisasModule({
           </div>
         )}
 
+        {errorMessage && (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
+        {!clienteId && (
+          <p className="mt-6 text-sm text-[#64748b]">
+            Tu usuario no está asociado a ningún cliente: por ahora solo podés consultar tasas.
+          </p>
+        )}
+
         <div className="mt-8 flex justify-end">
           <button
-            onClick={() => setIsModalOpen(true)}
-            disabled={savedMethods.length === 0}
+            onClick={() => void handleComprar()}
+            disabled={savedMethods.length === 0 || !clienteId || numericAmount <= 0 || procesando}
             className="rounded-xl bg-[#1a7eff] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#146be7] disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            Comprar
+            {procesando && !isModalOpen ? "Calculando..." : "Comprar"}
           </button>
         </div>
       </div>
 
-      {isModalOpen && (
+      {isModalOpen && operacion && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
           <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-2xl font-bold text-[#0f172a]">¿Desea realizar la transacción de compra?</h3>
@@ -286,44 +368,68 @@ export default function CompraDivisasModule({
             <div className="mt-5 space-y-3 rounded-2xl border border-[#e2e8f0] bg-[#f8fafc] p-4 text-sm text-[#374151]">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-[#64748b]">Monto a comprar / cambiar</span>
-                <span className="font-semibold text-[#0f172a]">{formatCurrency(numericAmount)} {currency}</span>
+                <span className="font-semibold text-[#0f172a]">{operacion.montoDivisa} {operacion.moneda}</span>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-[#64748b]">Tasa de cambio aplicada</span>
-                <span className="font-semibold text-[#0f172a]">1 {currency} = {formatCurrency(conversionRate)} PYG</span>
+                <span className="font-semibold text-[#0f172a]">1 {operacion.moneda} = {formatCurrency(operacion.tasaAplicada)} PYG</span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span className="text-[#64748b]">Perfil del cliente</span>
-                <span className="font-semibold text-[#0f172a]">{userType}</span>
+                <span className="text-[#64748b]">Cliente</span>
+                <span className="font-semibold text-[#0f172a]">{operacion.cliente.nombre} ({userType})</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[#64748b]">Subtotal</span>
+                <span className="font-semibold text-[#0f172a]">{formatCurrency(operacion.montoGuaranies)} PYG</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[#64748b]">Comisión ({operacion.porcentajeComision} %)</span>
+                <span className="font-semibold text-[#0f172a]">+ {formatCurrency(operacion.comision)} PYG</span>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-[#64748b]">Total a pagar en PYG</span>
-                <span className="font-semibold text-[#0f172a]">{formatCurrency(totalInPyg)} PYG</span>
+                <span className="font-semibold text-[#0f172a]">{formatCurrency(operacion.totalGuaranies)} PYG</span>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-[#64748b]">Método de pago</span>
-                <span className="font-semibold text-[#0f172a]">{selectedMethod ? etiquetaMedioPago(selectedMethod) : "Nuevo método de pago"}</span>
+                <span className="font-semibold text-[#0f172a]">{operacion.medioPago ?? "Sin especificar"}</span>
               </div>
             </div>
 
-            <p className="mt-5 text-sm text-[#475569]">Si los datos son correctos, presione Confirmar.</p>
+            <p className="mt-5 text-sm text-[#475569]">
+              Si los datos son correctos, presione Confirmar. Si la cotización cambia antes del pago, la operación se cancela sin cobrarle nada.
+            </p>
 
             <div className="mt-6 flex justify-end gap-3">
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={handleCancelar}
+                disabled={procesando}
                 className="rounded-xl border border-[#dbe3ee] bg-white px-4 py-2.5 text-sm font-semibold text-[#374151] hover:bg-[#f8fafc]"
               >
                 Cancelar
               </button>
               <button
-                onClick={handleConfirm}
-                className="rounded-xl bg-[#1a7eff] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#146be7]"
+                onClick={() => void handleConfirm()}
+                disabled={procesando}
+                className="rounded-xl bg-[#1a7eff] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#146be7] disabled:bg-slate-300"
               >
-                Confirmar
+                {procesando ? "Procesando..." : "Confirmar"}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {alerta && (
+        <AlertaCancelacionModal
+          operacion={alerta}
+          procesando={procesando}
+          onReintentar={() => {
+            setAlerta(null);
+            void handleComprar();
+          }}
+          onCerrar={() => setAlerta(null)}
+        />
       )}
     </div>
   );

@@ -1,9 +1,5 @@
 """Registro de Cotizacion en el panel de administración de Django."""
-from datetime import timedelta
-
 from django.contrib import admin
-from django.core.exceptions import ValidationError
-from django.utils import timezone
 
 from .models import Cotizacion, HistorialCotizacion
 
@@ -13,8 +9,8 @@ class CotizacionAdmin(admin.ModelAdmin):
     """Configuración del panel de administración para la gestión de cotizaciones.
 
     Permite consultar, filtrar y modificar las tasas de cambio activas e históricas.
-    Integra la validación del bloqueo temporal de 1 hora al modificar precios y genera
-    automáticamente un registro en el historial de auditoría al guardar los cambios.
+    Genera automáticamente un registro en el historial de auditoría al guardar
+    cambios de precio.
 
     Attributes:
         list_display (tuple): Campos mostrados en la vista de lista del admin.
@@ -30,38 +26,18 @@ class CotizacionAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         """Sobrescribe la lógica de guardado en el admin para aplicar reglas y auditoría.
 
-        Valida que haya transcurrido al menos 1 hora desde la última modificación sobre la
-        moneda si los precios de compra o venta sufrieron cambios. Al persistir con éxito,
-        registra la modificación en el modelo ``HistorialCotizacion`` asignando al usuario
-        administrador en sesión.
+        Si los precios de compra o venta cambiaron, registra la modificación en el
+        modelo ``HistorialCotizacion`` asignando al usuario administrador en sesión.
 
         Args:
             request (HttpRequest): Solicitud HTTP con la sesión del usuario administrador.
             obj (Cotizacion): Instancia del modelo a crear o guardar.
             form (ModelForm): Formulario de edición procesado por Django admin.
             change (bool): True si el objeto ya existía (edición), False si es un alta nueva.
-
-        Raises:
-            ValidationError: Si se intenta modificar el precio de compra o venta antes de que
-                transcurra el lapso de 1 hora desde el último cambio registrado.
         """
         anterior = None
         if change:
             anterior = Cotizacion.objects.get(pk=obj.pk)
-            restante = timedelta(hours=1) - (
-                timezone.now() - obj.moneda.fecha_actualizacion
-            )
-            if (
-                (obj.precio_compra != anterior.precio_compra
-                 or obj.precio_venta != anterior.precio_venta)
-                and restante.total_seconds() > 0
-            ):
-                minutos = max(1, int((restante.total_seconds() + 59) // 60))
-                raise ValidationError(
-                    "No se puede actualizar la cotización. Debe transcurrir "
-                    f"al menos 1 hora desde el último cambio. Tiempo restante: "
-                    f"{minutos} minutos."
-                )
 
         super().save_model(request, obj, form, change)
         if anterior and (
