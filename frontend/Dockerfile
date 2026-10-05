@@ -13,7 +13,10 @@ COPY . .
 # navegador de quien abre la página tiene que poder llegar a ella.
 ARG VITE_BACKEND_URL
 ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
-RUN pnpm build
+# Ruta bajo la que se sirve la maqueta: "/" normalmente, "/app/" cuando
+# comparte dominio con Django (docker-compose.publico.yml).
+ARG VITE_BASE=/
+RUN pnpm build --base "$VITE_BASE"
 
 # 2) Servidor: solo los archivos construidos, sin Node ni dependencias.
 FROM nginx:1.27-alpine

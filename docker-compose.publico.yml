@@ -1,0 +1,56 @@
+# Publica el ambiente de producción en internet desde cualquier máquina con
+# Docker, sin servidor propio ni abrir puertos: dos túneles de Cloudflare
+# (gratis, sin cuenta) dan direcciones https://....trycloudflare.com.
+#
+# Se usa encima de docker-compose.prod.yml, y no a mano: lo levanta
+#   python publicar.py
+# que lee las direcciones que tocaron y configura todo con ellas.
+# Detalle en docs/despliegue-produccion.md.
+#
+#   https://<app>.trycloudflare.com/      Django (pantallas, /api/, login)
+#   https://<app>.trycloudflare.com/app/  la maqueta
+#   https://<kc>.trycloudflare.com/       Keycloak
+
+services:
+  keycloak:
+    # Solo para que publicar.py lo configure desde esta máquina. Atado a
+    # 127.0.0.1: desde afuera se entra únicamente por el túnel.
+    ports: !override
+      - "127.0.0.1:${PUERTO_KEYCLOAK_LOCAL:-18080}:8080"
+    environment:
+      # Detrás del túnel: Keycloak toma el https y la IP real del cliente de
+      # las cabeceras X-Forwarded-* que agrega Cloudflare.
+      KC_PROXY_HEADERS: xforwarded
+
+  backend:
+    # Se entra por la puerta de entrada, no directo.
+    ports: !reset []
+
+  frontend:
+    ports: !reset []
+    build:
+      args:
+        # Vacío: la maqueta llama a /api/ en su mismo dominio. Así no hay que
+        # reconstruirla cuando cambia la dirección del túnel.
+        VITE_BACKEND_URL: ""
+        VITE_BASE: /app/
+
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./publico/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+
+  # Cada túnel imprime su dirección en el log al arrancar; la dirección es
+  # nueva cada vez que el contenedor se crea de nuevo. Sin "restart" a
+  # propósito: si se reiniciara solo, cambiaría la dirección sin avisar.
+  tunel-app:
+    image: cloudflare/cloudflared:2026.9.3
+    command: tunnel --no-autoupdate --url http://gateway:80
+
+  tunel-keycloak:
+    image: cloudflare/cloudflared:2026.9.3
+    command: tunnel --no-autoupdate --url http://keycloak:8080
