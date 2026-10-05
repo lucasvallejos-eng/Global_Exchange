@@ -117,6 +117,18 @@ Todo el sistema se levanta junto con `docker-compose.prod.yml` (Keycloak en
 modo producción, Django con gunicorn, la maqueta con nginx). Paso a paso en
 [`docs/despliegue-produccion.md`](docs/despliegue-produccion.md).
 
+Para ponerlo **en internet desde esta misma PC**, sin servidor (Docker Desktop
+abierto):
+
+```bash
+backend\.venv\Scripts\python publicar.py --demo
+```
+
+Imprime una dirección `https://...trycloudflare.com` que abre desde cualquier
+lado. Para apagarlo: `backend\.venv\Scripts\python publicar.py --apagar`.
+Paso a paso, usuarios y problemas comunes en
+[`docs/levantar-en-internet.md`](docs/levantar-en-internet.md).
+
 ---
 
 ## Notas para el equipo
