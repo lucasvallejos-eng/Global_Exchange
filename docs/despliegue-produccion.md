@@ -4,8 +4,66 @@ Cómo montar Global Exchange en un servidor (criterio **AMB** del Hito 5:
 "Ambiente de producción, montado y funcionando").
 
 Todo está preparado y **probado de punta a punta en una máquina local** (ver
-[Qué se verificó](#qué-se-verificó)). Falta solo elegir el servidor y seguir
-estos pasos.
+[Qué se verificó](#qué-se-verificó)). Hay dos formas de montarlo:
+
+- **[En internet sin servidor](#en-internet-sin-servidor-un-solo-comando)**:
+  desde cualquier PC con Docker, un solo comando. Es la forma recomendada
+  para las demos. Guía paso a paso en
+  [`levantar-en-internet.md`](levantar-en-internet.md).
+- **[En un servidor propio](#qué-se-levanta)**: los pasos del resto de esta
+  guía.
+
+---
+
+## En internet sin servidor (un solo comando)
+
+Con Docker Desktop abierto, desde la raíz del repositorio:
+
+```bash
+backend\.venv\Scripts\python publicar.py --demo    # Windows
+backend/.venv/bin/python publicar.py --demo        # Linux/Mac
+```
+
+Al terminar imprime la dirección pública, por ejemplo
+`https://palabras-al-azar.trycloudflare.com`, que abre desde cualquier
+celular o computadora. `--demo` crea un usuario por rol (contraseña
+`Prueba2026!`) y carga datos de ejemplo; las próximas veces no hace falta.
+
+Para apagar: `backend\.venv\Scripts\python publicar.py --apagar` (los datos
+quedan guardados).
+
+### Cómo funciona
+
+Levanta el mismo `docker-compose.prod.yml` de abajo, más
+`docker-compose.publico.yml`, que agrega:
+
+- **Dos túneles de Cloudflare** (gratis, sin cuenta, sin abrir puertos del
+  router): uno para la aplicación y otro para Keycloak. Dan HTTPS, que
+  Keycloak exige para entrar desde afuera.
+- **Una puerta de entrada** (`publico/nginx.conf`) que deja todo en un solo
+  dominio: Django en `/` y la maqueta en `/app/`. Es necesario porque la
+  maqueta usa la cookie de sesión de Django, y el navegador no la manda a otro
+  dominio (en desarrollo funciona porque los dos son `localhost`).
+
+`publicar.py` lee las direcciones que tocaron, las escribe en `.env.prod`
+(lo crea con claves nuevas la primera vez), levanta todo y configura Keycloak
+con `keycloak/configurar_produccion.py`.
+
+### Límites
+
+- **La dirección cambia** cada vez que se apaga y se vuelve a levantar
+  (mientras siga prendido, volver a correr el script no la cambia). Para una
+  dirección fija hace falta un dominio propio y una cuenta de Cloudflare.
+- **Funciona mientras la PC esté prendida** con Docker abierto.
+- Recién creada, la dirección puede tardar uno o dos minutos en abrir.
+
+### Qué se verificó
+
+El 4 de octubre de 2026, por la dirección pública con HTTPS real: login por
+Keycloak con los cuatro roles (cada uno aterriza en la maqueta con su rol),
+cookie de sesión marcada `Secure`, las nueve pantallas de Django y las APIs,
+los estáticos de `/admin/`, asociar un usuario a un cliente y una compra
+(cotizar y confirmar) con CSRF, y el logout de vuelta al login de Keycloak.
 
 ---
 
