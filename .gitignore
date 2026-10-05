@@ -43,3 +43,6 @@ package-lock.json
 
 # Estáticos que junta collectstatic para producción (se regeneran al construir).
 /backend/staticfiles/
+
+# Guia local de Claude Code: tiene secretos de esta maquina. No se versiona.
+/CLAUDE.md
