@@ -29,36 +29,36 @@ interface NavItem {
 
 const Icon = ({ path }: { path: string }) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d={path}/>
+    <path d={path} />
   </svg>
 );
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   cliente: [
-    { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
-    { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5"/> },
-    { id: "cotizaciones", label: "Cotizaciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
-    { id: "facturas", label: "Facturas", icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/> },
-    { id: "simulacion", label: "Simulación", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
-    { id: "monedas-historial", label: "Historial de Monedas", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
-    { id: "historial", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
-    { id: "configuracion", label: "Configuración de Datos", icon: <Icon path="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/> },
+    { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+    { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5" /> },
+    { id: "cotizaciones", label: "Cotizaciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+    { id: "facturas", label: "Facturas", icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /> },
+    { id: "simulacion", label: "Simulación", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+    { id: "monedas-historial", label: "Historial de Monedas", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+    { id: "historial", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+    { id: "configuracion", label: "Configuración de Datos", icon: <Icon path="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /> },
   ],
   cajero: [
-    { id: "apertura-caja", label: "Apertura de Caja", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6"/> },
-    { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
-    { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5"/> },
-    { id: "cierre-caja", label: "Cierre de Caja", icon: <Icon path="M6 2h12v20H6zM9 6h6M9 10h6M9 14h6"/> },
+    { id: "apertura-caja", label: "Apertura de Caja", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6" /> },
+    { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+    { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5" /> },
+    { id: "cierre-caja", label: "Cierre de Caja", icon: <Icon path="M6 2h12v20H6zM9 6h6M9 10h6M9 14h6" /> },
   ],
   analista_cambiario: [
-    { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
-    { id: "historial-transacciones", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/> },
+    { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+    { id: "historial-transacciones", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
   ],
   administrador: [
-    { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/> },
-    { id: "porcentajes", label: "Porcentajes", icon: <Icon path="M12 1v22M1 12h22"/> },
-    { id: "medios-pago", label: "Medios de Pago", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6"/> },
-    { id: "clientes", label: "Clientes", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/> },
+    { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+    { id: "porcentajes", label: "Porcentajes", icon: <Icon path="M12 1v22M1 12h22" /> },
+    { id: "medios-pago", label: "Medios de Pago", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6" /> },
+    { id: "clientes", label: "Clientes", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /> },
   ],
 };
 
@@ -73,13 +73,15 @@ const PLACEHOLDER_TEXT: Record<string, string> = {
   "apertura-caja": "APARTADO DE APERTURA DE CAJA",
   "cierre-caja": "APARTADO DE CIERRE DE CAJA",
   "historial-transacciones": "APARTADO DE HISTORIAL DE TRANSACCIONES",
-  //"simulacion-venta": "APARTADO DE SIMULACIÓN DE VENTA",
   "monedas-historial": "APARTADO DE HISTORIAL DE MONEDAS",
 };
 
 export default function DashboardLayout({ user, onLogout }: Props) {
   const navItems = NAV_BY_ROLE[user.role];
-  const [activeSection, setActiveSection] = useState(navItems[0]?.id ?? "");
+
+  // SE CAMBIÓ AQUÍ: Al autenticarse la sección activa predeterminada será "inicio"
+  const [activeSection, setActiveSection] = useState("inicio");
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [manualClientType, setManualClientType] = useState<ClientType>("Minorista");
 
@@ -98,12 +100,24 @@ export default function DashboardLayout({ user, onLogout }: Props) {
   const effectiveDiscount = user.role === "cajero"
     ? CLIENT_TYPE_OPTIONS.indexOf(manualClientType) * 0.05 + 0.05
     : activeClient?.descuentoCompra ?? 0;
-  // El cliente activo proviene de las asociaciones cargadas desde Django.
-  // No depender del rol permite mostrarlo también a usuarios con más de un rol.
+
   const showClientContext = assignedClients.length > 0;
   const showManualClientType = user.role === "cajero";
 
   const renderContent = () => {
+    if (activeSection === "inicio") {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[65vh] text-center px-4">
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1a202c] mb-3 tracking-tight">
+            Bienvenido a Global Exchange
+          </h1>
+          <p className="text-base sm:text-lg text-[#64748b] max-w-md">
+            Selecciona una opción del menú lateral para comenzar a operar.
+          </p>
+        </div>
+      );
+    }
+
     if (activeSection === "clientes" && user.role === "administrador") {
       return <ClientesModule />;
     }
@@ -186,14 +200,21 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     );
   };
 
-  const activeLabel = navItems.find(n => n.id === activeSection)?.label ?? "";
+  // SE CAMBIÓ AQUÍ: Si activeSection es "inicio", mostramos "Inicio" en el encabezado
+  const activeLabel = activeSection === "inicio"
+    ? "Inicio"
+    : navItems.find(n => n.id === activeSection)?.label ?? "";
 
   return (
     <div className="flex h-screen bg-[#f0f4f8] overflow-hidden">
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? "w-64" : "w-16"} transition-all duration-300 bg-white border-r border-[#e2e8f0] flex flex-col shadow-sm flex-shrink-0`}>
         {/* Logo */}
-        <div className={`flex items-center gap-3 px-4 py-5 border-b border-[#f1f5f9] ${!sidebarOpen ? "justify-center" : ""}`}>
+        <div
+          onClick={() => setActiveSection("inicio")}
+          className={`flex items-center gap-3 px-4 py-5 border-b border-[#f1f5f9] cursor-pointer hover:bg-slate-50 transition-colors ${!sidebarOpen ? "justify-center" : ""}`}
+          title="Ir a Inicio"
+        >
           <div className="w-8 h-8 rounded-full bg-[#1a7eff] flex items-center justify-center flex-shrink-0 shadow">
             <span className="text-white font-bold text-sm">$</span>
           </div>
@@ -213,11 +234,10 @@ export default function DashboardLayout({ user, onLogout }: Props) {
             <button
               key={item.id}
               onClick={() => setActiveSection(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                activeSection === item.id
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${activeSection === item.id
                   ? "bg-[#1a7eff] text-white shadow-sm"
                   : "text-[#4b5563] hover:bg-[#f0f4f8]"
-              } ${!sidebarOpen ? "justify-center" : ""}`}
+                } ${!sidebarOpen ? "justify-center" : ""}`}
               title={!sidebarOpen ? item.label : undefined}
             >
               <span className="flex-shrink-0">{item.icon}</span>
@@ -233,7 +253,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-colors ${!sidebarOpen ? "justify-center" : ""}`}
             title={!sidebarOpen ? "Cerrar Sesión" : undefined}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
             {sidebarOpen && "Cerrar Sesión"}
           </button>
         </div>
@@ -248,7 +268,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 rounded-lg hover:bg-[#f0f4f8] transition-colors text-[#6b7280]"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
             </button>
             <div>
               <p className="text-xs text-[#9ca3af] font-medium">Panel de Control</p>
@@ -281,11 +301,11 @@ export default function DashboardLayout({ user, onLogout }: Props) {
 
             {/* Notification bell */}
             <button className="relative p-2 rounded-lg hover:bg-[#f0f4f8] transition-colors text-[#6b7280]">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#1a7eff] rounded-full"/>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#1a7eff] rounded-full" />
             </button>
 
-            {/* Cliente activo: opciones cargadas desde /api/me/. */}
+            {/* Cliente activo */}
             {showClientContext && (
               <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b]">Cliente</span>
