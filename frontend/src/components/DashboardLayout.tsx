@@ -11,6 +11,7 @@ import SimulacionModule from "./SimulacionModule";
 import CotizacionesModule from "./CotizacionesModule";
 import PorcentajesModule from "./PorcentajesModule";
 import MediosPagoModule from "./MediosPagoModule";
+import DenominacionesModule from "./DenominacionesModule";
 import MonedasHistorialModule from "./MonedasHistorialModule";
 import HistorialTransaccionesModule from "./HistorialTransaccionesModule";
 import ConfiguracionDatosModule from "./ConfiguracionDatosModule";
@@ -52,15 +53,18 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   analista_cambiario: [
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+    { id: "denominaciones", label: "Denominaciones", icon: <Icon path="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 12h.01 M18 12h.01" /> },
     { id: "historial-transacciones", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
   ],
   administrador: [
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+    { id: "denominaciones", label: "Denominaciones", icon: <Icon path="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 12h.01 M18 12h.01" /> },
     { id: "porcentajes", label: "Porcentajes", icon: <Icon path="M12 1v22M1 12h22" /> },
     { id: "medios-pago", label: "Medios de Pago", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6" /> },
     { id: "clientes", label: "Clientes", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /> },
   ],
 };
+
 
 const PLACEHOLDER_TEXT: Record<string, string> = {
   "compra-divisas": "APARTADO DE COMPRA DE DIVISAS",
@@ -157,6 +161,11 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     if (activeSection === "monedas") {
       return <MonedasModule />;
     }
+
+    if (activeSection === "denominaciones") {
+      return <DenominacionesModule />;
+    }
+
 
     if (activeSection === "porcentajes") {
       return <PorcentajesModule />;

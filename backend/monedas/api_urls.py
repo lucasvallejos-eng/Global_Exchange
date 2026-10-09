@@ -6,4 +6,7 @@ from . import api
 urlpatterns = [
     path("monedas/", api.monedas_lista, name="api_monedas_lista"),
     path("monedas/<int:pk>/", api.monedas_detalle, name="api_monedas_detalle"),
+    path("denominaciones/", api.denominaciones_lista, name="api_denominaciones_lista"),
+    path("denominaciones/<int:pk>/", api.denominaciones_detalle, name="api_denominaciones_detalle"),
 ]
+

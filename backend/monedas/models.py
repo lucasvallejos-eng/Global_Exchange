@@ -29,3 +29,47 @@ class Moneda(models.Model):
             str: Cadena formateada con el código y el nombre de la moneda.
         """
         return f"{self.codigo} - {self.nombre}"
+
+
+class Denominacion(models.Model):
+    """Representa el valor nominal de un billete o moneda de una divisa (1:N).
+
+    Attributes:
+        moneda (ForeignKey): Referencia a la moneda a la que pertenece la denominación.
+        valor (DecimalField): Valor numérico o monto nominal del billete/moneda.
+        creado_en (DateTimeField): Fecha y hora de creación de la denominación.
+        actualizado_en (DateTimeField): Fecha y hora de la última modificación.
+    """
+    moneda = models.ForeignKey(
+        Moneda,
+        on_delete=models.CASCADE,
+        related_name="denominaciones",
+        verbose_name="Moneda",
+    )
+    valor = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        verbose_name="Valor nominal",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Creado en")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Actualizado en")
+
+    class Meta:
+        db_table = "denominaciones"
+        verbose_name = "Denominación"
+        verbose_name_plural = "Denominaciones"
+        ordering = ["moneda", "valor"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["moneda", "valor"],
+                name="unique_denominacion_moneda_valor",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor__gt=0),
+                name="check_denominacion_valor_positivo",
+            ),
+        ]
+
+    def __str__(self):
+        """Devuelve la representación legible de la denominación."""
+        return f"{self.moneda.codigo} {self.valor}"
