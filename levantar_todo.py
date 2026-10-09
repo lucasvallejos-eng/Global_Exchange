@@ -161,27 +161,101 @@ def comando_pnpm(env):
     sys.exit("[levantar] No encuentro node/pnpm. Instalá Node.js 20+ (o revisá nvm).")
 
 
-def levantar_keycloak():
+def actualizar_o_crear_env(path_env: Path, path_example: Path, cambios: dict):
+    """Crea el archivo .env desde su plantilla si no existe, y actualiza/agrega
+    las variables indicadas en cambios."""
+    if not path_env.exists():
+        if path_example.exists():
+            shutil.copy(path_example, path_env)
+        else:
+            path_env.touch()
+
+    lineas = path_env.read_text(encoding="utf-8").splitlines() if path_env.exists() else []
+    pendientes = dict(cambios)
+
+    nuevas_lineas = []
+    for linea in lineas:
+        linea_strip = linea.strip()
+        if linea_strip and not linea_strip.startswith("#") and "=" in linea:
+            clave = linea.split("=", 1)[0].strip()
+            if clave in pendientes:
+                val = pendientes.pop(clave)
+                linea = f"{clave}={val}"
+        nuevas_lineas.append(linea)
+
+    for clave, val in pendientes.items():
+        nuevas_lineas.append(f"{clave}={val}")
+
+    path_env.write_text("\n".join(nuevas_lineas) + "\n", encoding="utf-8")
+
+
+def fase1_preparar_envs():
+    """Fase 1: Creación y Verificación Previa de .env.
+    Crea los .env que falten e inyecta credenciales fijas de admin en Keycloak."""
+    log("Fase 1: Verificando y preparando archivos .env...")
+    
+    # Keycloak .env
+    kc_changes = {
+        "KEYCLOAK_ADMIN": "admin",
+        "KEYCLOAK_ADMIN_PASSWORD": "admin123",
+        "KC_BOOTSTRAP_ADMIN_USERNAME": "admin",
+        "KC_BOOTSTRAP_ADMIN_PASSWORD": "admin123",
+        "POSTGRES_PASSWORD": "admin123",
+    }
+    actualizar_o_crear_env(KEYCLOAK / ".env", KEYCLOAK / ".env.example", kc_changes)
+
+    # Backend .env
+    actualizar_o_crear_env(BACKEND / ".env", BACKEND / ".env.example", {})
+
+    # Frontend .env
+    frontend_example = FRONTEND / ".env.example" if (FRONTEND / ".env.example").exists() else RAIZ / ".env.example"
+    actualizar_o_crear_env(FRONTEND / ".env", frontend_example, {})
+
+    # Root .env
+    actualizar_o_crear_env(RAIZ / ".env", RAIZ / ".env.example", {})
+    log("Archivos .env verificados y credenciales fijas inyectadas (Keycloak: admin / admin123).")
+
+
+def fase2_infraestructura_y_secret():
+    """Fase 2: Levantar Infraestructura e Ingreso de Client Secret.
+    Inicia los contenedores (db keycloak), solicita la clave por consola e inyecta la variable."""
     if not shutil.which("docker"):
         sys.exit("[levantar] No encuentro docker en el PATH.")
-    if not (KEYCLOAK / ".env").exists():
-        sys.exit("[levantar] Falta keycloak/.env (copiá keycloak/.env.example y completalo).")
-    log("Levantando Keycloak (docker compose up -d)...")
+
+    log("Fase 2: Levantando infraestructura (docker compose up -d db keycloak)...")
     subprocess.run(["docker", "compose", "up", "-d"], cwd=KEYCLOAK, check=True)
 
     url = realm_url()
     log(f"Esperando a que Keycloak responda en {url} ...")
     limite = time.time() + ESPERA_KEYCLOAK_SEG
+    keycloak_listo = False
     while time.time() < limite:
         try:
             with urllib.request.urlopen(url, timeout=3) as r:
                 if r.status == 200:
                     log("Keycloak listo.")
-                    return
+                    keycloak_listo = True
+                    break
         except Exception:
             pass
         time.sleep(2)
-    sys.exit("[levantar] Keycloak no respondió a tiempo. Mirá: cd keycloak && docker compose logs keycloak")
+
+    if not keycloak_listo:
+        log("Aviso: Keycloak aún no respondió a tiempo, procediendo...")
+
+    print("\n" + "=" * 60)
+    client_secret = input("Ingrese el Client Secret de Keycloak: ").strip()
+    print("=" * 60 + "\n")
+
+    secret_changes = {
+        "KEYCLOAK_CLIENT_SECRET": client_secret,
+        "KEYCLOAK_WEB_CLIENT_SECRET": client_secret,
+    }
+
+    actualizar_o_crear_env(BACKEND / ".env", BACKEND / ".env.example", secret_changes)
+    actualizar_o_crear_env(FRONTEND / ".env", FRONTEND / ".env.example", secret_changes)
+    actualizar_o_crear_env(RAIZ / ".env", RAIZ / ".env.example", secret_changes)
+    log("KEYCLOAK_CLIENT_SECRET inyectado correctamente en los archivos .env del Backend y Frontend.")
 
 
 def reenviar_salida(proc, prefijo):
@@ -240,8 +314,14 @@ def main():
         except Exception as error:  # sin el job igual funciona; solo limpia peor
             log(f"Aviso: no se pudo crear el Job Object de Windows ({error}).")
 
-    levantar_keycloak()
+    # Fase 1: Creación y Verificación Previa de .env
+    fase1_preparar_envs()
 
+    # Fase 2: Levantar Infraestructura e Ingreso de Client Secret
+    fase2_infraestructura_y_secret()
+
+    # Fase 3: Arranque de Servicios Restantes
+    log("Fase 3: Arrancando servicios restantes (Backend + Frontend)...")
     py = python_backend()
     env_py = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
     log("Aplicando migraciones...")
