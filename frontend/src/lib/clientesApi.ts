@@ -27,6 +27,17 @@ export async function listClients(): Promise<Client[]> {
   return unwrap(res);
 }
 
+export type TasaPreferencial = {
+  clienteId: number;
+  categoria: string | null;
+  porcentajePreferencial: string;
+};
+
+export async function getClientPreferredRate(id: number): Promise<TasaPreferencial> {
+  const res = await fetch(`${BACKEND}/api/clientes/${id}/tasa-preferencial/`, { credentials: "include" });
+  return unwrap(res);
+}
+
 export async function createClient(cliente: Omit<Client, "id">): Promise<Client> {
   const res = await fetch(`${BACKEND}/api/clientes/`, {
     method: "POST",

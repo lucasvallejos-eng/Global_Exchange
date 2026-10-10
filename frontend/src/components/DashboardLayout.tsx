@@ -5,6 +5,8 @@ import CompraDivisasModule from "./CompraDivisasModule";
 import VentaDivisasModule from "./VentaDivisasModule";
 import AperturaCajaModule from "./AperturaCajaModule";
 import CierraCajaModule from "./CierraCajaModule";
+import CompraDivisaCaja from "./CompraDivisaCaja";
+import VentaDivisaCaja from "./VentaDivisaCaja";
 import MonedasModule from "./MonedasModule";
 import FacturaModule from "./FacturaModule";
 import SimulacionModule from "./SimulacionModule";
@@ -16,6 +18,7 @@ import MonedasHistorialModule from "./MonedasHistorialModule";
 import HistorialTransaccionesModule from "./HistorialTransaccionesModule";
 import ConfiguracionDatosModule from "./ConfiguracionDatosModule";
 import { CLIENT_TYPE_OPTIONS, ClientType } from "../lib/clientRates";
+import { obtenerEstadoDiario, type EstadoCaja, type EstadoDiario } from "../lib/cajaApi";
 
 interface Props {
   user: User;
@@ -88,6 +91,28 @@ export default function DashboardLayout({ user, onLogout }: Props) {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [manualClientType, setManualClientType] = useState<ClientType>("Minorista");
+  // Estado de caja del cajero: derivado del backend, persiste entre sesiones.
+  // Arranca en ESPERANDO_ARQUEO hasta que el primer fetch del backend responda.
+  const [estadoCaja, setEstadoCaja] = useState<EstadoCaja>("ESPERANDO_ARQUEO");
+  const [horaApertura, setHoraApertura] = useState<string | null>(null);
+
+  const refrescarEstadoCaja = () => {
+    obtenerEstadoDiario()
+      .then((data: EstadoDiario) => {
+        setEstadoCaja(data.estadoCaja ?? (data.activa ? "EN_SERVICIO" : data.aperturada ? "CAJA_CERRADA" : "ESPERANDO_ARQUEO"));
+        setHoraApertura(data.horaApertura);
+      })
+      .catch(() => {
+        setEstadoCaja("ESPERANDO_ARQUEO");
+        setHoraApertura(null);
+      });
+  };
+
+  useEffect(() => {
+    if (user.role === "cajero") {
+      refrescarEstadoCaja();
+    }
+  }, [user.role]);
 
   const assignedClients: ClienteAsignado[] = useMemo(() => {
     return user.clientesAsignados ?? [];
@@ -131,31 +156,45 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "apertura-caja") {
-      return <AperturaCajaModule />;
+      return (
+        <AperturaCajaModule
+          onApertura={() => refrescarEstadoCaja()}
+        />
+      );
     }
 
     if (activeSection === "compra-divisas") {
+      if (user.role === "cajero" && estadoCaja !== "EN_SERVICIO") {
+        const msg = estadoCaja === "CAJA_CERRADA" ? "Caja cerrada. No se pueden registrar operaciones." : "Arqueo aún no realizado.";
+        return <div className="flex min-h-[400px] items-center justify-center"><div className="rounded-3xl border border-[#dbe3ee] bg-white p-12 text-center shadow-sm"><h2 className="text-2xl font-bold text-[#0f172a]">{msg}</h2></div></div>;
+      }
+      if (user.role === "cajero") return <CompraDivisaCaja />;
       return (
         <CompraDivisasModule
           userType={userType}
           descuentoCompra={effectiveDiscount}
           clienteId={activeClient?.id ?? null}
-          onAddPaymentMethod={() => {
-            setActiveSection("configuracion");
-            window.setTimeout(() => {
-              document.getElementById("medios-pago-config")?.scrollIntoView({ behavior: "smooth" });
-            }, 0);
-          }}
         />
       );
     }
 
     if (activeSection === "venta-divisas") {
+      if (user.role === "cajero" && estadoCaja !== "EN_SERVICIO") {
+        const msg = estadoCaja === "CAJA_CERRADA" ? "Caja cerrada. No se pueden registrar operaciones." : "Arqueo aún no realizado.";
+        return <div className="flex min-h-[400px] items-center justify-center"><div className="rounded-3xl border border-[#dbe3ee] bg-white p-12 text-center shadow-sm"><h2 className="text-2xl font-bold text-[#0f172a]">{msg}</h2></div></div>;
+      }
+      if (user.role === "cajero") return <VentaDivisaCaja />;
       return <VentaDivisasModule userType={userType} descuentoCompra={effectiveDiscount} clienteId={activeClient?.id ?? null} />;
     }
 
     if (activeSection === "cierre-caja") {
-      return <CierraCajaModule />;
+      if (user.role === "cajero" && estadoCaja === "ESPERANDO_ARQUEO") {
+        return <div className="flex min-h-[400px] items-center justify-center"><div className="rounded-3xl border border-[#dbe3ee] bg-white p-12 text-center shadow-sm"><h2 className="text-2xl font-bold text-[#0f172a]">Arqueo aún no realizado.</h2></div></div>;
+      }
+      if (user.role === "cajero" && estadoCaja === "CAJA_CERRADA") {
+        return <div className="flex min-h-[400px] items-center justify-center"><div className="rounded-3xl border border-[#dbe3ee] bg-white p-12 text-center shadow-sm"><h2 className="text-2xl font-bold text-[#0f172a]">Caja cerrada.</h2><p className="mt-3 text-[#64748b]">El turno de hoy ya fue cerrado. Un nuevo ciclo comenzará mañana.</p></div></div>;
+      }
+      return <CierraCajaModule onCierre={() => refrescarEstadoCaja()} />;
     }
 
     if (activeSection === "monedas") {
@@ -236,6 +275,21 @@ export default function DashboardLayout({ user, onLogout }: Props) {
             <p className="text-[10px] font-semibold text-[#1a7eff] uppercase tracking-widest">{ROLE_LABELS[user.role]}</p>
           </div>
         )}
+
+        {/* Estado de caja badge (solo cajero) */}
+        {user.role === "cajero" && sidebarOpen && (() => {
+          const cfg = {
+            ESPERANDO_ARQUEO: { dot: "bg-amber-400", text: "text-amber-700", bg: "bg-amber-50 border-amber-200", label: "Esperando arqueo" },
+            EN_SERVICIO:      { dot: "bg-green-500",  text: "text-green-700",  bg: "bg-green-50 border-green-200",  label: horaApertura ? `Caja abierta · ${horaApertura} hs` : "Caja abierta" },
+            CAJA_CERRADA:     { dot: "bg-slate-400",  text: "text-slate-600",  bg: "bg-slate-50 border-slate-200",  label: "Caja cerrada" },
+          }[estadoCaja];
+          return (
+            <div className={`mx-3 mb-2 flex items-center gap-2 rounded-xl border px-3 py-1.5 ${cfg.bg}`}>
+              <span className={`h-2 w-2 flex-shrink-0 rounded-full ${cfg.dot}`} />
+              <p className={`text-[10px] font-semibold ${cfg.text} truncate`}>{cfg.label}</p>
+            </div>
+          );
+        })()}
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">

@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { crearCierre } from "../lib/cajaApi";
+import { obtenerResumenCierre, type ResumenCierre } from "../lib/cajaApi";
 
 const CURRENCIES = ["USD", "BRL", "EUR", "PYG"] as const;
 type Currency = (typeof CURRENCIES)[number];
@@ -30,19 +32,26 @@ const formatNumber = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-export default function CierraCajaModule() {
+export default function CierraCajaModule({ onCierre }: { onCierre?: () => void }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const [resumen, setResumen] = useState<ResumenCierre["resumen"]>([]);
+  const [reales, setReales] = useState<Record<string, string>>({});
+  const [bloqueado, setBloqueado] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  useEffect(() => {
+    obtenerResumenCierre().then((data) => setResumen(data.resumen)).catch(() => setBloqueado(true));
+  }, []);
+
   const rows = useMemo(
-    () =>
-      SUMMARY_DATA.map((row) => {
-        const totalCompras = row.compras.total;
-        const totalVentas = row.ventas.total;
-        const saldoFinal = row.saldoInicial + totalCompras - totalVentas;
-        return { ...row, saldoFinal };
-      }),
-    [],
+    () => resumen.map((row) => ({
+      moneda: row.moneda,
+      saldoInicial: row.saldoInicial,
+      saldoFinal: row.saldoTeorico,
+      compras: { cantidad: 0, total: row.compras },
+      ventas: { cantidad: 0, total: row.ventas },
+    })),
+    [resumen],
   );
 
   const totalGeneral = useMemo(
@@ -54,14 +63,23 @@ export default function CierraCajaModule() {
     [rows],
   );
 
-  const handleFinalizar = () => {
-    setModalOpen(false);
-    setToast("Cierre de caja finalizado correctamente.");
-    setTimeout(() => setToast(null), 2200);
+  const handleFinalizar = async () => {
+    try {
+      await crearCierre(Object.fromEntries(rows.map((row) => [row.moneda, Number(reales[row.moneda] || 0)])));
+      setModalOpen(false);
+      setToast("Cierre de caja finalizado correctamente.");
+      setTimeout(() => setToast(null), 2200);
+      onCierre?.();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "No se pudo registrar el cierre.");
+    }
   };
 
   return (
     <div className="space-y-6">
+      {bloqueado ? (
+        <div className="rounded-3xl border border-[#dbe3ee] bg-white p-10 text-center shadow-sm"><h2 className="text-2xl font-bold text-[#0f172a]">Arqueo aún no realizado</h2></div>
+      ) : (
       <div className="rounded-3xl border border-[#dbe3ee] bg-white p-6 shadow-sm">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
@@ -84,7 +102,9 @@ export default function CierraCajaModule() {
                 <th className="px-4 py-3 font-semibold">Cantidad de Ventas</th>
                 <th className="px-4 py-3 font-semibold">Cantidad de Compras</th>
                 <th className="px-4 py-3 font-semibold text-right">Saldo Inicial</th>
-                <th className="px-4 py-3 font-semibold text-right">Saldo Final Esperado</th>
+                <th className="px-4 py-3 font-semibold text-right">Saldo Teórico Final</th>
+                <th className="px-4 py-3 font-semibold text-right">Saldo Real Físico</th>
+                <th className="px-4 py-3 font-semibold text-right">Diferencia</th>
               </tr>
             </thead>
             <tbody>
@@ -101,12 +121,13 @@ export default function CierraCajaModule() {
                   <td className="px-4 py-3 text-right font-semibold text-[#1a7eff]">
                     {formatNumber(row.saldoFinal)}
                   </td>
+                  <td className="px-4 py-3 text-right"><input type="number" min="0" value={reales[row.moneda] ?? ""} onChange={(event) => setReales((current) => ({ ...current, [row.moneda]: event.target.value }))} className="w-32 rounded-lg border px-2 py-1 text-right" /></td>
+                  <td className="px-4 py-3 text-right font-semibold">{formatNumber(Number(reales[row.moneda] || 0) - row.saldoFinal)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
         <div className="mt-6 rounded-2xl border border-[#dbe3ee] bg-[#f0f7ff] p-4">
           <p className="text-sm text-[#64748b]">Fórmula aplicada</p>
           <p className="mt-1 text-base font-semibold text-[#0f172a]">
@@ -115,6 +136,7 @@ export default function CierraCajaModule() {
           <p className="mt-3 text-2xl font-bold text-[#1a7eff]">{formatNumber(totalGeneral)} PYG</p>
         </div>
       </div>
+      )}
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
