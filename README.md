@@ -129,6 +129,35 @@ lado. Para apagarlo: `backend\.venv\Scripts\python publicar.py --apagar`.
 Paso a paso, usuarios y problemas comunes en
 [`docs/levantar-en-internet.md`](docs/levantar-en-internet.md).
 
+### Despliegue automático (un solo comando)
+
+`desplegar.py` deja el sistema funcionando en cualquiera de los dos ambientes.
+Se ocupa de las tres cosas: el **código fuente** (baja del repositorio la
+versión pedida), la **base de datos** (la crea con las migraciones) y la
+**población** (datos de ejemplo y un usuario por rol, ya asociado a sus
+clientes). Con Docker Desktop abierto:
+
+```bash
+python desplegar.py --ambiente desarrollo                # lo que haya en la carpeta
+python desplegar.py --ambiente produccion --tag v5.0     # un release, en internet
+python desplegar.py --ambiente desarrollo --base-nueva   # borra los datos y arranca de cero
+```
+
+| Opción | Qué hace |
+|---|---|
+| `--ambiente` | `desarrollo` (usa `levantar_todo.py`) o `produccion` (usa `publicar.py`). Obligatoria. |
+| `--tag` | Versión a desplegar (`v4.0`, `v5.0`...). No cambia de versión si hay cambios sin commitear. |
+| `--base-nueva` | Borra la base antes de desplegar. En producción borra también la de Keycloak. |
+| `--sin-datos` | Producción: no carga los datos de ejemplo ni los usuarios de prueba. |
+
+También sirve en una máquina sin el proyecto: copiando solo `desplegar.py` a
+una carpeta vacía, clona el repositorio en `./Global_Exchange` y sigue.
+Requisitos: Git, Python 3.12+, Docker y, para desarrollo, Node.js 20+.
+
+Los usuarios de prueba (`admin.test`, `analista.test`, `cajero.test`,
+`cliente.test`; contraseña `Prueba2026!`) quedan listos para operar:
+`cliente.test` ya está asociado a los dos clientes de ejemplo.
+
 ---
 
 ## Notas para el equipo
