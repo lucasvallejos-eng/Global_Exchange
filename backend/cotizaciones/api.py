@@ -131,11 +131,20 @@ def cotizaciones_lista(request):
         if codigo:
             consulta = consulta.filter(moneda__codigo=codigo.upper())
 
-        # ?activas=1   -> solo las vigentes
-        if request.GET.get("activas") == "1":
-            consulta = consulta.filter(activa=True, moneda__activo=True)
+        consulta = consulta.order_by("-fecha")
 
-        return JsonResponse([_a_dict(c) for c in consulta.order_by("-fecha")], safe=False)
+        # ?activas=1   -> solo las vigentes: la activa más reciente de cada
+        # moneda, la misma definición con la que se opera
+        # (operaciones.servicios.cotizacion_vigente). Si una moneda quedó con
+        # más de una activa, mostrar otra haría operar con un precio distinto
+        # del que se ve.
+        if request.GET.get("activas") == "1":
+            vigentes = {}
+            for cotizacion in consulta.filter(activa=True, moneda__activo=True):
+                vigentes.setdefault(cotizacion.moneda_id, cotizacion)
+            return JsonResponse([_a_dict(c) for c in vigentes.values()], safe=False)
+
+        return JsonResponse([_a_dict(c) for c in consulta], safe=False)
 
     return _crear(request)
 
