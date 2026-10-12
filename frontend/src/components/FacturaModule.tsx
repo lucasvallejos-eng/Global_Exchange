@@ -200,7 +200,9 @@ export default function FacturaModule() {
                       <td className="px-4 py-3 font-medium text-[#0f172a]">{factura.numero}</td>
                       <td className="px-4 py-3 text-[#475569]">
                         {factura.cliente}
-                        <span className="block text-xs text-[#94a3b8]">{factura.operacion}</span>
+                        <span className="block text-xs text-[#94a3b8]">
+                          {factura.operacion} · {factura.origen} #{factura.operacionId}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <span

@@ -10,7 +10,7 @@ from django.views.decorators.http import require_POST
 from cuentas.decorators import rol_requerido
 
 from . import servicio
-from .api import TODOS_LOS_ROLES, facturas_visibles
+from .api import TODOS_LOS_ROLES, descripcion_de, facturas_visibles
 from .models import Factura
 from .servicio import ErrorFacturaSegura, FacturaInvalida
 
@@ -42,7 +42,7 @@ def detalle_factura(request, pk):
     factura = get_object_or_404(facturas_visibles(request.user), pk=pk)
     return render(request, "facturacion/detalle.html", {
         "f": factura,
-        "t": factura.transaccion,
+        "operacion": descripcion_de(factura),
         "items": factura.de.get("gCamItem", []),
         "se_puede_emitir": servicio.se_puede_emitir(factura),
         "error": request.session.pop("error_factura", None),

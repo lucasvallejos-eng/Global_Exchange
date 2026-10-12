@@ -5,8 +5,8 @@
 - **Integrante:** Milner Noguera
 - **Ramas de trabajo:** `feature/facturacion-electronica` (creada desde
   `develop` en el commit `32c5e82`) y, una sobre la otra,
-  `feature/reportes-ganancias`, `feature/tema-login-keycloak` y
-  `feature/simulacion-completa`
+  `feature/reportes-ganancias`, `feature/tema-login-keycloak`,
+  `feature/simulacion-completa` y `feature/transaccion-completa`
 
 ---
 
@@ -95,6 +95,20 @@ factura todavía**, porque los números son pocos.
     del segmento, tasa aplicada, comisión y total), sin registrar nada. Antes
     la hacía el navegador y no incluía la comisión.
 
+### 6. Simulación completa de transacciones
+
+- **Pedido:** el equipo aclaró, con la lista de hitos, que "simulación
+  completa de transacciones" es poder recorrer una transacción entera con todo
+  lo de los sprints anteriores funcionando junto, no el simulador de
+  conversión del Hito 4.
+- **Qué se hizo:** la IA revisó el recorrido y encontró un hueco: las
+  operaciones de la **caja** no generaban factura. Se generalizó la
+  facturación (la factura puede ser de una transacción web, una compra o una
+  venta de caja, y guarda su cliente) y se agregó una prueba de punta a punta
+  por la API (`backend/tests/test_transaccion_completa.py`): alta del cliente,
+  operación, pago o cancelación, notificación, factura, descarga y reporte,
+  por la web y por la caja.
+
 ## Decisiones que tomó la IA y quedaron a confirmar
 
 Se dejaron escritas como supuestos, en el código y en la guía, para que el
@@ -121,13 +135,13 @@ equipo las revise con la cátedra:
 - **Copiar la configuración de Factura Segura a `.env.prod`**, como se hizo
   con Stripe. Son más de veinte variables: se prefirió que producción lea el
   mismo archivo con `env_file`, sin tocar `publicar.py`.
-- **Notas de crédito, cancelación de facturas y facturación de la caja.**
-  Quedaron fuera de esta sesión.
+- **Notas de crédito y cancelación de facturas.** Quedaron fuera de esta
+  sesión.
 
 ## Verificación
 
-- **Pruebas unitarias:** 311 en total, todas en verde; 44 nuevas de
-  facturación y 18 de reportes. Ninguna sale a la red: se reemplaza el único
+- **Pruebas unitarias:** 327 en total, todas en verde; 48 nuevas de
+  facturación, 18 de reportes y 12 del recorrido completo. Ninguna sale a la red: se reemplaza el único
   punto que habla con Factura Segura, y `settings.py` apaga el token y la
   emisión al correr los tests.
 - **En el navegador, con login real por Keycloak** (usuarios de prueba)
@@ -135,8 +149,9 @@ equipo las revise con la cátedra:
   las operaciones cargadas; una factura de un cliente sin RUC quedó en error y
   pasó a simulada al reintentarla después de cargarle el RUC; el RUC se guardó
   desde el formulario de Clientes; la simulación mostró el desglose completo;
-  y el tema nuevo se vio en el login, en el error de contraseña y en el
-  registro.
+  el tema nuevo se vio en el login, en el error de contraseña y en el
+  registro; y una compra hecha desde la maqueta como cliente generó su
+  factura. El recorrido de la caja se probó por la API, no a mano.
 - **Maqueta:** chequeo de tipos y `vite build` sin errores.
 - **Sin verificar:** nada se probó contra Factura Segura. La emisión real, la
   consulta al SIFEN y las descargas del KuDE y del XML solo están cubiertas

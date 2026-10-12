@@ -1,9 +1,10 @@
 """Facturas electrónicas de las operaciones pagadas.
 
-Cada operación pagada tiene, como mucho, una factura. La factura la genera y
-la firma **Factura Segura**, que es quien habla con el SIFEN de la DNIT; acá
-solo se guarda lo necesario para mostrarla, consultar su estado y descargarla
-(ver ``facturacion.servicio``).
+Cada operación pagada tiene, como mucho, una factura: las de la web
+(``operaciones.Transaccion``) y las de la caja (``caja.CompraCaja`` y
+``caja.VentaCaja``). La factura la genera y la firma **Factura Segura**, que
+es quien habla con el SIFEN de la DNIT; acá solo se guarda lo necesario para
+mostrarla, consultar su estado y descargarla (ver ``facturacion.servicio``).
 """
 from django.conf import settings
 from django.db import models
@@ -12,9 +13,13 @@ from django.db import models
 class Factura(models.Model):
     """La factura electrónica de una operación.
 
-    Los datos del receptor y el total se guardan **copiados**: si mañana cambia
-    el nombre o el RUC del cliente, una factura ya emitida tiene que seguir
-    mostrando a nombre de quién salió.
+    La operación facturada es **una sola** de estas tres: ``transaccion`` (la
+    web), ``compra_caja`` o ``venta_caja`` (la ventanilla). Las otras dos
+    quedan vacías.
+
+    El cliente, los datos del receptor y el total se guardan **copiados**: si
+    mañana cambia el nombre o el RUC del cliente, una factura ya emitida tiene
+    que seguir mostrando a nombre de quién salió.
 
     ``numero`` es el número de documento dentro del rango que nos asignó la
     cátedra. Una factura simulada no tiene número: no gasta ninguno.
@@ -30,7 +35,20 @@ class Factura(models.Model):
         CANCELADA = "CANCELADA", "Cancelada"
 
     transaccion = models.OneToOneField(
-        "operaciones.Transaccion", on_delete=models.PROTECT, related_name="factura"
+        "operaciones.Transaccion", on_delete=models.PROTECT, related_name="factura",
+        null=True, blank=True,
+    )
+    compra_caja = models.OneToOneField(
+        "caja.CompraCaja", on_delete=models.PROTECT, related_name="factura",
+        null=True, blank=True,
+    )
+    venta_caja = models.OneToOneField(
+        "caja.VentaCaja", on_delete=models.PROTECT, related_name="factura",
+        null=True, blank=True,
+    )
+    # De quién es: decide quién puede verla, venga de la web o de la caja.
+    cliente = models.ForeignKey(
+        "clientes.Cliente", on_delete=models.PROTECT, related_name="facturas"
     )
     numero = models.PositiveIntegerField(
         null=True, blank=True, unique=True,
@@ -60,6 +78,11 @@ class Factura(models.Model):
 
     def __str__(self):
         return f"Factura {self.numero_completo} ({self.get_estado_display()})"
+
+    @property
+    def origen(self):
+        """La operación facturada: la transacción web o la operación de caja."""
+        return self.transaccion or self.compra_caja or self.venta_caja
 
     @property
     def numero_completo(self):

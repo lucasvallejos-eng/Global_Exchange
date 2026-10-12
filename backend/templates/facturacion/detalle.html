@@ -35,8 +35,14 @@ archivos (KuDE y XML) existen solo si se emitió de verdad en Factura Segura.
     <dt>A nombre de</dt><dd>{{ f.receptor_nombre }}</dd>
     <dt>RUC / cédula</dt><dd>{{ f.receptor_documento|default:"Sin cargar" }}</dd>
     <dt>Operación</dt>
-    <dd><a href="{% url 'detalle_operacion' t.pk %}">#{{ t.pk }}</a> {{ t.get_tipo_display }} —
-      {{ t.monto_divisa|floatformat:"2g" }} {{ t.moneda.codigo }}</dd>
+    <dd>
+      {% if f.transaccion_id %}
+        <a href="{% url 'detalle_operacion' f.transaccion_id %}">#{{ f.transaccion_id }}</a> (web)
+      {% else %}
+        #{{ f.origen.pk }} (caja)
+      {% endif %}
+      {{ operacion }}
+    </dd>
     <dt>Fecha</dt><dd>{{ f.fecha_creacion|date:"d/m/Y H:i" }}</dd>
     {% if f.cdc %}<dt>CDC</dt><dd>{{ f.cdc }}</dd>{% endif %}
   </dl>

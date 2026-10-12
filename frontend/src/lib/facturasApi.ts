@@ -20,6 +20,8 @@ export interface Factura {
   // A nombre de quién salió: el cliente de la operación, no el usuario.
   cliente: string;
   documento: string | null;
+  // De dónde salió la operación facturada: la web o la caja (ventanilla).
+  origen: "Web" | "Caja";
   operacionId: number;
   operacion: string;
   cdc: string | null;

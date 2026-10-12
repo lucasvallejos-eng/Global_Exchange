@@ -68,14 +68,20 @@ Son supuestos a confirmar con la cátedra:
   por el monto en guaraníes, con la comisión como descuento. El total es lo
   que recibió el cliente.
 
+Las operaciones de la **caja** (ventanilla) se facturan igual. Ahí la tasa ya
+trae incluido el porcentaje del segmento y no hay comisión aparte: la factura
+lleva un solo ítem exento por el total, y se informa como operación
+presencial.
+
 Los ítems van en guaraníes y con cantidad 1, para que el total coincida con lo
 cobrado sin decimales. Factura Segura solo admite PYG o USD como moneda de la
 operación.
 
 ## Flujo
 
-1. Una operación queda **pagada** (por cualquiera de los caminos). La señal
-   `facturacion.senales` llama a `servicio.facturar` después del `commit`.
+1. Una operación queda **pagada**: una de la web (por cualquiera de sus
+   caminos) o una compra o venta de la caja. La señal `facturacion.senales`
+   llama a `servicio.facturar` después del `commit`.
 2. Se arma el documento resumido (`armar_de`) y se completa con `calcular_de`.
 3. Si la emisión está prendida, se reserva el número y se manda `generar_de`.
    Factura Segura devuelve el **CDC** (44 dígitos) y la factura queda
@@ -118,8 +124,9 @@ pedirlo con el botón "Emitir", una por una.
 | GET | `/api/facturas/<id>/kude/` | Descarga el KuDE (PDF) |
 | GET | `/api/facturas/<id>/xml/` | Descarga el XML firmado |
 
-Cada uno ve las facturas de las operaciones que puede ver: el cliente las de
-sus clientes; administrador, analista y cajero, todas.
+Quién ve qué: el administrador, el analista y el cajero ven todas las
+facturas, de la web y de la caja; el resto, las de los clientes a los que está
+asociado.
 
 ## Cómo probar sin gastar números
 
@@ -131,7 +138,14 @@ cd backend
 Para verlo en pantalla: pagar una operación con un cliente que tenga RUC y
 entrar a **Facturas**. Con la emisión apagada queda simulada.
 
+El recorrido completo de una transacción (alta del cliente, operación, pago,
+notificación, factura, descarga y reporte), por la web y por la caja, está
+probado de punta a punta en `backend/tests/test_transaccion_completa.py`:
+
+```
+.venv\Scripts\python manage.py test tests.test_transaccion_completa
+```
+
 ## Pendiente
 
 - Notas de crédito y cancelación (`sol_cancelacion`) al anular una operación.
-- Facturar las operaciones de la caja (ventanilla), que hoy no generan factura.

@@ -59,6 +59,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { id: "compra-divisas", label: "Compra de Divisas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
     { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5" /> },
     { id: "cierre-caja", label: "Cierre de Caja", icon: <Icon path="M6 2h12v20H6zM9 6h6M9 10h6M9 14h6" /> },
+    { id: "facturas", label: "Facturas", icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /> },
     { id: "historial-caja", label: "Historial de Caja", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
     { id: "preferencias-notificaciones", label: "Notificaciones", icon: <Icon path="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /> },
   ],

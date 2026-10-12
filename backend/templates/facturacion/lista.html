@@ -68,7 +68,13 @@ lleva al detalle, que es donde se descarga o se consulta el estado.
               <td style="white-space:nowrap">{{ f.numero_completo }}</td>
               <td style="white-space:nowrap">{{ f.fecha_creacion|date:"d/m/Y H:i" }}</td>
               <td>{{ f.receptor_nombre }}</td>
-              <td><a href="{% url 'detalle_operacion' f.transaccion.pk %}">#{{ f.transaccion.pk }}</a> {{ f.transaccion.get_tipo_display }}</td>
+              <td>
+                {% if f.transaccion_id %}
+                  <a href="{% url 'detalle_operacion' f.transaccion_id %}">#{{ f.transaccion_id }}</a> web
+                {% else %}
+                  #{{ f.origen.pk }} caja
+                {% endif %}
+              </td>
               <td class="numero">{{ f.total|floatformat:"0g" }}</td>
               <td><span class="etiqueta {{ f.estado|lower }}">{{ f.get_estado_display }}</span></td>
               <td class="acciones"><a href="{% url 'detalle_factura' f.pk %}">Ver</a></td>
