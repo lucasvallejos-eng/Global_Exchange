@@ -39,7 +39,7 @@ archivos (KuDE y XML) existen solo si se emitió de verdad en Factura Segura.
       {% if f.transaccion_id %}
         <a href="{% url 'detalle_operacion' f.transaccion_id %}">#{{ f.transaccion_id }}</a> (web)
       {% else %}
-        #{{ f.origen.pk }} (caja)
+        {{ f.referencia }}
       {% endif %}
       {{ operacion }}
     </dd>

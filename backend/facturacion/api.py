@@ -65,6 +65,7 @@ def factura_a_dict(factura, emite_el_usuario):
         # De dónde salió: una operación de la web o de la caja.
         "origen": "Web" if factura.transaccion_id else "Caja",
         "operacionId": factura.origen.pk,
+        "referencia": factura.referencia,
         "operacion": descripcion_de(factura),
         "cdc": factura.cdc or None,
         # Qué botones mostrar.

@@ -23,6 +23,8 @@ export interface Factura {
   // De dónde salió la operación facturada: la web o la caja (ventanilla).
   origen: "Web" | "Caja";
   operacionId: number;
+  /** "Web #5", "Caja, compra #2" o "Caja, venta #2". */
+  referencia: string;
   operacion: string;
   cdc: string | null;
   // Existe en Factura Segura: tiene KuDE (PDF) y XML para descargar.

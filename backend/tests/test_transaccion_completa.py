@@ -285,6 +285,7 @@ class TransaccionDeCajaCompletaTest(BaseTransaccionCompleta):
         factura = self.client.get(reverse("api_facturas")).json()["facturas"][0]
         self.assertEqual(factura["cliente"], "Comercial Clara S.A.")
         self.assertEqual((factura["origen"], factura["operacionId"]), ("Caja", operacion["id"]))
+        self.assertEqual(factura["referencia"], f"Caja, venta #{operacion['id']}")
         self.assertEqual(factura["monto"], 732600)
 
         # La usuaria del cliente también la ve; otro usuario, no.
@@ -315,3 +316,10 @@ class TransaccionDeCajaCompletaTest(BaseTransaccionCompleta):
         self.assertEqual(Factura.objects.exclude(venta_caja=None).get().venta_caja, VentaCaja.objects.get())
         self.assertEqual(Factura.objects.exclude(transaccion=None).get().transaccion,
                          Transaccion.objects.get())
+        # La compra y la venta de caja pueden tener el mismo número: la
+        # referencia dice de cuál de las dos es cada factura.
+        self.assertEqual({f.referencia for f in Factura.objects.all()}, {
+            f"Caja, venta #{VentaCaja.objects.get().pk}",
+            f"Caja, compra #{CompraCaja.objects.get().pk}",
+            f"Web #{Transaccion.objects.get().pk}",
+        })
