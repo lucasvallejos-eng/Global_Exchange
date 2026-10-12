@@ -326,5 +326,127 @@
       "creado_en": "2026-09-04T09:00:00Z",
       "actualizado_en": "2026-09-04T09:00:00Z"
     }
+  },
+  {
+    "model": "monedas.moneda",
+    "fields": {
+      "codigo": "PYG",
+      "nombre": "Guaraní paraguayo",
+      "simbolo": "₲",
+      "activo": true,
+      "es_local": true,
+      "fecha_creacion": "2026-09-01T09:00:00Z",
+      "fecha_actualizacion": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "50.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "100.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "500.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "1000.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "2000.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "5000.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "10000.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "20000.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "50000.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "fields": {
+      "moneda": [
+        "PYG"
+      ],
+      "valor": "100000.00",
+      "creado_en": "2026-09-01T09:00:00Z",
+      "actualizado_en": "2026-09-01T09:00:00Z"
+    }
   }
 ]

@@ -16,6 +16,7 @@ from django.urls import reverse
 
 from clientes.models import Cliente
 from cuentas.auth import BackendOIDCKeycloak
+from monedas.models import Denominacion, Moneda
 
 User = get_user_model()
 FIXTURE = str(settings.BASE_DIR / "fixtures" / "demo.json")
@@ -58,10 +59,30 @@ class DatosDemoTests(TestCase):
         self.assertEqual(respuesta.status_code, 200, respuesta.content)
         self.assertEqual(respuesta.json()["totalGuaranies"], 740000)
 
+    def test_trae_la_moneda_local_con_sus_billetes(self):
+        # Sin la moneda local, el arqueo de la caja no sigue los guaraníes.
+        local = Moneda.local()
+        self.assertEqual(local.codigo, "PYG")
+        self.assertEqual(local.denominaciones.count(), 10)
+
     def test_cargarlo_dos_veces_no_duplica(self):
-        antes = (User.objects.count(), Cliente.objects.count())
+        antes = (User.objects.count(), Cliente.objects.count(), Moneda.objects.count(),
+                 Denominacion.objects.count())
         call_command("loaddata", FIXTURE, verbosity=0)
-        self.assertEqual((User.objects.count(), Cliente.objects.count()), antes)
+        self.assertEqual((User.objects.count(), Cliente.objects.count(), Moneda.objects.count(),
+                          Denominacion.objects.count()), antes)
+
+    def test_no_choca_con_una_moneda_local_cargada_a_mano(self):
+        # Alguien ya había creado el guaraní desde la pantalla de Monedas:
+        # tiene otro id y solo algunos billetes.
+        Moneda.objects.filter(codigo="PYG").delete()
+        Moneda.objects.create(codigo="ARS", nombre="Peso argentino", simbolo="$")
+        a_mano = Moneda.objects.create(codigo="PYG", nombre="Guaraní", simbolo="Gs", es_local=True)
+        Denominacion.objects.create(moneda=a_mano, valor=100000)
+        call_command("loaddata", FIXTURE, verbosity=0)
+        self.assertEqual(Moneda.local().pk, a_mano.pk)
+        self.assertEqual(a_mano.denominaciones.count(), 10)
+        self.assertTrue(Moneda.objects.filter(codigo="ARS").exists())
 
     def test_cargarlo_sobre_usuarios_que_ya_existian_no_los_duplica(self):
         # Una base usada: el usuario ya entró y Django le dio otro id.
