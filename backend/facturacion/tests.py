@@ -233,6 +233,45 @@ class EmisionTest(BaseFacturacionTest):
         reintentada = servicio.reintentar(factura)
         self.assertEqual((reintentada.numero, reintentada.estado), (382, Factura.Estado.ENVIADA))
 
+    def sin_confirmar(self):
+        """Una factura a la que se le cortó la conexión justo al emitir."""
+        def se_corta_al_generar(operation, params):
+            if operation == "generar_de":
+                raise SinConfirmar("No hubo respuesta de Factura Segura.")
+            return respuesta_de_factura_segura(operation, params)
+
+        self.pedir.side_effect = se_corta_al_generar
+        factura = servicio.facturar(self.pagada())
+        self.pedir.side_effect = respuesta_de_factura_segura
+        return factura
+
+    def test_un_no_al_reintentar_una_sin_confirmar_no_libera_el_numero(self):
+        # La primera vez sí se había emitido: al reenviarla, Factura Segura
+        # dice que ya existe. El 382 está gastado y nadie más lo puede tomar.
+        factura = self.sin_confirmar()
+
+        def ya_existe(operation, params):
+            if operation == "generar_de":
+                raise ErrorFacturaSegura("El documento 001-003-0000382 ya existe")
+            return respuesta_de_factura_segura(operation, params)
+
+        self.pedir.side_effect = ya_existe
+        reintentada = servicio.reintentar(factura)
+        self.assertEqual((reintentada.numero, reintentada.estado), (382, Factura.Estado.SIN_CONFIRMAR))
+        self.assertIn("ya existe", reintentada.detalle)
+
+        self.pedir.side_effect = respuesta_de_factura_segura
+        self.assertEqual(servicio.facturar(self.pagada()).numero, 383)
+
+    def test_una_sin_confirmar_no_se_vuelve_simulada_con_la_emision_apagada(self):
+        factura = self.sin_confirmar()
+        self.pedir.reset_mock()
+        with override_settings(FACTURA_SEGURA_EMITIR=False):
+            reintentada = servicio.reintentar(factura)
+        self.assertEqual((reintentada.numero, reintentada.estado), (382, Factura.Estado.SIN_CONFIRMAR))
+        self.assertIn("emisión está apagada", reintentada.detalle)
+        self.pedir.assert_not_called()
+
     def test_si_se_corta_al_calcular_no_queda_nada_sin_confirmar(self):
         self.pedir.side_effect = SinConfirmar("No hubo respuesta de Factura Segura.")
         factura = servicio.facturar(self.pagada())
@@ -444,6 +483,36 @@ class PantallasYApiTest(BaseFacturacionTest):
         # Una que no falló no se reintenta.
         respuesta = self.client.post(reverse("api_facturas_reintentar", args=[self.factura.pk]))
         self.assertEqual(respuesta.status_code, 400)
+
+    @override_settings(**CONFIGURADO, FACTURA_SEGURA_EMITIR=True)
+    def test_con_la_emision_prendida_el_cliente_no_puede_emitir(self):
+        # self.factura es simulada: emitirla gastaría un número del rango.
+        self.entrar(self.usuario)
+        self.assertFalse(self.client.get(reverse("api_facturas")).json()["facturas"][0]["sePuedeEmitir"])
+        respuesta = self.client.post(reverse("api_facturas_reintentar", args=[self.factura.pk]))
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertIn("solo el administrador", respuesta.json()["error"])
+
+        detalle = self.client.get(reverse("detalle_factura", args=[self.factura.pk]))
+        self.assertNotContains(detalle, "Emitir de verdad")
+        pantalla = self.client.post(reverse("reintentar_factura", args=[self.factura.pk]), follow=True)
+        self.assertContains(pantalla, "solo el administrador")
+
+        self.factura.refresh_from_db()
+        self.assertEqual((self.factura.estado, self.factura.numero), (Factura.Estado.SIMULADA, None))
+        self.pedir.assert_not_called()
+
+    @override_settings(**CONFIGURADO, FACTURA_SEGURA_EMITIR=True)
+    def test_con_la_emision_prendida_el_administrador_si_puede_emitir(self):
+        admin = base.Usuario.objects.create_user(username="admin")
+        admin.groups.add(base.Group.objects.get_or_create(name="administrador")[0])
+        self.entrar(admin)
+        self.assertTrue(self.client.get(reverse("api_facturas")).json()["facturas"][0]["sePuedeEmitir"])
+        self.assertContains(self.client.get(reverse("detalle_factura", args=[self.factura.pk])),
+                            "Emitir de verdad")
+        respuesta = self.client.post(reverse("api_facturas_reintentar", args=[self.factura.pk]))
+        self.assertEqual((respuesta.json()["estado"], respuesta.json()["numero"]),
+                         ("ENVIADA", "001-003-0000382"))
 
 
 class RucDelClienteTest(BaseFacturacionTest):
