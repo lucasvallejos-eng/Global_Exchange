@@ -4,10 +4,12 @@
 doble: se prueba qué le mandamos, cómo interpretamos lo que responde y, sobre
 todo, que **no se gasten números de factura** cuando no corresponde.
 """
+import dataclasses
 import io
 import json
 import urllib.error
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import override_settings
@@ -458,3 +460,31 @@ class RucDelClienteTest(BaseFacturacionTest):
         self.assertEqual(respuesta.json()["ruc"], "80002247-5")
         self.cliente.refresh_from_db()
         self.assertEqual(self.cliente.ruc, "80002247-5")
+
+
+@override_settings(**CONFIGURADO)
+class FormaDePagoTest(BaseFacturacionTest):
+    """Cómo se informa el pago, en la web y en la caja."""
+
+    def pago(self, **cambios):
+        operacion = dataclasses.replace(servicio.operacion_de(self.pagada()), **cambios)
+        return servicio.armar_de(operacion, 382)["gPaConEIni"][0]
+
+    def test_tarjeta_en_la_caja_pasa_por_pos(self):
+        tarjeta = SimpleNamespace(alias="Visa ****4242", banco_o_proveedor="Stripe")
+        pago = self.pago(presencial=True, forma_pago="TARJETA_STRIPE", medio_pago=tarjeta)
+        self.assertEqual((pago["iTiPago"], pago["iDenTarj"], pago["iForProPa"]), ("3", "1", "1"))
+
+    def test_tarjeta_en_la_web_es_pago_electronico(self):
+        tarjeta = SimpleNamespace(alias="Mastercard ****4444", banco_o_proveedor=None)
+        pago = self.pago(forma_pago="TARJETA_CREDITO", medio_pago=tarjeta)
+        self.assertEqual((pago["iTiPago"], pago["iDenTarj"], pago["iForProPa"]), ("3", "2", "2"))
+
+    def test_transferencia_y_billetera(self):
+        self.assertEqual(self.pago(forma_pago="TRANSFERENCIA")["iTiPago"], "5")
+        self.assertEqual(self.pago(forma_pago="BILLETERA_DIGITAL")["iTiPago"], "7")
+
+    def test_una_forma_que_no_se_conoce_va_como_efectivo(self):
+        pago = self.pago(forma_pago="Otro medio")
+        self.assertEqual(pago["iTiPago"], "1")
+        self.assertNotIn("iDenTarj", pago)

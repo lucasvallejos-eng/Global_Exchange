@@ -26,18 +26,24 @@ Qué se factura (supuestos a confirmar con la cátedra):
   por el monto en guaraníes, con la comisión como descuento. El total es lo
   que recibió el cliente.
 
+Las operaciones de la **caja** (ventanilla) se facturan igual. Ahí la tasa ya
+trae incluido el porcentaje del segmento del cliente y no hay comisión aparte,
+así que la factura lleva un solo ítem, exento, por el total.
+
 El receptor es siempre el **cliente** de la operación (RN02), nunca el usuario
 que la cargó.
 """
 import json
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction as transaccion_bd
 from django.utils import timezone
 
+from caja.models import CompraCaja, VentaCaja
 from clientes.models import Cliente
 from operaciones.models import Transaccion
 
@@ -46,9 +52,14 @@ from .models import Factura
 RECURSO = "/misife00/v1/esi"
 ESPERA_SEGUNDOS = 20
 
-# iTiPago del Manual Técnico del SIFEN, según el tipo de medio de pago.
+CERO = Decimal("0")
+
+# iTiPago del Manual Técnico del SIFEN, según el tipo de medio de pago (en la
+# web) o la forma de pago que anotó el cajero (en la caja).
 EFECTIVO = "1"
 TIPOS_DE_PAGO = {
+    "EFECTIVO": EFECTIVO,
+    "TARJETA_STRIPE": "3",
     "TARJETA_CREDITO": "3",
     "TARJETA_DEBITO": "4",
     "CUENTA_BANCARIA": "5",
@@ -84,6 +95,82 @@ def habilitado():
 def emite():
     """Si las facturas se emiten de verdad (gastan un número del rango)."""
     return habilitado() and settings.FACTURA_SEGURA_EMITIR
+
+
+# --- La operación a facturar --------------------------------------------------
+
+@dataclass
+class Operacion:
+    """Lo que se factura, venga de la web o de la caja.
+
+    Las operaciones de la web y las de la caja guardan lo mismo con nombres
+    distintos. Esta clase lo junta para que la factura se arme de una sola
+    manera.
+
+    Attributes:
+        referencia: cómo se nombra la operación en la factura y en pantalla.
+        casa_vende: ``True`` si la casa vende la divisa (el cliente compra).
+        presencial: ``True`` en la caja, ``False`` en la web.
+        monto_guaranies: el monto de divisa por la tasa aplicada.
+        comision: la comisión aparte, en guaraníes (cero en la caja).
+        total: lo que pagó (o recibió) el cliente.
+        forma_pago: clave de ``TIPOS_DE_PAGO``; vacía si no se registró.
+    """
+
+    referencia: str
+    cliente: Cliente
+    casa_vende: bool
+    presencial: bool
+    moneda: str
+    monto_divisa: Decimal
+    tasa_aplicada: Decimal
+    monto_guaranies: Decimal
+    comision: Decimal
+    total: Decimal
+    medio_pago: object
+    forma_pago: str
+
+
+# En qué campo de ``Factura`` va cada tipo de operación.
+CAMPO_DE_ORIGEN = {Transaccion: "transaccion", CompraCaja: "compra_caja", VentaCaja: "venta_caja"}
+
+
+def operacion_de(origen):
+    """Convierte una ``Transaccion``, ``CompraCaja`` o ``VentaCaja`` en ``Operacion``.
+
+    En la caja los nombres van desde el lado de la casa: una ``VentaCaja`` es
+    la casa vendiendo divisa (el cliente compra).
+    """
+    if isinstance(origen, Transaccion):
+        return Operacion(
+            referencia=f"Operación #{origen.pk}",
+            cliente=origen.cliente,
+            casa_vende=origen.tipo == Transaccion.Tipo.COMPRA,
+            presencial=False,
+            moneda=origen.moneda.codigo,
+            monto_divisa=Decimal(origen.monto_divisa),
+            tasa_aplicada=Decimal(origen.tasa_aplicada),
+            monto_guaranies=Decimal(origen.monto_guaranies),
+            comision=Decimal(origen.comision),
+            total=Decimal(origen.total_guaranies),
+            medio_pago=origen.medio_pago,
+            forma_pago=origen.medio_pago.tipo if origen.medio_pago else "",
+        )
+    venta = isinstance(origen, VentaCaja)
+    return Operacion(
+        referencia=f"Caja, {'venta' if venta else 'compra'} #{origen.pk}",
+        cliente=origen.cliente,
+        casa_vende=venta,
+        presencial=True,
+        moneda=origen.moneda.codigo,
+        monto_divisa=Decimal(origen.monto_divisa),
+        tasa_aplicada=Decimal(origen.cotizacion_aplicada),
+        monto_guaranies=Decimal(origen.monto_local_total),
+        comision=CERO,
+        total=Decimal(origen.monto_local_total),
+        medio_pago=origen.medio_pago,
+        forma_pago=origen.forma_pago,
+    )
 
 
 # --- Comunicación con Factura Segura ------------------------------------------
@@ -198,17 +285,23 @@ def _receptor(cliente):
     }
 
 
-def _pago(transaccion, total):
-    """El pago al contado (``gPaConEIni``), según el medio de pago de la operación."""
-    medio = transaccion.medio_pago
-    tipo = TIPOS_DE_PAGO.get(medio.tipo, EFECTIVO) if medio else EFECTIVO
-    pago = {"iTiPago": tipo, "dMonTiPag": _texto(total), "cMoneTiPag": "PYG", "dTiCamTiPag": "1"}
+def _pago(operacion):
+    """El pago al contado (``gPaConEIni``), según cómo se pagó la operación."""
+    tipo = TIPOS_DE_PAGO.get((operacion.forma_pago or "").upper(), EFECTIVO)
+    pago = {
+        "iTiPago": tipo,
+        "dMonTiPag": _texto(operacion.total),
+        "cMoneTiPag": "PYG",
+        "dTiCamTiPag": "1",
+    }
     if tipo in TARJETAS:
-        descripcion = f"{medio.alias} {medio.banco_o_proveedor or ''}".lower()
+        medio = operacion.medio_pago
+        descripcion = f"{medio.alias} {medio.banco_o_proveedor or ''}".lower() if medio else ""
         pago["iDenTarj"] = next(
             (codigo for marca, codigo in MARCAS_DE_TARJETA.items() if marca in descripcion), "99"
         )
-        pago["iForProPa"] = "2"  # pago electrónico (no hay POS)
+        # En la caja la tarjeta pasa por un POS; en la web es un pago electrónico.
+        pago["iForProPa"] = "1" if operacion.presencial else "2"
     return pago
 
 
@@ -230,33 +323,45 @@ def _item(codigo, descripcion, precio, descuento=0, gravado=False):
     }
 
 
-def _items(t):
+def _items(operacion):
     """Los ítems de la factura (ver el docstring del módulo).
 
     Van en guaraníes y con cantidad 1: así el total coincide siempre con lo
     que se cobró, sin decimales que el guaraní no tiene.
     """
-    detalle = f"{_texto(t.monto_divisa)} {t.moneda.codigo} a {_texto(t.tasa_aplicada)} Gs."
-    if t.tipo == Transaccion.Tipo.COMPRA:
-        items = [_item(t.moneda.codigo, f"Venta de divisa: {detalle}", t.monto_guaranies)]
-        if t.comision:
-            items.append(_item("COMISION", "Comisión por operación de cambio", t.comision, gravado=True))
+    detalle = (
+        f"{_texto(operacion.monto_divisa)} {operacion.moneda} "
+        f"a {_texto(operacion.tasa_aplicada)} Gs."
+    )
+    if operacion.casa_vende:
+        items = [_item(operacion.moneda, f"Venta de divisa: {detalle}", operacion.monto_guaranies)]
+        if operacion.comision:
+            items.append(
+                _item("COMISION", "Comisión por operación de cambio", operacion.comision, gravado=True)
+            )
         return items
-    return [_item(t.moneda.codigo, f"Compra de divisa: {detalle}", t.monto_guaranies, descuento=t.comision)]
+    return [_item(operacion.moneda, f"Compra de divisa: {detalle}", operacion.monto_guaranies,
+                  descuento=operacion.comision)]
 
 
-def armar_de(transaccion, numero):
+def armar_de(operacion, numero):
     """El documento electrónico **resumido** de la operación (JSON de Factura Segura).
 
     Es lo que recibe ``calcular_de``, que devuelve el documento completo con
     los montos e impuestos calculados según el SIFEN.
 
+    Args:
+        operacion: una ``Operacion``, o directamente la ``Transaccion`` o la
+            operación de caja (se convierte con ``operacion_de``).
+        numero (int): número de documento dentro del rango asignado.
+
     Raises:
         FacturaInvalida: si al cliente le falta el RUC o no es válido.
     """
+    if not isinstance(operacion, Operacion):
+        operacion = operacion_de(operacion)
     emisor = settings.FACTURA_SEGURA_EMISOR
     numeracion = settings.FACTURA_SEGURA_NUMERACION
-    venta_de_la_casa = transaccion.tipo == Transaccion.Tipo.COMPRA
     return {
         "iTipEmi": "1",
         "iTiDE": "1",  # factura electrónica
@@ -266,7 +371,7 @@ def armar_de(transaccion, numero):
         "dPunExp": numeracion["punto_expedicion"],
         "dNumDoc": f"{numero:07d}",
         "dFeEmiDE": timezone.localtime().strftime("%Y-%m-%dT%H:%M:%S"),
-        "iTipTra": "5" if venta_de_la_casa else "6",  # venta / compra de divisas
+        "iTipTra": "5" if operacion.casa_vende else "6",  # venta / compra de divisas
         "iTImp": "1",
         "cMoneOpe": "PYG",
         "dCondTiCam": "1",
@@ -284,18 +389,18 @@ def armar_de(transaccion, numero):
         "dTelEmi": emisor["telefono"],
         "dEmailE": emisor["email"],
         "gActEco": [{"cActEco": emisor["actividad_codigo"], "dDesActEco": emisor["actividad"]}],
-        **_receptor(transaccion.cliente),
-        "iIndPres": "2",  # operación electrónica
+        **_receptor(operacion.cliente),
+        "iIndPres": "1" if operacion.presencial else "2",  # presencial / electrónica
         "iCondOpe": "1",  # contado
-        "gPaConEIni": [_pago(transaccion, transaccion.total_guaranies)],
+        "gPaConEIni": [_pago(operacion)],
         "iCondCred": "1",
         "dPlazoCre": "0",
-        "gCamItem": _items(transaccion),
+        "gCamItem": _items(operacion),
         "CDC": "0",
         "dCodSeg": "0",
         "dDVId": "0",
         "dSisFact": "1",
-        "dInfAdic": f"Global Exchange - Operación #{transaccion.pk}",
+        "dInfAdic": f"Global Exchange - {operacion.referencia}",
     }
 
 
@@ -339,21 +444,27 @@ def _siguiente_numero():
 
 # --- Emisión ------------------------------------------------------------------
 
-def facturar(transaccion):
+def facturar(origen):
     """Genera la factura de una operación pagada. Se puede llamar más de una vez.
 
-    Nunca lanza una excepción: la operación ya está pagada y un problema con
-    la factura no la puede deshacer. Lo que haya pasado queda en el ``estado``
-    y el ``detalle`` de la factura, y se puede reintentar.
+    Nunca lanza una excepción por un problema con la factura: la operación ya
+    está pagada y eso no la puede deshacer. Lo que haya pasado queda en el
+    ``estado`` y el ``detalle`` de la factura, y se puede reintentar.
+
+    Args:
+        origen: una ``Transaccion`` de la web, o una ``CompraCaja`` o
+            ``VentaCaja`` de la ventanilla.
 
     Returns:
-        Factura: la factura de la operación, o ``None`` si no está pagada.
+        Factura: la factura de la operación, o ``None`` si es una transacción
+        que no está pagada.
     """
-    if transaccion.estado != Transaccion.Estado.PAGADA:
+    if isinstance(origen, Transaccion) and origen.estado != Transaccion.Estado.PAGADA:
         return None
-    factura = Factura.objects.filter(transaccion=transaccion).first()
+    campo = CAMPO_DE_ORIGEN[type(origen)]
+    factura = Factura.objects.filter(**{campo: origen}).first()
     if factura is None:
-        factura = Factura(transaccion=transaccion)
+        factura = Factura(**{campo: origen}, cliente=origen.cliente)
     elif not factura.se_puede_reintentar:
         return factura
     return _emitir(factura)
@@ -384,16 +495,17 @@ def se_puede_emitir(factura):
 
 
 def _emitir(factura):
-    transaccion = factura.transaccion
-    factura.receptor_nombre = transaccion.cliente.nombre
-    factura.receptor_documento = transaccion.cliente.ruc
-    factura.total = transaccion.total_guaranies
+    operacion = operacion_de(factura.origen)
+    factura.cliente = operacion.cliente
+    factura.receptor_nombre = operacion.cliente.nombre
+    factura.receptor_documento = operacion.cliente.ruc
+    factura.total = operacion.total
     factura.cdc = ""
     try:
         if emite():
-            _emitir_de_verdad(factura)
+            _emitir_de_verdad(factura, operacion)
         else:
-            _simular(factura)
+            _simular(factura, operacion)
     except (FacturaInvalida, ErrorFacturaSegura) as error:
         # Un "no" claro libera el número. Si no se sabe qué pasó, se conserva:
         # el reintento manda el mismo número y no gasta otro.
@@ -406,10 +518,10 @@ def _emitir(factura):
     return factura
 
 
-def _simular(factura):
+def _simular(factura, operacion):
     """Arma la factura sin emitirla. Con token, la valida con ``calcular_de``."""
     libres = numeros_libres()
-    de = armar_de(factura.transaccion, libres[0] if libres else 0)
+    de = armar_de(operacion, libres[0] if libres else 0)
     factura.numero = None
     factura.estado = Factura.Estado.SIMULADA
     if habilitado():
@@ -421,7 +533,7 @@ def _simular(factura):
     factura.de = de
 
 
-def _emitir_de_verdad(factura):
+def _emitir_de_verdad(factura, operacion):
     _validar_configuracion()
     with transaccion_bd.atomic():
         if factura.numero is None:
@@ -429,7 +541,7 @@ def _emitir_de_verdad(factura):
         factura.estado = Factura.Estado.SIN_CONFIRMAR
         factura.detalle = ""
         factura.save()  # reserva el número antes de salir a la red
-    de = _calcular(armar_de(factura.transaccion, factura.numero))
+    de = _calcular(armar_de(operacion, factura.numero))
     factura.de = de
     resultados = _pedir("generar_de", {"DE": de})
     factura.cdc = resultados[0]["CDC"]
