@@ -1,5 +1,116 @@
 [
   {
+    "model": "auth.group",
+    "fields": {
+      "name": "administrador"
+    }
+  },
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "analista_cambiario"
+    }
+  },
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "cajero"
+    }
+  },
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "cliente"
+    }
+  },
+  {
+    "model": "auth.user",
+    "fields": {
+      "username": "admin.test",
+      "first_name": "Ana",
+      "last_name": "Administradora",
+      "email": "admin.test@globalexchange.local",
+      "password": "!",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2026-09-01T09:00:00Z",
+      "groups": [
+        [
+          "cliente"
+        ],
+        [
+          "administrador"
+        ],
+        [
+          "analista_cambiario"
+        ],
+        [
+          "cajero"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "auth.user",
+    "fields": {
+      "username": "analista.test",
+      "first_name": "Ana",
+      "last_name": "Analista",
+      "email": "analista.test@globalexchange.local",
+      "password": "!",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-09-01T09:00:00Z",
+      "groups": [
+        [
+          "cliente"
+        ],
+        [
+          "analista_cambiario"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "auth.user",
+    "fields": {
+      "username": "cajero.test",
+      "first_name": "Carlos",
+      "last_name": "Cajero",
+      "email": "cajero.test@globalexchange.local",
+      "password": "!",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-09-01T09:00:00Z",
+      "groups": [
+        [
+          "cliente"
+        ],
+        [
+          "cajero"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "auth.user",
+    "fields": {
+      "username": "cliente.test",
+      "first_name": "Clara",
+      "last_name": "Cliente",
+      "email": "cliente.test@globalexchange.local",
+      "password": "!",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-09-01T09:00:00Z",
+      "groups": [
+        [
+          "cliente"
+        ]
+      ]
+    }
+  },
+  {
     "model": "monedas.moneda",
     "pk": 1,
     "fields": {
@@ -79,7 +190,11 @@
       "correo": "cliente.test@globalexchange.local",
       "ruc": "4567890-1",
       "segmento": null,
-      "usuarios": [],
+      "usuarios": [
+        [
+          "cliente.test"
+        ]
+      ],
       "created_at": "2026-09-04T09:00:00Z"
     }
   },
@@ -94,7 +209,11 @@
       "correo": "contacto@clienteejemplo.com.py",
       "ruc": "80012345-0",
       "segmento": null,
-      "usuarios": [],
+      "usuarios": [
+        [
+          "cliente.test"
+        ]
+      ],
       "created_at": "2026-09-04T09:00:00Z"
     }
   },
