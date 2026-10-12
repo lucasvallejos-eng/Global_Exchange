@@ -4,9 +4,13 @@ Backend de autenticación OIDC para Keycloak.
 Extiende el backend de mozilla-django-oidc para, cada vez que un usuario entra,
 sincronizar sus datos y sus **roles** de Keycloak con Django.
 
-Los roles llegan en `realm_access.roles` del token de Keycloak. Acá los
+Los roles son roles del client ``global-exchange-web`` y llegan en el claim
+plano ``roles`` (mapper "roles-cliente", ver keycloak/README.md). Acá los
 mapeamos a **grupos de Django**, así el control de acceso del lado del servidor
 usa el sistema de permisos estándar de Django.
+
+No se usa ``realm_access.roles``: ahí solo vienen los roles por defecto de
+Keycloak (``offline_access``, ``uma_authorization``...), no los del sistema.
 """
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -53,18 +57,18 @@ class BackendOIDCKeycloak(OIDCAuthenticationBackend):
         return usuario
 
     def get_userinfo(self, access_token, id_token, payload):
-        """Conserva los roles del token cuando userinfo no los devuelve."""
+        """Conserva el ``sub`` y los roles del ID token cuando userinfo no los devuelve."""
         claims = super().get_userinfo(access_token, id_token, payload)
         claims.setdefault("sub", payload.get("sub"))
-        if not claims.get("realm_access", {}).get("roles"):
-            claims["realm_access"] = payload.get("realm_access", {})
+        if not claims.get("roles"):
+            claims["roles"] = payload.get("roles", [])
         return claims
 
     def _sincronizar(self, usuario, claims):
         """Actualiza el perfil del usuario (nombre, apellido, is_staff) y sus grupos.
 
-        Sobrescribe los grupos asignados en Django según la lista de roles que provee
-        Keycloak en la clave 'roles'.
+        Sobrescribe los grupos asignados en Django según los roles que provee
+        Keycloak en el claim plano 'roles'.
 
         Args:
             usuario (User): Instancia del usuario que se va a modificar.
@@ -86,16 +90,14 @@ class BackendOIDCKeycloak(OIDCAuthenticationBackend):
         ):
             usuario.username = nombre
 
-        # Keycloak entrega los roles de realm en realm_access.roles. Se
-        # conserva el claim plano como compatibilidad con instalaciones
-        # antiguas que todavía usan el mapper "roles".
-        roles = claims.get("realm_access", {}).get("roles", []) or claims.get("roles", []) or []
+        # Roles del client en el claim plano "roles". Keycloak ya expande los
+        # roles compuestos (administrador incluye cajero y analista_cambiario).
+        roles = claims.get("roles", []) or []
 
+        # El "sub" de Keycloak identifica al cajero en la caja. Los roles no
+        # se guardan en la sesión: la única fuente son los grupos de Django.
         if self.request is not None:
-            self.request.session["keycloak_claims"] = {
-                "sub": claims.get("sub"),
-                "realm_access": claims.get("realm_access", {}),
-            }
+            self.request.session["keycloak_claims"] = {"sub": claims.get("sub")}
 
         # El administrador de Keycloak puede entrar al /admin de Django.
         usuario.is_staff = "administrador" in roles

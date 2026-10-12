@@ -11,5 +11,6 @@ urlpatterns = [
     path("operaciones/confirmar/", api.confirmar, name="api_operaciones_confirmar"),
     path("operaciones/<int:pk>/", api.detalle, name="api_operaciones_detalle"),
     path("operaciones/<int:pk>/pagar/", api.pagar, name="api_operaciones_pagar"),
+    path("operaciones/<int:pk>/verificar-pago/", api.verificar_pago, name="api_operaciones_verificar_pago"),
     path("operaciones/<int:pk>/cancelar/", api.cancelar, name="api_operaciones_cancelar"),
 ]

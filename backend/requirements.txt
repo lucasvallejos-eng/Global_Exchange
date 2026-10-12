@@ -2,6 +2,8 @@
 Django>=5.2,<5.3
 mozilla-django-oidc>=4.0,<5.0
 python-dotenv>=1.0
+# Cobros con tarjeta (modo test).
+stripe>=12.5,<13
 
 # Solo para generar la documentación del código (docs/). No hace falta para
 # levantar el sistema; sí para reconstruir docs/_build con:

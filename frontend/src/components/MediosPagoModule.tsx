@@ -3,24 +3,23 @@ import {
   actualizarMedioPago,
   borrarMedioPago,
   crearMedioPago,
+  etiquetaMedioPago,
   listarMediosPago,
   actualizarTipoMedioPago,
   type MedioPago,
   type TipoMedioPago,
 } from "../lib/mediosPagoApi";
+import ConfirmacionModal from "./ConfirmacionModal";
+import TarjetaStripeForm from "./TarjetaStripeForm";
 
 type Props = { adminMode?: boolean };
 type FormState = Record<string, string> & { tipo: string; alias: string };
 const EMPTY: FormState = { tipo: "", alias: "" };
 
+// Las tarjetas no tienen campos propios: se cargan con Stripe (TarjetaStripeForm).
+const TARJETAS = ["TARJETA_CREDITO", "TARJETA_DEBITO"];
+
 const fields: Record<string, { key: string; label: string; type?: string }[]> = {
-  TARJETA_CREDITO: [
-    { key: "nombreTitular", label: "Nombre del titular" },
-    { key: "aliasTarjeta", label: "Alias de tarjeta" },
-    { key: "numeroTarjeta", label: "Número de tarjeta" },
-    { key: "fechaVencimiento", label: "Vencimiento (MM/YY)" },
-    { key: "codigoSeguridad", label: "Código de seguridad", type: "password" },
-  ],
   TRANSFERENCIA: [
     { key: "numeroCuentaOrigen", label: "Cuenta origen" },
     { key: "bancoOrigen", label: "Banco origen" },
@@ -43,6 +42,10 @@ export default function MediosPagoModule({ adminMode = false }: Props) {
   const [editando, setEditando] = useState<number | null>(null);
   const [modal, setModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [aEliminar, setAEliminar] = useState<MedioPago | null>(null);
+  // Al modificar una tarjeta solo se cambia el alias: los datos los tiene Stripe.
+  const [tarjetaEditada, setTarjetaEditada] = useState<string | null>(null);
+  const esTarjetaNueva = editando === null && TARJETAS.includes(form.tipo);
 
   const avisar = (mensaje: string) => {
     setToast(mensaje);
@@ -62,10 +65,12 @@ export default function MediosPagoModule({ adminMode = false }: Props) {
   const abrir = (medio?: MedioPago) => {
     if (!medio) {
       setEditando(null);
+      setTarjetaEditada(null);
       setForm({ ...EMPTY });
     } else {
       setEditando(medio.id);
       setForm({ tipo: medio.tipo, alias: medio.alias, ...medio.detalle });
+      setTarjetaEditada(medio.tarjeta ? etiquetaMedioPago(medio) : null);
     }
     setModal(true);
   };
@@ -82,9 +87,15 @@ export default function MediosPagoModule({ adminMode = false }: Props) {
     }
   };
   const eliminar = async (medio: MedioPago) => {
-    if (!window.confirm(`¿Eliminar «${medio.alias}»?`)) return;
-    await borrarMedioPago(medio.id);
-    await recargar();
+    try {
+      await borrarMedioPago(medio.id);
+      await recargar();
+      avisar("Método de pago eliminado.");
+    } catch (error) {
+      avisar(error instanceof Error ? error.message : "No se pudo eliminar.");
+    } finally {
+      setAEliminar(null);
+    }
   };
   const cambiarEstado = async (medio: MedioPago) => {
     try {
@@ -124,9 +135,9 @@ export default function MediosPagoModule({ adminMode = false }: Props) {
       <div className="overflow-x-auto rounded-2xl border border-[#e2e8f0]">
         <table className="min-w-full text-left text-sm"><thead className="bg-[#f8fafc]"><tr><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Alias</th><th className="px-4 py-3">Usuario</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Acciones</th></tr></thead>
           <tbody>{medios.map((medio) => <tr key={medio.id} className="border-t border-[#edf2f7]">
-            <td className="px-4 py-3">{medio.tipoTexto}</td><td className="px-4 py-3 font-medium">{medio.alias}</td><td className="px-4 py-3">{medio.usuario}</td>
+            <td className="px-4 py-3">{medio.tipoTexto}</td><td className="px-4 py-3 font-medium">{etiquetaMedioPago(medio)}{medio.tarjeta && <span className="ml-2 text-xs text-[#64748b]">vence {medio.tarjeta.vencimiento}</span>}</td><td className="px-4 py-3">{medio.usuario}</td>
             <td className="px-4 py-3"><button onClick={() => adminMode && cambiarEstado(medio)} disabled={!adminMode} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${medio.activo ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"}`}>{medio.activo ? "Activo" : "Inactivo"}</button></td>
-            <td className="px-4 py-3">{!adminMode && <><button onClick={() => abrir(medio)} className="mr-2 text-xs font-semibold text-[#1a7eff]">Modificar</button><button onClick={() => void eliminar(medio)} className="text-xs font-semibold text-red-600">Eliminar</button></>}</td>
+            <td className="px-4 py-3">{!adminMode && <><button onClick={() => abrir(medio)} className="mr-2 text-xs font-semibold text-[#1a7eff]">Modificar</button><button onClick={() => setAEliminar(medio)} className="text-xs font-semibold text-red-600">Eliminar</button></>}</td>
           </tr>)}</tbody>
         </table>
       </div>
@@ -134,12 +145,32 @@ export default function MediosPagoModule({ adminMode = false }: Props) {
       {modal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6">
         <h3 className="text-xl font-bold">Método de pago</h3>
         <div className="mt-4 grid gap-3">
-          <select value={form.tipo} onChange={(e) => setForm({ tipo: e.target.value, alias: "", })} className="rounded-xl border px-3 py-2.5"><option value="">Seleccionar tipo</option>{tipos.filter((tipo) => tipo.activo).map((tipo) => <option key={tipo.valor} value={tipo.valor}>{tipo.texto}</option>)}</select>
+          <select value={form.tipo} disabled={editando !== null} onChange={(e) => setForm({ tipo: e.target.value, alias: "", })} className="rounded-xl border px-3 py-2.5"><option value="">Seleccionar tipo</option>{tipos.filter((tipo) => tipo.activo).map((tipo) => <option key={tipo.valor} value={tipo.valor}>{tipo.texto}</option>)}</select>
           <input value={form.alias} onChange={(e) => setForm({ ...form, alias: e.target.value })} placeholder="Alias del método" className="rounded-xl border px-3 py-2.5" />
           {(fields[form.tipo] ?? []).map((field) => <input key={field.key} type={field.type ?? "text"} value={form[field.key] ?? ""} onChange={(e) => setForm({ ...form, [field.key]: e.target.value })} placeholder={field.label} className="rounded-xl border px-3 py-2.5" />)}
+          {tarjetaEditada && <p className="rounded-xl border bg-[#f8fafc] px-3 py-2.5 text-sm text-[#475569]">{tarjetaEditada}. Para cambiar la tarjeta, eliminala y cargá una nueva.</p>}
         </div>
+        {esTarjetaNueva ? (
+          <TarjetaStripeForm
+            tipo={form.tipo}
+            alias={form.alias}
+            onCancelar={() => setModal(false)}
+            onGuardada={() => { setModal(false); void recargar(); avisar("Tarjeta guardada."); }}
+          />
+        ) : (
         <div className="mt-5 flex justify-end gap-3"><button onClick={() => setModal(false)} className="rounded-xl border px-4 py-2">Cancelar</button><button onClick={() => void guardar()} className="rounded-xl bg-[#1a7eff] px-4 py-2 font-semibold text-white">Guardar</button></div>
+        )}
       </div></div>}
+      {aEliminar && (
+        <ConfirmacionModal
+          titulo={`¿Eliminar «${aEliminar.alias}»?`}
+          mensaje={aEliminar.tarjeta
+            ? "La tarjeta se desvincula de Stripe y no se podrá volver a cobrar con ella."
+            : "El método de pago deja de estar disponible para tus operaciones."}
+          onConfirmar={() => void eliminar(aEliminar)}
+          onCancelar={() => setAEliminar(null)}
+        />
+      )}
       {toast && <div className="fixed bottom-6 right-6 z-[60] rounded-xl bg-[#0f172a] px-4 py-3 text-sm text-white">{toast}</div>}
     </div>
   );

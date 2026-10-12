@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ClientType, getAppliedRate } from "../lib/clientRates";
 import { useTasas } from "../lib/useTasas";
 import { etiquetaMedioPago, listarMediosPago, type MedioPago } from "../lib/mediosPagoApi";
+import { completarPagoOperacion } from "../lib/pagosApi";
 import { confirmarOperacion, cotizarOperacion, type NuevaOperacion, type Operacion, type Presupuesto } from "../lib/operacionesApi";
 import AlertaCancelacionModal from "./AlertaCancelacionModal";
 
@@ -117,9 +118,16 @@ export default function VentaDivisasModule({
     try {
       // Recién acá se registra la operación. Si la cotización cambió desde el
       // cálculo, el backend la registra cancelada en vez de cobrarla.
-      const resultado = await confirmarOperacion({ ...pedido, tasaBase: operacion.tasaBase });
+      // Con tarjeta, el backend cobra la divisa en Stripe; si el banco pide
+      // 3D Secure, completarPagoOperacion muestra la verificación.
+      const resultado = await completarPagoOperacion(
+        await confirmarOperacion({ ...pedido, tasaBase: operacion.tasaBase }),
+      );
       if (resultado.estado === "PAGADA") {
-        setSuccessMessage(`Venta #${resultado.id} confirmada: vas a recibir ${formatCurrency(resultado.totalGuaranies)} PYG.`);
+        setSuccessMessage(
+          `Venta #${resultado.id} confirmada: vas a recibir ${formatCurrency(resultado.totalGuaranies)} PYG.` +
+          (resultado.pagoConTarjeta ? ` Se cobraron ${resultado.montoDivisa} ${resultado.moneda} a tu tarjeta.` : ""),
+        );
       } else if (resultado.canceladaPorCotizacion) {
         setAlerta(resultado);
       } else {
@@ -203,7 +211,9 @@ export default function VentaDivisasModule({
           </label>
           {!isNewPaymentMethod && selectedMethod && (
             <p className="mt-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-              Se utilizarán los datos guardados de «{etiquetaMedioPago(selectedMethod)}».
+              {selectedMethod.tarjeta
+                ? `La divisa que vendés (${numericAmount} ${currency}) se cobrará a «${etiquetaMedioPago(selectedMethod)}» con Stripe.`
+                : `Se utilizarán los datos guardados de «${etiquetaMedioPago(selectedMethod)}».`}
             </p>
           )}
           {isNewPaymentMethod && <div className="mt-4 grid gap-4 md:grid-cols-2">

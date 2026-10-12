@@ -10,6 +10,8 @@ urlpatterns = [
     path("caja/compras/", api.compra),
     path("caja/ventas", api.venta, name="api_caja_ventas"),
     path("caja/ventas/", api.venta),
+    path("caja/clientes/<int:pk>/tarjetas/", api.tarjetas_del_cliente, name="api_caja_tarjetas_cliente"),
+    path("caja/historial/", api.historial, name="api_caja_historial"),
     path("caja/resumen-cierre/", api.resumen_cierre, name="api_caja_resumen_cierre"),
     path("caja/cierre/", api.cierre, name="api_caja_cierre"),
 ]

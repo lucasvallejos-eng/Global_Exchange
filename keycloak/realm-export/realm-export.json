@@ -388,7 +388,15 @@
           "id": "f752638a-e8f7-4679-9c3c-e16a26105990",
           "name": "administrador",
           "description": "",
-          "composite": false,
+          "composite": true,
+          "composites": {
+            "client": {
+              "global-exchange-web": [
+                "analista_cambiario",
+                "cajero"
+              ]
+            }
+          },
           "clientRole": true,
           "containerId": "7bf1f2b6-1cb1-49e6-88d4-8788d055a9e7",
           "attributes": {}

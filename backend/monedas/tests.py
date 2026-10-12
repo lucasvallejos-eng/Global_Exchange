@@ -190,3 +190,101 @@ class DenominacionApiTest(TestCase):
         self.assertEqual(res.status_code, 204)
         self.assertFalse(Denominacion.objects.filter(id=self.d1.id).exists())
 
+
+
+class MonedaLocalTest(TestCase):
+    """La moneda local (guaraní): sin cotización y una sola."""
+
+    def setUp(self):
+        import time
+        from django.contrib.auth.models import Group, User
+
+        analista = User.objects.create_user("analista_local")
+        analista.groups.add(Group.objects.get_or_create(name="analista_cambiario")[0])
+        self.client.force_login(analista)
+        session = self.client.session
+        session["oidc_id_token_expiration"] = time.time() + 3600
+        session.save()
+
+    def _crear(self, **datos):
+        import json
+        return self.client.post(reverse("api_monedas_lista"), data=json.dumps(datos), content_type="application/json")
+
+    def test_se_crea_sin_precios(self):
+        respuesta = self._crear(codigo="PYG", nombre="Guaraní", esLocal=True)
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertTrue(respuesta.json()["esLocal"])
+        self.assertIsNone(respuesta.json()["precioCompra"])
+        self.assertEqual(Moneda.local().codigo, "PYG")
+
+    def test_ignora_precios_y_no_crea_cotizacion(self):
+        respuesta = self._crear(codigo="PYG", nombre="Guaraní", esLocal=True, precioCompra=1, precioVenta=1)
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertFalse(Moneda.objects.get(codigo="PYG").cotizaciones.exists())
+
+    def test_solo_una_moneda_local(self):
+        self._crear(codigo="PYG", nombre="Guaraní", esLocal=True)
+        respuesta = self._crear(codigo="ARS", nombre="Peso", esLocal=True)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("solo puede haber una", respuesta.json()["error"])
+        with self.assertRaises(IntegrityError):
+            Moneda.objects.create(codigo="UYU", nombre="Peso uruguayo", simbolo="$", es_local=True)
+
+    def test_la_moneda_local_no_admite_cotizacion(self):
+        from django.core.exceptions import ValidationError
+
+        from cotizaciones.models import Cotizacion
+
+        guarani = Moneda.objects.create(codigo="PYG", nombre="Guaraní", simbolo="Gs", es_local=True)
+        with self.assertRaisesMessage(ValidationError, "moneda local"):
+            Cotizacion(moneda=guarani, precio_compra=1, precio_venta=2).clean()
+
+    def test_pasar_a_local_desactiva_la_cotizacion(self):
+        import json
+
+        from cotizaciones.models import Cotizacion
+
+        moneda = Moneda.objects.create(codigo="PYG", nombre="Guaraní", simbolo="Gs")
+        Cotizacion.objects.create(moneda=moneda, precio_compra=1, precio_venta=2, activa=True)
+        respuesta = self.client.patch(reverse("api_monedas_detalle", args=[moneda.pk]),
+                                      data=json.dumps({"esLocal": True}), content_type="application/json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(moneda.cotizaciones.filter(activa=True).exists())
+        self.assertIsNone(respuesta.json()["precioVenta"])
+
+
+class BorrarMonedaApiTest(TestCase):
+    """Eliminar monedas desde la maqueta."""
+
+    # Mismo analista logueado que MonedaLocalTest, sin repetir sus tests.
+    setUp = MonedaLocalTest.setUp
+
+    def test_moneda_sin_operaciones_se_elimina(self):
+        moneda = Moneda.objects.create(codigo="GS", nombre="Guarani", simbolo="Gs")
+        respuesta = self.client.delete(reverse("api_monedas_detalle", args=[moneda.pk]))
+        self.assertEqual(respuesta.status_code, 204)
+        self.assertFalse(Moneda.objects.filter(pk=moneda.pk).exists())
+
+    def test_moneda_con_operaciones_no_se_elimina(self):
+        from caja.models import AperturaCaja, CompraCaja
+        from clientes.models import Cliente
+
+        moneda = Moneda.objects.create(codigo="USD", nombre="Dólar", simbolo="$")
+        CompraCaja.objects.create(
+            apertura=AperturaCaja.objects.create(cajero_id="c1"), cajero_id="c1",
+            cliente=Cliente.objects.create(nombre="C", tipo=Cliente.Tipo.FISICA, direccion="x",
+                                           cuenta_acreditar="1", correo="c@example.com"),
+            moneda=moneda, monto_divisa=1, cotizacion_aplicada=1, monto_local_total=1,
+        )
+        respuesta = self.client.delete(reverse("api_monedas_detalle", args=[moneda.pk]))
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("desactivarla", respuesta.json()["error"])
+        self.assertTrue(Moneda.objects.filter(pk=moneda.pk).exists())
+
+    def test_el_204_no_lleva_cuerpo(self):
+        """Un 204 con cuerpo rompe la respuesta siguiente de la misma conexión
+        (keep-alive): la maqueta no podía recargar la lista después de borrar."""
+        moneda = Moneda.objects.create(codigo="ZZZ", nombre="Prueba", simbolo="z")
+        respuesta = self.client.delete(reverse("api_monedas_detalle", args=[moneda.pk]))
+        self.assertEqual(respuesta.status_code, 204)
+        self.assertEqual(respuesta.content, b"")

@@ -1,11 +1,15 @@
 """API JSON de métodos de pago con CRUD por usuario y control administrativo."""
 import json
-import secrets
 
-from django.http import JsonResponse
+from django.db import transaction
+from django.db.models import ProtectedError
+
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from cuentas.decorators import rol_requerido
+from pagos import servicio as stripe_servicio
+from pagos.servicio import PagoRechazado
 
 from .models import (
     BilleteraDigital,
@@ -14,6 +18,10 @@ from .models import (
     TipoMedioPago,
     TransferenciaBancaria,
 )
+
+# Las tarjetas se cargan solo con Stripe Elements (ver tarjetas_registrar):
+# el número y el CVV no pasan por este backend.
+TARJETAS = ("TARJETA_CREDITO", "TARJETA_DEBITO")
 
 TIPOS = {
     "TARJETA_CREDITO": ("Tarjeta de Crédito", TarjetaCredito),
@@ -42,14 +50,13 @@ def _bool_value(value):
 
 
 def _visibles_para(usuario):
-    if _administrador(usuario) or usuario.groups.filter(name="cajero").exists():
+    # El administrador ve también los inactivos para poder reactivarlos; el
+    # cajero solo los activos, que son los que puede usar en la caja.
+    if _administrador(usuario):
+        return MedioPago.objects.all()
+    if usuario.groups.filter(name="cajero").exists():
         return MedioPago.objects.filter(activo=True)
     return MedioPago.objects.filter(usuario=usuario, tipo__in=_tipos_activos())
-
-
-def _tokenizar(valor):
-    valor = str(valor or "").strip()
-    return f"tok_{secrets.token_urlsafe(18)}_{valor[-4:]}" if valor else ""
 
 
 def _upsert_child(model, medio, defaults):
@@ -65,17 +72,7 @@ def _upsert_child(model, medio, defaults):
 
 
 def _guardar_detalle(medio, datos):
-    if medio.tipo == "TARJETA_CREDITO":
-        _upsert_child(
-            TarjetaCredito, medio, {
-                "nombre_titular": datos.get("nombreTitular", ""),
-                "alias_tarjeta": datos.get("aliasTarjeta") or medio.alias,
-                "numero_tarjeta": _tokenizar(datos.get("numeroTarjeta")),
-                "fecha_vencimiento": datos.get("fechaVencimiento", ""),
-                "codigo_seguridad": _tokenizar(datos.get("codigoSeguridad")),
-            }
-        )
-    elif medio.tipo == "TRANSFERENCIA":
+    if medio.tipo == "TRANSFERENCIA":
         _upsert_child(TransferenciaBancaria, medio, {
                 "numero_cuenta_origen": datos.get("numeroCuentaOrigen", ""),
                 "banco_origen": datos.get("bancoOrigen", ""),
@@ -119,14 +116,23 @@ def _a_dict(medio):
             "identificadorCuenta": item.identificador_cuenta,
             "titular": item.titular,
         }
+    tarjeta = None
+    if medio.stripe_payment_method_id:
+        tarjeta = {
+            "marca": medio.banco_o_proveedor or "",
+            "ultimos4": medio.numero_cuenta_o_tarjeta,
+            "vencimiento": medio.tarjeta_vencimiento,
+        }
     return {
         "id": medio.id,
         "tipo": medio.tipo,
-        "tipoTexto": TIPOS.get(medio.tipo, ("Sin tipo", None))[0],
+        "tipoTexto": medio.get_tipo_display() or "Sin tipo",
         "alias": medio.alias,
         "activo": medio.activo,
         "usuario": medio.usuario.get_username(),
         "detalle": detalle,
+        # Tarjeta de Stripe: se puede cobrar con ella. None para los demás medios.
+        "tarjeta": tarjeta,
     }
 
 
@@ -153,6 +159,10 @@ def medios_lista(request):
     alias = (datos.get("alias") or "").strip()
     if tipo not in set(_tipos_activos()):
         return JsonResponse({"error": "Debe seleccionar un tipo válido y activo."}, status=400)
+    if tipo in TARJETAS:
+        return JsonResponse(
+            {"error": "Las tarjetas se cargan con el formulario seguro de Stripe."}, status=400
+        )
     if not alias:
         return JsonResponse({"error": "El nombre es obligatorio."}, status=400)
     medio = MedioPago.objects.create(
@@ -191,8 +201,17 @@ def medios_detalle(request, pk):
     if request.method == "GET":
         return JsonResponse(_a_dict(medio))
     if request.method == "DELETE":
-        medio.delete()
-        return JsonResponse({}, status=204)
+        if medio.stripe_payment_method_id:
+            stripe_servicio.desvincular_tarjeta(medio.stripe_payment_method_id)
+        try:
+            with transaction.atomic():
+                medio.delete()
+        except ProtectedError:
+            # Ya se usó en operaciones de caja: se conserva para el historial,
+            # desactivado (y si era tarjeta, ya no se puede cobrar con ella).
+            medio.activo = False
+            medio.save(update_fields=["activo"])
+        return HttpResponse(status=204)
 
     datos = _cuerpo(request)
     if "alias" in datos:
@@ -205,10 +224,53 @@ def medios_detalle(request, pk):
         medio.activo = _bool_value(datos["activo"])
     medio.save()
     if any(key in datos for key in (
-        "nombreTitular", "aliasTarjeta", "numeroTarjeta", "fechaVencimiento",
-        "codigoSeguridad", "numeroCuentaOrigen", "bancoOrigen", "titularOrigen",
+        "numeroCuentaOrigen", "bancoOrigen", "titularOrigen",
         "numeroCuentaDestino", "bancoDestino", "titularDestino", "plataforma",
         "identificadorCuenta", "titular",
     )):
         _guardar_detalle(medio, datos)
     return JsonResponse(_a_dict(medio))
+
+
+@require_http_methods(["POST"])
+@rol_requerido("cliente", "administrador")
+def tarjetas_preparar(request):
+    """Primer paso para cargar una tarjeta: el ``client_secret`` de un
+    SetupIntent, con el que Stripe Elements guarda la tarjeta en Stripe."""
+    try:
+        return JsonResponse({"clientSecret": stripe_servicio.preparar_tarjeta(request.user)})
+    except PagoRechazado as error:
+        return JsonResponse({"error": str(error)}, status=400)
+
+
+@require_http_methods(["POST"])
+@rol_requerido("cliente", "administrador")
+def tarjetas_registrar(request):
+    """Segundo paso: registra como medio de pago la tarjeta que Stripe guardó.
+
+    Espera ``{"setupIntentId", "tipo": "TARJETA_CREDITO"|"TARJETA_DEBITO",
+    "alias"}``. Los datos de la tarjeta (marca, últimos 4, vencimiento) se
+    leen de Stripe, no del navegador.
+    """
+    datos = _cuerpo(request)
+    tipo = datos.get("tipo")
+    alias = (datos.get("alias") or "").strip()
+    if tipo not in TARJETAS or tipo not in set(_tipos_activos()):
+        return JsonResponse({"error": "Debe seleccionar un tipo de tarjeta válido y activo."}, status=400)
+    if not alias:
+        return JsonResponse({"error": "El nombre es obligatorio."}, status=400)
+    try:
+        tarjeta = stripe_servicio.tarjeta_registrada(request.user, datos.get("setupIntentId") or "")
+    except PagoRechazado as error:
+        return JsonResponse({"error": str(error)}, status=400)
+    medio = MedioPago.objects.create(
+        usuario=request.user,
+        tipo=tipo,
+        alias=alias,
+        activo=True,
+        stripe_payment_method_id=tarjeta["payment_method_id"],
+        banco_o_proveedor=tarjeta["marca"],
+        numero_cuenta_o_tarjeta=tarjeta["ultimos4"],
+        tarjeta_vencimiento=tarjeta["vencimiento"],
+    )
+    return JsonResponse(_a_dict(medio), status=201)

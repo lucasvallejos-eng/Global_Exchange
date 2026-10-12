@@ -5,12 +5,21 @@ import {
   registrarCompraCaja,
   registrarVentaCaja,
   type CajaMoneda,
+  type OperacionCajaEntrada,
 } from "../lib/cajaApi";
 import { listarMediosPago, type TipoMedioPago } from "../lib/mediosPagoApi";
+import { completarVerificacion, tarjetasDelCliente, type TarjetaCliente } from "../lib/pagosApi";
 import { useTasas } from "../lib/useTasas";
 import type { Client } from "../types";
 
 type Props = { tipo: "compra" | "venta" };
+
+// El medio de cobro elegido: "efectivo", "tipo:<clave>" (venta sin tarjeta,
+// queda registrado como texto) o "tarjeta:<id>" (se cobra con Stripe).
+const EFECTIVO = "efectivo";
+// En la venta, el efectivo se manda como tipo de pago: el backend lo usa para
+// sumar los guaraníes al cajón en el arqueo.
+const EFECTIVO_VENTA = "EFECTIVO";
 
 const formatNumber = (value: number) =>
   new Intl.NumberFormat("es-PY", { maximumFractionDigits: 0 }).format(value);
@@ -24,6 +33,8 @@ export default function OperacionCajaForm({ tipo }: Props) {
   const [monto, setMonto] = useState("");
   const [tipoPago, setTipoPago] = useState("");
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const [tarjetas, setTarjetas] = useState<TarjetaCliente[]>([]);
+  const [enviando, setEnviando] = useState(false);
   const [preferencial, setPreferencial] = useState<TasaPreferencial | null>(null);
   const { tasas, codigos, cargando } = useTasas();
 
@@ -34,7 +45,7 @@ export default function OperacionCajaForm({ tipo }: Props) {
         .then(({ tipos: disponibles }) => setTipos(disponibles.filter((t) => t.activo)))
         .catch(() => setTipos([]));
       listarDenominacionesPorMoneda()
-        .then(setMonedasCaja)
+        .then((monedas) => setMonedasCaja(monedas.filter((m) => !m.esLocal)))
         .catch(() => setMonedasCaja([]));
     }
   }, [tipo]);
@@ -42,10 +53,20 @@ export default function OperacionCajaForm({ tipo }: Props) {
   useEffect(() => {
     if (!clienteId) {
       setPreferencial(null);
+      setTarjetas([]);
       return;
     }
     getClientPreferredRate(Number(clienteId)).then(setPreferencial).catch(() => setPreferencial(null));
+    // Tarjetas que los usuarios del cliente cargaron en Stripe.
+    tarjetasDelCliente(clienteId).then(setTarjetas).catch(() => setTarjetas([]));
   }, [clienteId]);
+
+  // Si se cambia de cliente, una tarjeta del cliente anterior ya no vale.
+  useEffect(() => {
+    if (tipoPago.startsWith("tarjeta:") && !tarjetas.some((t) => `tarjeta:${t.id}` === tipoPago)) {
+      setTipoPago(tipo === "compra" ? EFECTIVO : "");
+    }
+  }, [tarjetas, tipoPago, tipo]);
 
   useEffect(() => {
     if (tipo === "venta" && monedasCaja.length > 0) {
@@ -61,7 +82,8 @@ export default function OperacionCajaForm({ tipo }: Props) {
       if (!moneda && codigos.length) setMoneda(codigos[0]);
     }
     if (!clienteId && clientes.length) setClienteId(String(clientes[0].id));
-    if (tipo === "venta" && !tipoPago && tipos.length) setTipoPago(tipos[0].valor);
+    if (tipo === "compra" && !tipoPago) setTipoPago(EFECTIVO);
+    if (tipo === "venta" && !tipoPago) setTipoPago(`tipo:${EFECTIVO_VENTA}`);
   }, [clienteId, clientes, codigos, tipoPago, tipos, moneda, tipo, monedasCaja]);
 
   const tasaBase = tasas[moneda]?.[tipo === "compra" ? "compra" : "venta"] ?? 0;
@@ -75,22 +97,43 @@ export default function OperacionCajaForm({ tipo }: Props) {
     monedasCaja.length > 0 &&
     (!monedaSeleccionada || !monedaSeleccionada.tieneDenominaciones);
 
+  const tarjetaElegida = tarjetas.find((t) => `tarjeta:${t.id}` === tipoPago);
+  // Con tarjeta: en la venta se cobra el total en guaraníes; en la compra, la
+  // divisa que entrega el cliente (no entra al cajón, no cuenta en el arqueo).
+  const montoACobrar = tipo === "venta" ? `${formatNumber(total)} PYG` : `${monto || 0} ${moneda}`;
+
+  const registrar = (datos: OperacionCajaEntrada) =>
+    tipo === "compra" ? registrarCompraCaja(datos) : registrarVentaCaja(datos);
+
   const enviar = async () => {
+    setEnviando(true);
     try {
       if (!clienteId || !moneda || !(Number(monto) > 0)) throw new Error("Complete cliente, moneda y monto.");
-      if (tipo === "compra") {
-        await registrarCompraCaja({ cliente_id: clienteId, moneda, monto_divisa: Number(monto) });
-      } else {
-        if (sinDenominaciones) {
-          throw new Error("La moneda seleccionada no posee denominaciones registradas.");
-        }
-        if (!tipoPago) throw new Error("Seleccione un medio de pago.");
-        await registrarVentaCaja({ cliente_id: clienteId, moneda, monto_divisa: Number(monto), tipo_pago: tipoPago });
+      if (tipo === "venta" && sinDenominaciones) {
+        throw new Error("La moneda seleccionada no posee denominaciones registradas.");
       }
-      setMensaje("Operación registrada correctamente.");
+      if (!tipoPago) throw new Error("Seleccione un medio de pago.");
+      const datos: OperacionCajaEntrada = { cliente_id: clienteId, moneda, monto_divisa: Number(monto) };
+      if (tarjetaElegida) datos.medio_pago_id = tarjetaElegida.id;
+      else if (tipoPago.startsWith("tipo:")) datos.tipo_pago = tipoPago.slice("tipo:".length);
+
+      let respuesta = await registrar(datos);
+      if (respuesta.pagoPendiente) {
+        // El banco pidió 3D Secure: el cliente lo completa y se reenvía la
+        // operación con el pago ya verificado.
+        await completarVerificacion(respuesta.pagoPendiente.clientSecret);
+        respuesta = await registrar({ ...datos, payment_intent_id: respuesta.pagoPendiente.paymentIntentId });
+      }
+      setMensaje(
+        respuesta.pagoConTarjeta
+          ? `Operación registrada: se cobraron ${montoACobrar} a la tarjeta.`
+          : "Operación registrada correctamente.",
+      );
       setMonto("");
     } catch (error) {
       setMensaje(error instanceof Error ? error.message : "No se pudo registrar la operación.");
+    } finally {
+      setEnviando(false);
     }
   };
 
@@ -131,17 +174,31 @@ export default function OperacionCajaForm({ tipo }: Props) {
           <span className="mb-2 block text-sm font-medium">Monto a {tipo === "compra" ? "comprar" : "vender"}</span>
           <input type="number" min="0" step="0.01" value={monto} onChange={(event) => setMonto(event.target.value)} className="w-full rounded-xl border bg-[#f8fafc] px-3 py-2.5" />
         </label>
-        {tipo === "venta" && (
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium">Medio de pago</span>
-            <select value={tipoPago} onChange={(event) => setTipoPago(event.target.value)} className="w-full rounded-xl border bg-[#f8fafc] px-3 py-2.5">
-              <option value="">Seleccione un medio</option>
-              {tipos.map((t) => (
-                <option key={t.valor} value={t.valor}>{t.texto}</option>
-              ))}
-            </select>
-          </label>
-        )}
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium">Medio de pago</span>
+          <select value={tipoPago} onChange={(event) => setTipoPago(event.target.value)} className="w-full rounded-xl border bg-[#f8fafc] px-3 py-2.5">
+            {tipo === "compra" ? (
+              <option value={EFECTIVO}>Efectivo</option>
+            ) : (
+              <>
+                <option value={`tipo:${EFECTIVO_VENTA}`}>Efectivo</option>
+                {tipos.map((t) => (
+                  <option key={t.valor} value={`tipo:${t.valor}`}>{t.texto}</option>
+                ))}
+              </>
+            )}
+            {tarjetas.length > 0 && (
+              <optgroup label="Cobrar con tarjeta del cliente (Stripe)">
+                {tarjetas.map((t) => (
+                  <option key={t.id} value={`tarjeta:${t.id}`}>{t.nombre} · {t.titular}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          {tarjetaElegida && (
+            <span className="mt-2 block text-xs text-[#1a7eff]">Se cobrarán {montoACobrar} a la tarjeta al registrar.</span>
+          )}
+        </label>
       </div>
       <div className="mt-5 rounded-2xl border border-[#dbe3ee] bg-[#f0f7ff] p-4">
         <p className="text-sm text-[#64748b]">Categoría: {preferencial?.categoria ?? "Sin categoría"} · Preferencial: {porcentaje.toFixed(2)}%</p>
@@ -151,11 +208,11 @@ export default function OperacionCajaForm({ tipo }: Props) {
         <p className="mt-1 text-2xl font-bold text-[#1a7eff]">{formatNumber(total)} PYG</p>
       </div>
       <button
-        onClick={enviar}
-        disabled={sinDenominaciones}
+        onClick={() => void enviar()}
+        disabled={sinDenominaciones || enviando}
         className="mt-5 rounded-xl bg-[#1a7eff] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Registrar {tipo}
+        {enviando ? "Procesando..." : `Registrar ${tipo}`}
       </button>
       {mensaje && <p className="mt-4 rounded-xl bg-[#f8fafc] px-3 py-2 text-sm text-[#475569]">{mensaje}</p>}
     </div>

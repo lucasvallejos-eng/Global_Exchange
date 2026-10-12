@@ -43,6 +43,10 @@ class Cotizacion(models.Model):
         Raises:
             ValidationError: Si el precio de venta es menor o igual al precio de compra.
         """
+        if self.moneda_id and self.moneda.es_local:
+            raise ValidationError(
+                f"{self.moneda.codigo} es la moneda local: no tiene cotización (vale 1 a 1)."
+            )
         if self.precio_venta <= self.precio_compra:
             raise ValidationError("El precio de venta debe ser mayor al precio de compra.")
 
