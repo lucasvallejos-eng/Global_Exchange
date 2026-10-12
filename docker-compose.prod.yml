@@ -50,6 +50,8 @@ services:
       - "${PUERTO_KEYCLOAK:-8080}:8080"
     volumes:
       - ./keycloak/realm-export:/opt/keycloak/data/import:ro
+      # Tema propio del inicio de sesión (ver keycloak/themes/global-exchange).
+      - ./keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       keycloak-db:
         condition: service_healthy
