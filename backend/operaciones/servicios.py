@@ -31,7 +31,9 @@ verificación y se llama a ``verificar_pago``. Si la tarjeta se rechaza, no se
 registra nada (la operación se deshace) y el cliente puede elegir otra.
 Con los demás medios de pago no se cobra nada: se registra como antes.
 """
+import inspect
 from decimal import ROUND_HALF_UP, Decimal
+from functools import wraps
 
 from django.db import transaction as transaccion_bd
 from django.utils import timezone
@@ -40,6 +42,7 @@ from clientes.models import Cliente
 from cotizaciones.models import Cotizacion
 from medios_pago.models import MedioPago
 from pagos import servicio as stripe_servicio
+from notificaciones import servicio as avisos
 from pagos.servicio import PagoRechazado
 
 from .models import Transaccion
@@ -55,6 +58,60 @@ VEN_TODAS = ("administrador", "analista_cambiario", "cajero")
 
 class OperacionInvalida(Exception):
     """La operación no se puede hacer. El mensaje se le muestra al usuario."""
+
+
+class PagoFallido(OperacionInvalida):
+    """El cobro con tarjeta no se pudo hacer (rechazo o 3D Secure no aprobado).
+
+    A diferencia de un error de validación, es una compra o venta fallida: se
+    le notifica al usuario (ver ``_con_avisos``). Lleva la operación para
+    armar el aviso, aunque al confirmar se deshaga y no quede registrada.
+    """
+
+    def __init__(self, mensaje, transaccion):
+        super().__init__(mensaje)
+        self.transaccion = transaccion
+
+
+def _con_avisos(funcion):
+    """Notifica cómo terminó la operación (campanita de la web).
+
+    - Quedó ``PAGADA``: compra o venta exitosa, con el medio y el valor.
+    - Quedó ``CANCELADA`` (cambió la cotización o la canceló el usuario):
+      fallida, con el motivo.
+    - ``PagoFallido``: fallida con el motivo de Stripe. Se avisa acá, afuera
+      del ``atomic()`` de la función, porque el rollback borraría el aviso.
+    - ``PENDIENTE`` (esperando el 3D Secure): todavía no hay nada que avisar.
+
+    Los errores de validación (monto, cliente ajeno...) no se notifican: son
+    errores del formulario, no operaciones fallidas.
+    """
+    firma = inspect.signature(funcion)
+
+    @wraps(funcion)
+    def envoltura(*args, **kwargs):
+        usuario = firma.bind(*args, **kwargs).arguments["usuario"]
+        try:
+            transaccion = funcion(*args, **kwargs)
+        except PagoFallido as error:
+            t = error.transaccion
+            # Al confirmar, la operación se deshizo: el aviso va sin número.
+            registrada = Transaccion.objects.filter(pk=t.pk).exists() if t.pk else False
+            avisos.operacion_web_fallida(
+                usuario, t.tipo, t.moneda.codigo, t.monto_divisa, str(error),
+                t.pk if registrada else None,
+            )
+            raise
+        if transaccion.estado == Transaccion.Estado.PAGADA:
+            avisos.operacion_web_exitosa(transaccion, usuario)
+        elif transaccion.estado == Transaccion.Estado.CANCELADA:
+            avisos.operacion_web_fallida(
+                usuario, transaccion.tipo, transaccion.moneda.codigo, transaccion.monto_divisa,
+                transaccion.motivo_cancelacion, transaccion.pk,
+            )
+        return transaccion
+
+    return envoltura
 
 
 def cotizacion_vigente(moneda):
@@ -220,6 +277,7 @@ def cotizar(usuario, cliente, tipo, moneda, monto_divisa, medio_pago=None):
     return calcular(tipo, monto_divisa, cotizacion, cliente.segmento)
 
 
+@_con_avisos
 def confirmar_operacion(usuario, cliente, tipo, moneda, monto_divisa, tasa_base_vista,
                         medio_pago=None):
     """Registra la operación que el cliente confirmó, ya pagada.
@@ -325,6 +383,7 @@ def filtrar_historial(operaciones, estado=None, tipo=None, moneda=None,
     return operaciones
 
 
+@_con_avisos
 def pagar(transaccion, usuario):
     """Intenta pagar una operación pendiente.
 
@@ -450,7 +509,7 @@ def _cobrar_con_tarjeta(transaccion):
             metadata={"transaccion_id": transaccion.pk, "cliente_id": transaccion.cliente_id},
         )
     except PagoRechazado as error:
-        raise OperacionInvalida(str(error)) from error
+        raise PagoFallido(str(error), transaccion) from error
     transaccion.stripe_payment_intent_id = cobro.id
     if cobro.estado == "aprobado":
         transaccion.estado = Transaccion.Estado.PAGADA
@@ -461,6 +520,7 @@ def _cobrar_con_tarjeta(transaccion):
     return transaccion
 
 
+@_con_avisos
 def verificar_pago(transaccion, usuario):
     """Completa el pago de una operación que esperaba la verificación 3D Secure.
 
@@ -481,13 +541,14 @@ def verificar_pago(transaccion, usuario):
         try:
             stripe_servicio.verificar_cobro(transaccion.stripe_payment_intent_id, monto, codigo)
         except PagoRechazado as error:
-            raise OperacionInvalida(str(error)) from error
+            raise PagoFallido(str(error), transaccion) from error
         transaccion.estado = Transaccion.Estado.PAGADA
         transaccion.fecha_pago = timezone.now()
         transaccion.save()
     return transaccion
 
 
+@_con_avisos
 def cancelar(transaccion, usuario):
     """El cliente cancela por su cuenta una operación que todavía no pagó.
 

@@ -17,6 +17,8 @@ import DenominacionesModule from "./DenominacionesModule";
 import MonedasHistorialModule from "./MonedasHistorialModule";
 import HistorialTransaccionesModule from "./HistorialTransaccionesModule";
 import HistorialCajaModule from "./HistorialCajaModule";
+import NotificacionesCampana from "./NotificacionesCampana";
+import PreferenciasNotificacionesModule from "./PreferenciasNotificacionesModule";
 import ConfiguracionDatosModule from "./ConfiguracionDatosModule";
 import { CLIENT_TYPE_OPTIONS, ClientType } from "../lib/clientRates";
 import { obtenerEstadoDiario, type EstadoCaja, type EstadoDiario } from "../lib/cajaApi";
@@ -48,6 +50,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { id: "monedas-historial", label: "Historial de Monedas", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
     { id: "historial", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
     { id: "configuracion", label: "Configuración de Datos", icon: <Icon path="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /> },
+    { id: "preferencias-notificaciones", label: "Notificaciones", icon: <Icon path="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /> },
   ],
   cajero: [
     { id: "apertura-caja", label: "Apertura de Caja", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6" /> },
@@ -55,12 +58,14 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { id: "venta-divisas", label: "Venta de Divisas", icon: <Icon path="M7 12l5-5 5 5M7 17l5-5 5 5" /> },
     { id: "cierre-caja", label: "Cierre de Caja", icon: <Icon path="M6 2h12v20H6zM9 6h6M9 10h6M9 14h6" /> },
     { id: "historial-caja", label: "Historial de Caja", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+    { id: "preferencias-notificaciones", label: "Notificaciones", icon: <Icon path="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /> },
   ],
   analista_cambiario: [
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
     { id: "denominaciones", label: "Denominaciones", icon: <Icon path="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 12h.01 M18 12h.01" /> },
     { id: "historial-transacciones", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
     { id: "historial-caja", label: "Historial de Caja", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+    { id: "preferencias-notificaciones", label: "Notificaciones", icon: <Icon path="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /> },
   ],
   administrador: [
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
@@ -69,6 +74,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { id: "medios-pago", label: "Medios de Pago", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6" /> },
     { id: "clientes", label: "Clientes", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /> },
     { id: "historial-caja", label: "Historial de Caja", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+    { id: "preferencias-notificaciones", label: "Notificaciones", icon: <Icon path="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /> },
   ],
 };
 
@@ -86,6 +92,7 @@ const PLACEHOLDER_TEXT: Record<string, string> = {
   "historial-transacciones": "APARTADO DE HISTORIAL DE TRANSACCIONES",
   "monedas-historial": "APARTADO DE HISTORIAL DE MONEDAS",
   "historial-caja": "APARTADO DE HISTORIAL DE CAJA",
+  "preferencias-notificaciones": "APARTADO DE PREFERENCIAS DE NOTIFICACIONES",
 };
 
 export default function DashboardLayout({ user, onLogout }: Props) {
@@ -162,6 +169,10 @@ export default function DashboardLayout({ user, onLogout }: Props) {
 
     if (activeSection === "historial-caja") {
       return <HistorialCajaModule />;
+    }
+
+    if (activeSection === "preferencias-notificaciones") {
+      return <PreferenciasNotificacionesModule />;
     }
 
     if (activeSection === "apertura-caja") {
@@ -371,11 +382,8 @@ export default function DashboardLayout({ user, onLogout }: Props) {
               </div>
             )}
 
-            {/* Notification bell */}
-            <button className="relative p-2 rounded-lg hover:bg-[#f0f4f8] transition-colors text-[#6b7280]">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#1a7eff] rounded-full" />
-            </button>
+            {/* Campanita: compras/ventas exitosas o fallidas y cambios de cotización */}
+            <NotificacionesCampana onConfigurar={() => setActiveSection("preferencias-notificaciones")} />
 
             {/* Cliente activo */}
             {showClientContext && (

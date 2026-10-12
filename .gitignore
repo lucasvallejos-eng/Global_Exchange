@@ -6,6 +6,7 @@ build/
 .env*
 !.env.example
 !.env.prod.example
+!.env.stripe.example
 .venv/
 **/.venv/
 __pycache__/

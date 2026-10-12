@@ -121,8 +121,16 @@ export default function OperacionCajaForm({ tipo }: Props) {
       if (respuesta.pagoPendiente) {
         // El banco pidió 3D Secure: el cliente lo completa y se reenvía la
         // operación con el pago ya verificado.
-        await completarVerificacion(respuesta.pagoPendiente.clientSecret);
-        respuesta = await registrar({ ...datos, payment_intent_id: respuesta.pagoPendiente.paymentIntentId });
+        const conPago = { ...datos, payment_intent_id: respuesta.pagoPendiente.paymentIntentId };
+        try {
+          await completarVerificacion(respuesta.pagoPendiente.clientSecret);
+        } catch (error) {
+          // Si la verificación falló, se reenvía igual: el backend lo confirma
+          // con Stripe, no registra la operación y deja la notificación.
+          await registrar(conPago).catch(() => undefined);
+          throw error;
+        }
+        respuesta = await registrar(conPago);
       }
       setMensaje(
         respuesta.pagoConTarjeta

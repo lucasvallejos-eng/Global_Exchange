@@ -10,7 +10,9 @@ Sphinx (sección "Pagos con tarjeta").
 Las claves salen del dashboard de Stripe, con *Test mode* encendido:
 **Developers → API keys** (`pk_test_...` y `sk_test_...`).
 
-**Desarrollo.** Van en `backend/.env.stripe`, un archivo aparte del `.env`:
+**Desarrollo.** Van en `backend/.env.stripe`, un archivo aparte del `.env`.
+Se crea copiando `backend/.env.stripe.example`, que explica paso a paso cómo
+crear la cuenta de Stripe (gratis, modo test) y dónde encontrar las claves:
 
 ```
 STRIPE_PUBLISHABLE_KEY=pk_test_...

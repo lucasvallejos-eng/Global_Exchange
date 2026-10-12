@@ -2,7 +2,7 @@
 from django.core.exceptions import ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 from cuentas.decorators import rol_requerido
-from .models import Cotizacion
+from .models import Cotizacion, HistorialCotizacion
 from monedas.models import Moneda
 
 
@@ -95,10 +95,31 @@ def crear_cotizacion(request):
         except ValidationError as e:
             return render(request, 'cotizaciones/formulario.html',
                           _contexto_formulario(request, errores=e.messages))
+        vigente = moneda.cotizaciones.filter(activa=True).order_by("-fecha").first()
         cotizacion.save()
+        if vigente:
+            _registrar_cambio(request, moneda, vigente.precio_compra, vigente.precio_venta, cotizacion)
         return redirect('listar_cotizaciones')
 
     return render(request, 'cotizaciones/formulario.html', _contexto_formulario(request))
+
+def _registrar_cambio(request, moneda, compra_anterior, venta_anterior, cotizacion):
+    """Deja el cambio de precio en la auditoría, igual que la API y el admin.
+
+    Estas pantallas no lo hacían, así que sus cambios no quedaban auditados ni
+    se notificaban (la notificación sale de ``HistorialCotizacion``).
+    """
+    if compra_anterior == cotizacion.precio_compra and venta_anterior == cotizacion.precio_venta:
+        return
+    HistorialCotizacion.objects.create(
+        moneda=moneda,
+        administrador=request.user,
+        precio_compra_anterior=compra_anterior,
+        precio_compra_nuevo=cotizacion.precio_compra,
+        precio_venta_anterior=venta_anterior,
+        precio_venta_nuevo=cotizacion.precio_venta,
+    )
+
 
 #UPDATE
 @rol_requerido(*GESTIONAN_TASAS)
@@ -124,6 +145,7 @@ def editar_cotizacion(request, pk):
         # get_object_or_404 en vez de asignar el id crudo: full_clean() no
         # comprueba que la moneda exista (eso lo hace recién la base de datos),
         # así que un id inventado terminaría en un error 500 al guardar.
+        compra_anterior, venta_anterior = cotizacion.precio_compra, cotizacion.precio_venta
         cotizacion.moneda = get_object_or_404(Moneda, id=request.POST.get('moneda'))
         cotizacion.precio_compra = request.POST.get('precio_compra')
         cotizacion.precio_venta = request.POST.get('precio_venta')
@@ -135,6 +157,7 @@ def editar_cotizacion(request, pk):
             return render(request, 'cotizaciones/formulario.html',
                           _contexto_formulario(request, cotizacion=cotizacion, errores=e.messages))
         cotizacion.save()
+        _registrar_cambio(request, cotizacion.moneda, compra_anterior, venta_anterior, cotizacion)
         return redirect('listar_cotizaciones')
 
     return render(request, 'cotizaciones/formulario.html',

@@ -192,6 +192,33 @@ vencimiento. Ver ``docs/integracion-stripe.md``.
    :members:
 
 
+Notificaciones
+--------------
+
+La campanita de la web avisa las compras y ventas exitosas (con el medio de
+pago y el valor), las fallidas (tarjeta rechazada, 3D Secure no aprobado,
+cotización que cambió antes del pago o cancelada por el usuario) y los
+cambios de cotización (a todos los usuarios menos a quien la cambió). En la
+caja se avisa al cajero y, si se cobró con tarjeta, al dueño de la tarjeta.
+La maqueta consulta ``/api/notificaciones/`` cada 15 segundos y después de
+cada operación.
+
+Cada usuario elige qué recibir (``PreferenciaNotificaciones``): compras,
+ventas y cambios de cotización, combinados como quiera, y en las cotizaciones
+solo algunas divisas si lo prefiere. Sin preferencias guardadas recibe todo.
+
+.. automodule:: notificaciones.models
+   :members:
+
+.. automodule:: notificaciones.servicio
+   :members:
+
+.. automodule:: notificaciones.senales
+   :members:
+
+.. automodule:: notificaciones.api
+   :members:
+
 Índices
 -------
 
