@@ -20,6 +20,8 @@ import HistorialCajaModule from "./HistorialCajaModule";
 import NotificacionesCampana from "./NotificacionesCampana";
 import PreferenciasNotificacionesModule from "./PreferenciasNotificacionesModule";
 import ConfiguracionDatosModule from "./ConfiguracionDatosModule";
+import ReportesModule from "./ReportesModule";
+import TableroGananciasModule from "./TableroGananciasModule";
 import { CLIENT_TYPE_OPTIONS, ClientType } from "../lib/clientRates";
 import { obtenerEstadoDiario, type EstadoCaja, type EstadoDiario } from "../lib/cajaApi";
 
@@ -64,6 +66,10 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { id: "monedas", label: "Monedas", icon: <Icon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
     { id: "denominaciones", label: "Denominaciones", icon: <Icon path="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 12h.01 M18 12h.01" /> },
     { id: "historial-transacciones", label: "Historial de Transacciones", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+    { id: "tablero-ganancias", label: "Tablero de Ganancias", icon: <Icon path="M4 20V10M10 20V4M16 20v-7M22 20H2" /> },
+    { id: "facturas", label: "Facturas", icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /> },
+    { id: "reportes", label: "Reportes", icon: <Icon path="M3 5h18v14H3zM3 10h18M9 5v14" /> },
+    { id: "monedas-historial", label: "Evolución de Tasas", icon: <Icon path="M3 3v18h18M7 15l4-4 3 3 5-6" /> },
     { id: "historial-caja", label: "Historial de Caja", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
     { id: "preferencias-notificaciones", label: "Notificaciones", icon: <Icon path="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /> },
   ],
@@ -73,6 +79,10 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { id: "porcentajes", label: "Porcentajes", icon: <Icon path="M12 1v22M1 12h22" /> },
     { id: "medios-pago", label: "Medios de Pago", icon: <Icon path="M4 7h16v10H4zM7 10h10M7 14h6" /> },
     { id: "clientes", label: "Clientes", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /> },
+    { id: "tablero-ganancias", label: "Tablero de Ganancias", icon: <Icon path="M4 20V10M10 20V4M16 20v-7M22 20H2" /> },
+    { id: "facturas", label: "Facturas", icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /> },
+    { id: "reportes", label: "Reportes", icon: <Icon path="M3 5h18v14H3zM3 10h18M9 5v14" /> },
+    { id: "monedas-historial", label: "Evolución de Tasas", icon: <Icon path="M3 3v18h18M7 15l4-4 3 3 5-6" /> },
     { id: "historial-caja", label: "Historial de Caja", icon: <Icon path="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
     { id: "preferencias-notificaciones", label: "Notificaciones", icon: <Icon path="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /> },
   ],
@@ -169,6 +179,14 @@ export default function DashboardLayout({ user, onLogout }: Props) {
 
     if (activeSection === "historial-caja") {
       return <HistorialCajaModule />;
+    }
+
+    if (activeSection === "tablero-ganancias") {
+      return <TableroGananciasModule />;
+    }
+
+    if (activeSection === "reportes") {
+      return <ReportesModule />;
     }
 
     if (activeSection === "preferencias-notificaciones") {

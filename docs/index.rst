@@ -220,6 +220,21 @@ nada**: las facturas quedan simuladas hasta que se prende
    :members:
 
 
+Reportes y tablero de ganancias
+-------------------------------
+
+Reportes de las operaciones pagadas y de lo que gana la casa con cada una (la
+comisión más el margen de cambio sobre el precio medio de la cotización). Solo
+los ven el administrador y el analista cambiario. El reporte de transacciones
+se puede exportar a CSV.
+
+.. automodule:: reportes.servicio
+   :members:
+
+.. automodule:: reportes.api
+   :members:
+
+
 Notificaciones
 --------------
 
