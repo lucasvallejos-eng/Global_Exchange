@@ -115,6 +115,17 @@ un "no" (por ejemplo, "el documento ya existe": la primera vez sí se había
 emitido), ni se vuelve simulada si se apaga la emisión. Su número puede estar
 gastado y otra factura no lo puede tomar.
 
+**Qué hacer con una factura sin confirmar.** La especificación pide verificar
+el resultado antes de reenviar, y el CDC recién lo devuelve Factura Segura al
+emitir, así que desde el sistema no se puede consultar. Los pasos son:
+
+1. Entrar al portal de Factura Segura (https://test.facturasegura.com.py) y
+   buscar el documento por su número.
+2. Si **existe**: copiar su CDC y cargarlo en la factura desde el `/admin/` de
+   Django, con un superusuario (campo `cdc`, estado "Enviada"). Después,
+   "Consultar estado en el SIFEN" la actualiza.
+3. Si **no existe**: "Reintentar" la vuelve a mandar con el mismo número.
+
 Con la emisión prendida, **solo el administrador** puede pedir que se emita o
 se reintente una factura, porque gasta un número del rango. Con la emisión
 apagada puede cualquiera que vea la factura: no se gasta nada.
