@@ -38,6 +38,7 @@ PATRON_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 # queda creada con POSTGRES_PASSWORD y no aceptaría otra.
 CLAVES = ("DJANGO_SECRET_KEY", "KC_BOOTSTRAP_ADMIN_PASSWORD", "POSTGRES_PASSWORD",
           "KEYCLOAK_WEB_CLIENT_SECRET")
+STRIPE = ("STRIPE_PUBLISHABLE_KEY", "STRIPE_SECRET_KEY")
 
 for flujo in (sys.stdout, sys.stderr):
     try:
@@ -60,9 +61,9 @@ def compose(*args, capturar=False):
     return (r.stdout + r.stderr) if capturar else None
 
 
-def leer_env():
+def leer_env(ruta=None):
     valores = {}
-    for linea in ENV.read_text(encoding="utf-8").splitlines():
+    for linea in (ruta or ENV).read_text(encoding="utf-8").splitlines():
         linea = linea.strip()
         if linea and not linea.startswith("#") and "=" in linea:
             clave, valor = linea.split("=", 1)
@@ -88,6 +89,19 @@ def asegurar_env():
     ENV.write_text(EJEMPLO.read_text(encoding="utf-8"), encoding="utf-8")
     escribir_env({clave: secrets.token_urlsafe(32) for clave in CLAVES})
     log(f"Creado {ENV.name} con claves nuevas (está en .gitignore, no se sube).")
+
+
+def copiar_claves_stripe():
+    """Si .env.prod no tiene las claves de Stripe, las toma de
+    backend/.env.stripe (el de desarrollo). Sin ellas no se paga con tarjeta."""
+    origen = RAIZ / "backend" / ".env.stripe"
+    faltan = [c for c in STRIPE if not leer_env().get(c)]
+    if not faltan or not origen.exists():
+        return
+    cambios = {c: v for c, v in leer_env(origen).items() if c in faltan and v}
+    if cambios:
+        escribir_env(cambios)
+        log("Claves de Stripe copiadas de backend/.env.stripe.")
 
 
 def direccion_tunel(servicio, espera=90):
@@ -165,6 +179,7 @@ def main():
         "DJANGO_ALLOWED_HOSTS": ".trycloudflare.com",
         "DJANGO_HTTPS": "1",
     })
+    copiar_claves_stripe()
 
     log("Levantando el sistema (la primera vez tarda unos minutos)...")
     compose("up", "-d", "--build")
