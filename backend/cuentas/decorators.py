@@ -20,7 +20,7 @@ from functools import wraps
 from django.core.exceptions import PermissionDenied
 
 
-def rol_requerido(*roles_permitidos):
+def rol_requerido(*roles_permitidos, exigir_token=False):
     """Decorador para restringir el acceso a vistas según los roles del usuario.
 
     Verifica que el usuario esté autenticado y posea al menos uno de los roles
@@ -42,9 +42,11 @@ def rol_requerido(*roles_permitidos):
         def envoltura(request, *args, **kwargs):
             if not request.user.is_authenticated:
                 raise PermissionDenied
-            roles_usuario = set(
-                request.user.groups.values_list("name", flat=True)
-            )
+            claims = request.session.get("keycloak_claims", {})
+            roles_token = claims.get("realm_access", {}).get("roles", [])
+            if exigir_token and not roles_token:
+                raise PermissionDenied
+            roles_usuario = set(roles_token or request.user.groups.values_list("name", flat=True))
             if roles_usuario.intersection(roles_permitidos):
                 return vista(request, *args, **kwargs)
             raise PermissionDenied

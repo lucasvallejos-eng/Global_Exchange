@@ -25,6 +25,8 @@ export interface UsuarioAsociable {
   username: string;
   nombre: string;
   email: string;
+  roles?: string[];
+  role?: Role | string;
 }
 
 export interface Client {
@@ -40,6 +42,8 @@ export interface Client {
   usuarios: number[];
   // Lo calcula el backend a partir del segmento; solo se muestra.
   porcentajeComision?: string | null;
+  categoria?: string | null;
+  porcentajePreferencial?: string | null;
 }
 
 export const DEMO_USERS: Record<string, User> = {

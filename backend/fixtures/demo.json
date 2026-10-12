@@ -95,5 +95,115 @@
       "usuarios": [],
       "created_at": "2026-09-04T09:00:00Z"
     }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 1,
+    "fields": {
+      "moneda": 1,
+      "valor": "1.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 2,
+    "fields": {
+      "moneda": 1,
+      "valor": "5.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 3,
+    "fields": {
+      "moneda": 1,
+      "valor": "10.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 4,
+    "fields": {
+      "moneda": 1,
+      "valor": "20.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 5,
+    "fields": {
+      "moneda": 1,
+      "valor": "50.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 6,
+    "fields": {
+      "moneda": 1,
+      "valor": "100.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 7,
+    "fields": {
+      "moneda": 2,
+      "valor": "5.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 8,
+    "fields": {
+      "moneda": 2,
+      "valor": "10.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 9,
+    "fields": {
+      "moneda": 2,
+      "valor": "20.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 10,
+    "fields": {
+      "moneda": 2,
+      "valor": "50.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
+  },
+  {
+    "model": "monedas.denominacion",
+    "pk": 11,
+    "fields": {
+      "moneda": 2,
+      "valor": "100.00",
+      "creado_en": "2026-09-04T09:00:00Z",
+      "actualizado_en": "2026-09-04T09:00:00Z"
+    }
   }
 ]

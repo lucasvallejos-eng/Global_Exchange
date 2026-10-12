@@ -47,6 +47,15 @@ export function post<T>(ruta: string, cuerpo: unknown): Promise<T> {
   }).then(unwrap<T>);
 }
 
+export function put<T>(ruta: string, cuerpo: unknown): Promise<T> {
+  return fetch(`${BACKEND}${ruta}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: headersConCsrf(),
+    body: JSON.stringify(cuerpo),
+  }).then(unwrap<T>);
+}
+
 export function patch<T>(ruta: string, cuerpo: unknown): Promise<T> {
   return fetch(`${BACKEND}${ruta}`, {
     method: "PATCH",
@@ -63,3 +72,4 @@ export function del<T>(ruta: string): Promise<T> {
     headers: headersConCsrf(),
   }).then(unwrap<T>);
 }
+

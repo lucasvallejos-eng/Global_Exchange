@@ -1,10 +1,36 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Client, UsuarioAsociable } from "../types";
 import { createClient, deleteClient, listClients, listUsuariosAsociables, updateClient } from "../lib/clientesApi";
 import { listarSegmentos, type Segmento } from "../lib/comisionesApi";
 import MultiSelect from "./MultiSelect";
 
 const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", segmento: null, direccion: "", cuentaAcreditar: "", correo: "", usuarios: [] };
+
+const ROLES_EXCLUIDOS = ["admin", "administrador", "cajero", "analista", "analista_cambiario", "analista cambiario"];
+const ROLES_PERMITIDOS = ["cliente", "usuario_final", "usuario final"];
+
+export const esUsuarioCliente = (u: UsuarioAsociable): boolean => {
+  const roles: string[] = [];
+  if (Array.isArray(u.roles)) {
+    roles.push(...u.roles);
+  }
+  if (u.role) {
+    roles.push(u.role);
+  }
+  const rolesLower = roles.map(r => r.toLowerCase().trim());
+
+  // Filtrar y ocultar usuarios con roles de personal interno
+  const tieneExcluido = rolesLower.some(r =>
+    ROLES_EXCLUIDOS.some(ex => r === ex || r.includes("admin") || r.includes("cajero") || r.includes("analista"))
+  );
+  if (tieneExcluido) return false;
+
+  // Mostrar únicamente usuarios con rol de cliente / usuario final
+  const tienePermitido = rolesLower.some(r =>
+    ROLES_PERMITIDOS.some(al => r === al || r.includes("cliente") || r.includes("usuario_final") || r.includes("usuario final"))
+  );
+  return tienePermitido;
+};
 
 export default function ClientesModule() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -34,6 +60,10 @@ export default function ClientesModule() {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
+
+  const usuariosClientes = useMemo(() => {
+    return usuarios.filter(esUsuarioCliente);
+  }, [usuarios]);
 
   const usuarioLabel = (id: number) => {
     const u = usuarios.find(x => x.id === id);
@@ -175,10 +205,11 @@ export default function ClientesModule() {
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1">Usuarios a Asociar</label>
             <MultiSelect
-              options={usuarios.map(u => ({ value: String(u.id), label: u.nombre }))}
+              options={usuariosClientes.map(u => ({ value: String(u.id), label: u.nombre }))}
               selected={form.usuarios.map(String)}
               onChange={values => setForm({ ...form, usuarios: values.map(Number) })}
-              placeholder="Ninguno (opcional)"
+              placeholder={usuariosClientes.length === 0 ? "No hay usuarios clientes disponibles para asociar" : "Ninguno (opcional)"}
+              emptyMessage="No hay usuarios clientes disponibles para asociar"
             />
           </div>
         </div>
