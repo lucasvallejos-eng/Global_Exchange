@@ -92,3 +92,20 @@ class SincronizacionRolesTests(TestCase):
             claims = self.backend.get_userinfo("acceso", "id", {"sub": "abc", "roles": ["cajero"]})
         self.assertEqual(claims["roles"], ["cajero"])
         self.assertEqual(claims["sub"], "abc")
+
+
+class CorsMaquetaTest(TestCase):
+    """El navegador pregunta (preflight) si puede usar cada método antes de enviarlo."""
+
+    def test_permite_todos_los_metodos_que_usa_la_maqueta(self):
+        from django.conf import settings
+
+        respuesta = self.client.options(
+            "/api/notificaciones/preferencias/",
+            HTTP_ORIGIN=settings.MAQUETA_URL.rstrip("/"),
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="PUT",
+        )
+        self.assertEqual(respuesta.status_code, 204)
+        permitidos = {m.strip() for m in respuesta["Access-Control-Allow-Methods"].split(",")}
+        self.assertTrue({"GET", "POST", "PUT", "PATCH", "DELETE"} <= permitidos)
+        self.assertEqual(respuesta["Access-Control-Allow-Credentials"], "true")

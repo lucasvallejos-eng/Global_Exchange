@@ -42,7 +42,9 @@ class CorsMaquetaMiddleware:
         if request.path.startswith("/api/"):
             respuesta["Access-Control-Allow-Origin"] = self.origen
             respuesta["Access-Control-Allow-Credentials"] = "true"
-            respuesta["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
+            # Todos los métodos que usa la maqueta. Si falta uno, el navegador
+            # bloquea la petición antes de enviarla ("Failed to fetch").
+            respuesta["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
             respuesta["Access-Control-Allow-Headers"] = "Content-Type, X-CSRFToken"
             respuesta["Vary"] = "Origin"
 
