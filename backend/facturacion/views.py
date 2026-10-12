@@ -10,7 +10,7 @@ from django.views.decorators.http import require_POST
 from cuentas.decorators import rol_requerido
 
 from . import servicio
-from .api import TODOS_LOS_ROLES, descripcion_de, facturas_visibles
+from .api import SOLO_ADMINISTRADOR, TODOS_LOS_ROLES, descripcion_de, facturas_visibles, puede_emitir
 from .models import Factura
 from .servicio import ErrorFacturaSegura, FacturaInvalida
 
@@ -44,7 +44,7 @@ def detalle_factura(request, pk):
         "f": factura,
         "operacion": descripcion_de(factura),
         "items": factura.de.get("gCamItem", []),
-        "se_puede_emitir": servicio.se_puede_emitir(factura),
+        "se_puede_emitir": puede_emitir(request.user) and servicio.se_puede_emitir(factura),
         "error": request.session.pop("error_factura", None),
     })
 
@@ -66,6 +66,9 @@ def actualizar_factura(request, pk):
 def reintentar_factura(request, pk):
     """Vuelve a emitir una factura que falló y vuelve al detalle."""
     factura = get_object_or_404(facturas_visibles(request.user), pk=pk)
+    if not puede_emitir(request.user):
+        request.session["error_factura"] = SOLO_ADMINISTRADOR
+        return redirect("detalle_factura", pk=pk)
     try:
         servicio.reintentar(factura)
     except FacturaInvalida as error:

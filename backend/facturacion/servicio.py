@@ -495,6 +495,9 @@ def se_puede_emitir(factura):
 
 
 def _emitir(factura):
+    # Una factura sin confirmar pudo haberse emitido: su número puede estar
+    # gastado. No se suelta ni se la vuelve simulada hasta saber qué pasó.
+    venia_sin_confirmar = factura.estado == Factura.Estado.SIN_CONFIRMAR
     operacion = operacion_de(factura.origen)
     factura.cliente = operacion.cliente
     factura.receptor_nombre = operacion.cliente.nombre
@@ -504,12 +507,16 @@ def _emitir(factura):
     try:
         if emite():
             _emitir_de_verdad(factura, operacion)
+        elif venia_sin_confirmar:
+            raise FacturaInvalida("La emisión está apagada: no se puede confirmar esta factura.")
         else:
             _simular(factura, operacion)
     except (FacturaInvalida, ErrorFacturaSegura) as error:
         # Un "no" claro libera el número. Si no se sabe qué pasó, se conserva:
-        # el reintento manda el mismo número y no gasta otro.
-        sin_confirmar = isinstance(error, SinConfirmar)
+        # el reintento manda el mismo número y no gasta otro. Tampoco lo
+        # libera un "no" a un reintento: si la primera vez sí se emitió,
+        # Factura Segura responde que ya existe y el número está gastado.
+        sin_confirmar = venia_sin_confirmar or isinstance(error, SinConfirmar)
         if not sin_confirmar:
             factura.numero = None
         factura.estado = Factura.Estado.SIN_CONFIRMAR if sin_confirmar else Factura.Estado.ERROR

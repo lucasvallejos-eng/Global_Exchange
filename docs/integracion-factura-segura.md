@@ -100,7 +100,7 @@ estado y el detalle de la factura.
 |---|---|---|
 | Simulada | No se emitió (emisión apagada o sin token) | No gasta |
 | No se pudo emitir | Faltan datos o Factura Segura dijo que no | Se libera |
-| Sin confirmar | Se cortó la conexión al emitir: pudo haberse procesado | Se conserva |
+| Sin confirmar | Se cortó la conexión al emitir: pudo haberse procesado | Se conserva siempre |
 | Enviada | Factura Segura la tiene; falta la respuesta del SIFEN | Usado |
 | Aprobada | El SIFEN la aprobó | Usado |
 | Rechazada | El SIFEN la rechazó (el motivo queda en el detalle) | Se conserva para reintentar |
@@ -109,6 +109,15 @@ estado y el detalle de la factura.
 **Reintentar** vuelve a mandar las que fallaron, con el mismo número si ya
 tenían uno. Las simuladas no se emiten solas al prender la emisión: hay que
 pedirlo con el botón "Emitir", una por una.
+
+Una factura **sin confirmar** no suelta su número aunque el reintento reciba
+un "no" (por ejemplo, "el documento ya existe": la primera vez sí se había
+emitido), ni se vuelve simulada si se apaga la emisión. Su número puede estar
+gastado y otra factura no lo puede tomar.
+
+Con la emisión prendida, **solo el administrador** puede pedir que se emita o
+se reintente una factura, porque gasta un número del rango. Con la emisión
+apagada puede cualquiera que vea la factura: no se gasta nada.
 
 ## Pantallas y API
 
@@ -120,7 +129,7 @@ pedirlo con el botón "Emitir", una por una.
 |---|---|---|
 | GET | `/api/facturas/` | Facturas visibles y si la emisión es real o simulada |
 | POST | `/api/facturas/<id>/actualizar/` | Consulta el estado en el SIFEN |
-| POST | `/api/facturas/<id>/reintentar/` | Vuelve a emitir una que falló |
+| POST | `/api/facturas/<id>/reintentar/` | Vuelve a emitir una que falló (con la emisión prendida, solo el administrador) |
 | GET | `/api/facturas/<id>/kude/` | Descarga el KuDE (PDF) |
 | GET | `/api/facturas/<id>/xml/` | Descarga el XML firmado |
 

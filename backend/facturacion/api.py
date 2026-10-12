@@ -17,6 +17,7 @@ from .models import Factura
 from .servicio import ErrorFacturaSegura, FacturaInvalida
 
 TODOS_LOS_ROLES = ("administrador", "analista_cambiario", "cajero", "cliente")
+SOLO_ADMINISTRADOR = "Con la emisión prendida, solo el administrador puede emitir facturas."
 
 
 def facturas_visibles(usuario):
@@ -29,6 +30,15 @@ def facturas_visibles(usuario):
     return facturas.filter(cliente__usuarios=usuario)
 
 
+def puede_emitir(usuario):
+    """Si el usuario puede pedir que se emita (o reintente) una factura.
+
+    Con la emisión prendida eso gasta un número del rango, que son pocos: solo
+    el administrador. Con la emisión apagada no se gasta nada y puede cualquiera.
+    """
+    return not servicio.emite() or usuario.groups.filter(name="administrador").exists()
+
+
 def descripcion_de(factura):
     """La operación facturada en una línea: ``Venta de divisa - 100 USD``."""
     operacion = servicio.operacion_de(factura.origen)
@@ -36,8 +46,12 @@ def descripcion_de(factura):
     return f"{tipo} - {operacion.monto_divisa} {operacion.moneda}"
 
 
-def factura_a_dict(factura):
-    """La factura en el formato que usa la maqueta (claves en camelCase)."""
+def factura_a_dict(factura, emite_el_usuario):
+    """La factura en el formato que usa la maqueta (claves en camelCase).
+
+    Args:
+        emite_el_usuario (bool): ``puede_emitir`` de quien la pide.
+    """
     return {
         "id": factura.pk,
         "numero": factura.numero_completo,
@@ -55,7 +69,7 @@ def factura_a_dict(factura):
         "cdc": factura.cdc or None,
         # Qué botones mostrar.
         "descargable": factura.emitida,
-        "sePuedeEmitir": servicio.se_puede_emitir(factura),
+        "sePuedeEmitir": emite_el_usuario and servicio.se_puede_emitir(factura),
     }
 
 
@@ -75,7 +89,8 @@ def facturas(request):
     ``emision`` le dice a la maqueta si las facturas se emiten de verdad o se
     simulan, para que lo aclare en pantalla.
     """
-    lista = [factura_a_dict(f) for f in facturas_visibles(request.user)]
+    emite_el_usuario = puede_emitir(request.user)
+    lista = [factura_a_dict(f, emite_el_usuario) for f in facturas_visibles(request.user)]
     return JsonResponse({
         "facturas": lista,
         "total": len(lista),
@@ -94,7 +109,7 @@ def actualizar(request, pk):
         servicio.actualizar_estado(factura)
     except ErrorFacturaSegura as error:
         return _error(str(error), 502)
-    return JsonResponse(factura_a_dict(factura))
+    return JsonResponse(factura_a_dict(factura, puede_emitir(request.user)))
 
 
 @require_POST
@@ -105,11 +120,13 @@ def reintentar(request, pk):
     factura = _factura_visible(request, pk)
     if factura is None:
         return _error("No encontrada.", 404)
+    if not puede_emitir(request.user):
+        return _error(SOLO_ADMINISTRADOR, 403)
     try:
         servicio.reintentar(factura)
     except FacturaInvalida as error:
         return _error(str(error))
-    return JsonResponse(factura_a_dict(factura))
+    return JsonResponse(factura_a_dict(factura, True))
 
 
 @require_GET
