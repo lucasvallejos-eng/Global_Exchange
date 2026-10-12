@@ -29,6 +29,31 @@ MONEDAS_SIN_DECIMALES = {
 }
 
 
+# Stripe explica los rechazos en inglés; estos son los motivos más comunes,
+# por código (https://docs.stripe.com/declines/codes). Se muestran al usuario
+# y en las notificaciones.
+MOTIVOS_DE_RECHAZO = {
+    "insufficient_funds": "fondos insuficientes",
+    "card_declined": "el banco rechazó la tarjeta",
+    "generic_decline": "el banco rechazó la tarjeta",
+    "do_not_honor": "el banco rechazó la tarjeta",
+    "expired_card": "la tarjeta está vencida",
+    "incorrect_cvc": "el código de seguridad es incorrecto",
+    "incorrect_number": "el número de tarjeta es incorrecto",
+    "lost_card": "la tarjeta fue denunciada como perdida",
+    "stolen_card": "la tarjeta fue denunciada como robada",
+    "card_velocity_exceeded": "se superó el límite de la tarjeta",
+    "processing_error": "hubo un error al procesar la tarjeta; probá de nuevo",
+    "authentication_required": "el banco pide verificación (3D Secure)",
+}
+
+
+def _motivo(error):
+    """El motivo del rechazo en castellano, o el texto de Stripe si no se conoce."""
+    codigo = getattr(error, "decline_code", None) or getattr(error, "code", None)
+    return MOTIVOS_DE_RECHAZO.get(codigo) or error.user_message or "sin detalle"
+
+
 class PagoRechazado(Exception):
     """El cobro no se pudo hacer. El mensaje se puede mostrar al usuario."""
 
@@ -135,7 +160,7 @@ def cobrar(medio_pago, monto, moneda_codigo, descripcion, metadata=None):
             "metadata": {k: str(v) for k, v in (metadata or {}).items()},
         })
     except stripe.CardError as error:
-        raise PagoRechazado(f"La tarjeta fue rechazada: {error.user_message or 'sin detalle'}") from error
+        raise PagoRechazado(f"La tarjeta fue rechazada: {_motivo(error)}.") from error
     except stripe.StripeError as error:
         raise PagoRechazado(f"No se pudo procesar el pago con Stripe: {error.user_message or error}") from error
     return _cobro(intento)

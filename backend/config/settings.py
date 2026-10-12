@@ -70,6 +70,8 @@ INSTALLED_APPS = [
     "caja",
     # Cobros con tarjeta vía Stripe (modo test).
     "pagos",
+    # Notificaciones de la campanita (operaciones y cotizaciones).
+    "notificaciones",
 ]
 
 MIDDLEWARE = [

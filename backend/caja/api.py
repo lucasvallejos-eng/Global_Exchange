@@ -12,6 +12,7 @@ from cuentas.decorators import rol_requerido
 from cotizaciones.models import Cotizacion
 from medios_pago.models import MedioPago, TipoMedioPago
 from monedas.models import Denominacion, Moneda
+from notificaciones import servicio as avisos
 from pagos import servicio as stripe_servicio
 from pagos.servicio import PagoRechazado
 
@@ -220,7 +221,7 @@ def _nombre_tarjeta(medio):
     return f"{medio.alias} ({medio.banco_o_proveedor} •••• {medio.numero_cuenta_o_tarjeta})"
 
 
-def _cobrar_si_es_tarjeta(datos, tipo, cliente, moneda, monto, calculo, medio):
+def _cobrar_si_es_tarjeta(datos, tipo, cliente, moneda, monto, calculo, medio, cajero):
     """Cobra con Stripe si el medio es una tarjeta.
 
     En la venta de caja la casa vende divisa: el cliente paga el total en
@@ -255,12 +256,29 @@ def _cobrar_si_es_tarjeta(datos, tipo, cliente, moneda, monto, calculo, medio):
                 metadata={"cliente_id": cliente.pk, "operacion": f"caja_{tipo}"},
             )
     except PagoRechazado as error:
+        # Rechazo o 3D Secure no aprobado: la operación no se registra, pero
+        # el cajero y el dueño de la tarjeta reciben el aviso con el motivo.
+        avisos.operacion_caja_fallida(cajero, tipo, cliente, moneda.codigo, monto, str(error), medio)
         return None, JsonResponse({"error": str(error)}, status=400)
     if cobro.estado == "requiere_accion":
         return None, JsonResponse({
             "pagoPendiente": {"clientSecret": cobro.client_secret, "paymentIntentId": cobro.id},
         }, status=202)
     return cobro.id, None
+
+
+def _avisar_exito(cajero, tipo, obj, calculo, medio, cobro_id):
+    """Notifica la operación de caja registrada (al cajero y, si se cobró con
+    tarjeta, al dueño de la tarjeta, con el importe cobrado)."""
+    forma = calculo.get("tipo_pago_nombre") or "Efectivo"
+    if not cobro_id:
+        avisos.operacion_caja_exitosa(cajero, tipo, obj, forma)
+        return
+    if tipo == "venta":
+        importe = f"{avisos.formatear_numero(obj.monto_local_total)} PYG"
+    else:
+        importe = f"{avisos.formatear_numero(obj.monto_divisa)} {obj.moneda.codigo}"
+    avisos.operacion_caja_exitosa(cajero, tipo, obj, forma, medio, importe)
 
 
 def _operacion_dict(obj, calculo):
@@ -404,7 +422,7 @@ def compra(request):
     if error:
         return error
     datos, apertura_obj, cliente, moneda, cotizacion, monto, calculo, medio = entrada
-    cobro_id, respuesta = _cobrar_si_es_tarjeta(datos, "compra", cliente, moneda, monto, calculo, medio)
+    cobro_id, respuesta = _cobrar_si_es_tarjeta(datos, "compra", cliente, moneda, monto, calculo, medio, request.user)
     if respuesta:
         return respuesta
     obj = CompraCaja.objects.create(
@@ -422,6 +440,7 @@ def compra(request):
         stripe_payment_intent_id=cobro_id,
         forma_pago=calculo["forma_pago"],
     )
+    _avisar_exito(request.user, "compra", obj, calculo, medio, cobro_id)
     return JsonResponse(_operacion_dict(obj, calculo), status=201)
 
 
@@ -433,7 +452,7 @@ def venta(request):
     if error:
         return error
     datos, apertura_obj, cliente, moneda, cotizacion, monto, calculo, medio = entrada
-    cobro_id, respuesta = _cobrar_si_es_tarjeta(datos, "venta", cliente, moneda, monto, calculo, medio)
+    cobro_id, respuesta = _cobrar_si_es_tarjeta(datos, "venta", cliente, moneda, monto, calculo, medio, request.user)
     if respuesta:
         return respuesta
     obj = VentaCaja.objects.create(
@@ -451,6 +470,7 @@ def venta(request):
         stripe_payment_intent_id=cobro_id,
         forma_pago=calculo["forma_pago"],
     )
+    _avisar_exito(request.user, "venta", obj, calculo, medio, cobro_id)
     return JsonResponse(_operacion_dict(obj, calculo), status=201)
 
 

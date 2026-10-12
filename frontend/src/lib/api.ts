@@ -53,13 +53,24 @@ export function get<T>(ruta: string): Promise<T> {
   return fetch(`${BACKEND}${ruta}`, { credentials: "include" }).then(unwrap<T>);
 }
 
+/**
+ * Evento para que la campanita se actualice ya, sin esperar su consulta
+ * periódica. Se dispara después de cada POST (compras, ventas, pagos...),
+ * que es cuando el backend puede haber creado una notificación.
+ */
+export const EVENTO_NOTIFICACIONES = "notificaciones-actualizar";
+
 export function post<T>(ruta: string, cuerpo: unknown): Promise<T> {
   return fetch(`${BACKEND}${ruta}`, {
     method: "POST",
     credentials: "include",
     headers: headersConCsrf(),
     body: JSON.stringify(cuerpo),
-  }).then(unwrap<T>);
+  })
+    .then(unwrap<T>)
+    .finally(() => {
+      if (!ruta.startsWith("/api/notificaciones/")) window.dispatchEvent(new Event(EVENTO_NOTIFICACIONES));
+    });
 }
 
 export function put<T>(ruta: string, cuerpo: unknown): Promise<T> {

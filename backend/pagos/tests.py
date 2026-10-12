@@ -66,6 +66,13 @@ class ServicioStripeTest(TestCase):
         with self.assertRaisesMessage(PagoRechazado, "rechazada"):
             servicio.cobrar(self.medio, 100, "USD", "desc")
 
+    def test_motivo_de_rechazo_en_castellano(self):
+        error = stripe.CardError("Your card has insufficient funds.", None, "card_declined")
+        error.decline_code = "insufficient_funds"
+        self.cliente_stripe.v1.payment_intents.create.side_effect = error
+        with self.assertRaisesMessage(PagoRechazado, "La tarjeta fue rechazada: fondos insuficientes."):
+            servicio.cobrar(self.medio, 100, "USD", "desc")
+
     def test_verificar_rechaza_monto_distinto(self):
         self.cliente_stripe.v1.payment_intents.retrieve.return_value = _intento("succeeded", amount=1)
         with self.assertRaisesMessage(PagoRechazado, "no corresponde"):

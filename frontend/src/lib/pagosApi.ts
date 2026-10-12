@@ -48,8 +48,16 @@ export async function completarVerificacion(clientSecret: string): Promise<void>
  */
 export async function completarPagoOperacion(operacion: Operacion): Promise<Operacion> {
   if (!operacion.pagoPendiente) return operacion;
-  await completarVerificacion(operacion.pagoPendiente.clientSecret);
-  return post<Operacion>(`/api/operaciones/${operacion.id}/verificar-pago/`, {});
+  const verificar = () => post<Operacion>(`/api/operaciones/${operacion.id}/verificar-pago/`, {});
+  try {
+    await completarVerificacion(operacion.pagoPendiente.clientSecret);
+  } catch (error) {
+    // La verificación falló o se canceló: igual se le avisa al backend, que
+    // lo confirma con Stripe y deja la notificación de la operación fallida.
+    await verificar().catch(() => undefined);
+    throw error;
+  }
+  return verificar();
 }
 
 // --- Caja -----------------------------------------------------------------------
