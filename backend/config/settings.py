@@ -77,6 +77,8 @@ INSTALLED_APPS = [
     "notificaciones",
     # Facturación electrónica (Factura Segura / SIFEN).
     "facturacion",
+    # Reportes de transacciones y ganancias (solo lectura, sin modelos).
+    "reportes",
 ]
 
 MIDDLEWARE = [
