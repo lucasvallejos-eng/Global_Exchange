@@ -4,8 +4,9 @@
 - **Herramienta:** Claude (Anthropic), a través de Claude Code
 - **Integrante:** Milner Noguera
 - **Ramas de trabajo:** `feature/facturacion-electronica` (creada desde
-  `develop` en el commit `32c5e82`) y `feature/reportes-ganancias` (creada
-  sobre la anterior)
+  `develop` en el commit `32c5e82`) y, una sobre la otra,
+  `feature/reportes-ganancias`, `feature/tema-login-keycloak` y
+  `feature/simulacion-completa`
 
 ---
 
@@ -73,6 +74,27 @@ factura todavía**, porque los números son pocos.
     evolución de tasas, que ya existía para el cliente, se agregó al menú del
     analista y del administrador.
 
+### 4. Aspecto del inicio de sesión
+
+- **Pedido:** si se podía mejorar la pantalla de login de Keycloak.
+- **Qué se hizo:** un tema propio (`keycloak/themes/global-exchange`) que
+  hereda del tema de Keycloak y solo cambia el aspecto con una hoja de
+  estilos, con los colores y las formas de la maqueta. El login lo sigue
+  dibujando Keycloak (RN05). Se monta en los dos `docker-compose`, viene en
+  el `realm-export.json` y `configurar_produccion.py` lo aplica en un Keycloak
+  que ya tenía el realm.
+
+### 5. Completar el alcance del Hito 7
+
+- **Pedido:** dejar el Hito 7 lo más completo posible.
+- **Qué se hizo:**
+  - El **RUC del cliente** se carga desde el formulario de Clientes de la
+    maqueta (se agregó `ruc` como campo opcional en `types.ts`).
+  - La **simulación** ahora es completa: con un cliente activo la calcula el
+    backend con la misma cuenta de una operación real (tasa base, descuento
+    del segmento, tasa aplicada, comisión y total), sin registrar nada. Antes
+    la hacía el navegador y no incluía la comisión.
+
 ## Decisiones que tomó la IA y quedaron a confirmar
 
 Se dejaron escritas como supuestos, en el código y en la guía, para que el
@@ -93,9 +115,9 @@ equipo las revise con la cátedra:
 - **Emitir solas las facturas simuladas al prender la emisión.** Se descartó
   para que nadie gaste números sin darse cuenta: se emiten una por una, a
   pedido.
-- **Agregar el RUC al formulario de clientes de la maqueta.** Implica cambiar
-  `types.ts`, que mantiene otro integrante. Quedó pendiente de coordinar; por
-  ahora el RUC se carga por la API o desde `/admin/`.
+- **Rehacer las pantallas de Keycloak con plantillas propias.** Se descartó:
+  con un tema que solo trae estilos, el registro, la recuperación de
+  contraseña y las pantallas futuras siguen funcionando sin mantenerlas.
 - **Copiar la configuración de Factura Segura a `.env.prod`**, como se hizo
   con Stripe. Son más de veinte variables: se prefirió que producción lea el
   mismo archivo con `env_file`, sin tocar `publicar.py`.
@@ -108,11 +130,13 @@ equipo las revise con la cátedra:
   facturación y 18 de reportes. Ninguna sale a la red: se reemplaza el único
   punto que habla con Factura Segura, y `settings.py` apaga el token y la
   emisión al correr los tests.
-- **En el navegador, con login real por Keycloak** (usuario de prueba del
-  analista) contra la base local: el tablero, el reporte y la lista de
-  facturas muestran las operaciones cargadas; una factura de un cliente sin
-  RUC quedó en error y pasó a simulada al reintentarla después de cargarle el
-  RUC.
+- **En el navegador, con login real por Keycloak** (usuarios de prueba)
+  contra la base local: el tablero, el reporte y la lista de facturas muestran
+  las operaciones cargadas; una factura de un cliente sin RUC quedó en error y
+  pasó a simulada al reintentarla después de cargarle el RUC; el RUC se guardó
+  desde el formulario de Clientes; la simulación mostró el desglose completo;
+  y el tema nuevo se vio en el login, en el error de contraseña y en el
+  registro.
 - **Maqueta:** chequeo de tipos y `vite build` sin errores.
 - **Sin verificar:** nada se probó contra Factura Segura. La emisión real, la
   consulta al SIFEN y las descargas del KuDE y del XML solo están cubiertas

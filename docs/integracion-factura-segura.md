@@ -54,6 +54,9 @@ cargó (RN02). Sale de `Cliente.nombre`, `Cliente.correo` y `Cliente.ruc`:
 - Sin `ruc`: la factura queda en **error** y se puede reintentar después de
   cargarlo.
 
+El RUC lo carga el administrador en el formulario de **Clientes** de la
+maqueta (campo "RUC o Cédula").
+
 ## Qué se factura
 
 Son supuestos a confirmar con la cátedra:
@@ -132,5 +135,3 @@ entrar a **Facturas**. Con la emisión apagada queda simulada.
 
 - Notas de crédito y cancelación (`sol_cancelacion`) al anular una operación.
 - Facturar las operaciones de la caja (ventanilla), que hoy no generan factura.
-- Cargar el RUC del cliente desde la maqueta (hoy se carga por la API o desde
-  `/admin/`).

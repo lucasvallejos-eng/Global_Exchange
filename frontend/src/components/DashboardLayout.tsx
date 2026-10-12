@@ -261,7 +261,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
     }
 
     if (activeSection === "simulacion" || activeSection === "simulacion-venta") {
-      return <SimulacionModule userType={userType} descuentoCompra={effectiveDiscount} />;
+      return <SimulacionModule userType={userType} descuentoCompra={effectiveDiscount} clienteId={activeClient?.id ?? null} />;
     }
 
     if (activeSection === "monedas-historial") {
