@@ -20,6 +20,7 @@ import requests
 
 REALM = "GlobalExchange"
 CLIENT = "global-exchange-web"
+TEMA_LOGIN = "global-exchange"
 
 
 def leer_env(ruta):
@@ -93,10 +94,19 @@ def main():
     if not respuesta.ok:
         sys.exit(f"Keycloak rechazó el rol compuesto: {respuesta.status_code} {respuesta.text[:200]}")
 
+    # El tema del inicio de sesión viene en el realm-export, pero un Keycloak
+    # que ya tenía el realm no lo reimporta: se asegura acá.
+    respuesta = requests.put(f"{base}/admin/realms/{REALM}", headers=cabeceras,
+                             json={"loginTheme": TEMA_LOGIN, "displayName": "Global Exchange"},
+                             timeout=30)
+    if not respuesta.ok:
+        sys.exit(f"Keycloak rechazó el tema: {respuesta.status_code} {respuesta.text[:200]}")
+
     print(f"Client {CLIENT} configurado:")
     print(f"  vuelve a      {', '.join(client['redirectUris'])}")
     print(f"  secreto       el de KEYCLOAK_WEB_CLIENT_SECRET en {args.env_file}")
     print("  administrador incluye analista_cambiario y cajero")
+    print(f"  inicio de sesión con el tema {TEMA_LOGIN}")
 
 
 if __name__ == "__main__":
