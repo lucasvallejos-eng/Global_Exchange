@@ -1,3 +1,7 @@
+import json
+import time
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -161,3 +165,111 @@ class MedioPagoAvanceViewsTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.medio_activo.refresh_from_db()
         self.assertFalse(self.medio_activo.activo)
+
+class MedioPagoVisibilidadApiTest(TestCase):
+    """Qué medios de pago ve cada rol en la API JSON."""
+
+    def setUp(self):
+        dueno = User.objects.create_user(username="dueno")
+        self.activo = MedioPago.objects.create(usuario=dueno, alias="Activo", activo=True)
+        self.inactivo = MedioPago.objects.create(usuario=dueno, alias="Inactivo", activo=False)
+
+    def _iniciar_sesion(self, rol):
+        usuario = User.objects.create_user(username=f"usuario_{rol}")
+        usuario.groups.add(Group.objects.get_or_create(name=rol)[0])
+        self.client.force_login(usuario)
+        session = self.client.session
+        session["oidc_id_token_expiration"] = time.time() + 3600
+        session.save()
+
+    def _ids_listados(self):
+        respuesta = self.client.get(reverse("api_medios_lista"))
+        self.assertEqual(respuesta.status_code, 200)
+        return {medio["id"] for medio in respuesta.json()["medios"]}
+
+    def test_administrador_ve_inactivos(self):
+        self._iniciar_sesion("administrador")
+        self.assertEqual(self._ids_listados(), {self.activo.pk, self.inactivo.pk})
+
+    def test_administrador_reactiva_un_inactivo(self):
+        self._iniciar_sesion("administrador")
+        respuesta = self.client.patch(
+            reverse("api_medios_detalle", args=[self.inactivo.pk]),
+            data=json.dumps({"activo": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.inactivo.refresh_from_db()
+        self.assertTrue(self.inactivo.activo)
+
+    def test_cajero_solo_ve_activos(self):
+        self._iniciar_sesion("cajero")
+        self.assertEqual(self._ids_listados(), {self.activo.pk})
+
+
+class TarjetasStripeApiTest(TestCase):
+    """Alta de tarjetas con Stripe (Stripe simulado)."""
+
+    def setUp(self):
+        self.usuario = User.objects.create_user(username="clara")
+        self.usuario.groups.add(Group.objects.get_or_create(name="cliente")[0])
+        self.client.force_login(self.usuario)
+        session = self.client.session
+        session["oidc_id_token_expiration"] = time.time() + 3600
+        session.save()
+
+    def _post(self, nombre, datos):
+        return self.client.post(reverse(nombre), data=json.dumps(datos), content_type="application/json")
+
+    def test_no_se_aceptan_numeros_de_tarjeta_en_crudo(self):
+        respuesta = self._post("api_medios_lista", {
+            "tipo": "TARJETA_CREDITO", "alias": "Visa", "numeroTarjeta": "4242424242424242", "codigoSeguridad": "123",
+        })
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertFalse(MedioPago.objects.exists())
+
+    def test_preparar_devuelve_client_secret(self):
+        with patch("pagos.servicio.preparar_tarjeta", return_value="seti_1_secret"):
+            respuesta = self._post("api_tarjetas_preparar", {})
+        self.assertEqual(respuesta.json(), {"clientSecret": "seti_1_secret"})
+
+    def test_registrar_guarda_solo_datos_no_sensibles(self):
+        tarjeta = {"payment_method_id": "pm_1", "marca": "Visa", "ultimos4": "4242", "vencimiento": "04/31"}
+        with patch("pagos.servicio.tarjeta_registrada", return_value=tarjeta) as leer:
+            respuesta = self._post("api_tarjetas_registrar", {
+                "setupIntentId": "seti_1", "tipo": "TARJETA_DEBITO", "alias": "Mi débito",
+            })
+        self.assertEqual(respuesta.status_code, 201)
+        leer.assert_called_once_with(self.usuario, "seti_1")
+        self.assertEqual(respuesta.json()["tarjeta"], {"marca": "Visa", "ultimos4": "4242", "vencimiento": "04/31"})
+        medio = MedioPago.objects.get()
+        self.assertEqual((medio.tipo, medio.stripe_payment_method_id), ("TARJETA_DEBITO", "pm_1"))
+
+    def test_borrar_desvincula_en_stripe(self):
+        medio = MedioPago.objects.create(usuario=self.usuario, tipo="TARJETA_CREDITO", alias="Visa",
+                                         stripe_payment_method_id="pm_1")
+        with patch("pagos.servicio.desvincular_tarjeta") as desvincular:
+            respuesta = self.client.delete(reverse("api_medios_detalle", args=[medio.pk]))
+        self.assertEqual(respuesta.status_code, 204)
+        desvincular.assert_called_once_with("pm_1")
+
+    def test_borrar_una_tarjeta_usada_en_caja_la_desactiva(self):
+        from caja.models import AperturaCaja, VentaCaja
+        from clientes.models import Cliente
+        from monedas.models import Moneda
+
+        medio = MedioPago.objects.create(usuario=self.usuario, tipo="TARJETA_CREDITO", alias="Visa",
+                                         stripe_payment_method_id="pm_1")
+        VentaCaja.objects.create(
+            apertura=AperturaCaja.objects.create(cajero_id="c1"), cajero_id="c1",
+            cliente=Cliente.objects.create(nombre="C", tipo=Cliente.Tipo.FISICA, direccion="x",
+                                           cuenta_acreditar="1", correo="c@example.com"),
+            moneda=Moneda.objects.create(codigo="USD", nombre="Dólar", simbolo="$"),
+            monto_divisa=1, cotizacion_aplicada=1, monto_local_total=1, medio_pago=medio,
+        )
+        with patch("pagos.servicio.desvincular_tarjeta") as desvincular:
+            respuesta = self.client.delete(reverse("api_medios_detalle", args=[medio.pk]))
+        self.assertEqual(respuesta.status_code, 204)
+        desvincular.assert_called_once_with("pm_1")
+        medio.refresh_from_db()
+        self.assertFalse(medio.activo)

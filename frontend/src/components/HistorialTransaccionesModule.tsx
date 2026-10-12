@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
 import { useTasas } from "../lib/useTasas";
+import { completarPagoOperacion } from "../lib/pagosApi";
+import ConfirmacionModal from "./ConfirmacionModal";
 import {
+  cancelarOperacion,
   listarOperaciones,
+  pagarOperacion,
   type EstadoOperacion,
   type FiltrosHistorial,
   type Operacion,
 } from "../lib/operacionesApi";
 
-// Historial de transacciones: solo consulta, como pide el alcance del
-// Sprint 3. Antes mostraba una lista escrita a mano y permitía cancelar
-// operaciones; ahora lee la base y no modifica nada.
+// Historial de transacciones. Es de consulta, salvo las operaciones que
+// quedaron pendientes de pago (por ejemplo, si falló la verificación 3D Secure
+// de la tarjeta): esas se pueden terminar de pagar o cancelar desde el detalle.
 
 const formatDateTime = (dateStr: string) =>
   new Date(dateStr).toLocaleString("es-PY", {
@@ -43,6 +47,54 @@ export default function HistorialTransaccionesModule() {
   const [error, setError] = useState<string | null>(null);
   const [filtros, setFiltros] = useState<FiltrosHistorial>({});
   const [seleccionada, setSeleccionada] = useState<Operacion | null>(null);
+  const [procesando, setProcesando] = useState(false);
+  const [aviso, setAviso] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [confirmarCancelacion, setConfirmarCancelacion] = useState(false);
+
+  // Reemplaza la operación en la lista y en el detalle con lo que devolvió el backend.
+  const actualizar = (operacion: Operacion) => {
+    setOperaciones((lista) => lista.map((o) => (o.id === operacion.id ? operacion : o)));
+    setSeleccionada(operacion);
+  };
+
+  const pagar = async (operacion: Operacion) => {
+    setProcesando(true);
+    setAviso(null);
+    try {
+      // Con tarjeta puede volver a pedir 3D Secure: completarPagoOperacion lo muestra.
+      const resultado = await completarPagoOperacion(await pagarOperacion(operacion.id));
+      actualizar(resultado);
+      if (resultado.estado === "PAGADA") setAviso({ tipo: "ok", texto: `Operación #${resultado.id} pagada.` });
+      else if (resultado.estado === "CANCELADA") setAviso({ tipo: "error", texto: resultado.motivoCancelacion ?? "La operación se canceló." });
+    } catch (e) {
+      setAviso({ tipo: "error", texto: e instanceof Error ? e.message : "No se pudo completar el pago." });
+      // El backend pudo haber cambiado algo (por ejemplo, el cobro anterior): se recarga.
+      listarOperaciones(filtros).then(({ operaciones: lista }) => {
+        setOperaciones(lista);
+        setSeleccionada(lista.find((o) => o.id === operacion.id) ?? null);
+      }).catch(() => undefined);
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const cancelar = async (operacion: Operacion) => {
+    setProcesando(true);
+    setAviso(null);
+    try {
+      const resultado = await cancelarOperacion(operacion.id);
+      actualizar(resultado);
+      // Si Stripe ya había cobrado (3D Secure completado), no se cancela: queda pagada.
+      setAviso(resultado.estado === "PAGADA"
+        ? { tipo: "ok", texto: "El pago con tarjeta ya se había aprobado: la operación quedó pagada." }
+        : { tipo: "ok", texto: `Operación #${resultado.id} cancelada. No se cobró nada.` });
+    } catch (e) {
+      setAviso({ tipo: "error", texto: e instanceof Error ? e.message : "No se pudo cancelar." });
+    } finally {
+      setProcesando(false);
+      setConfirmarCancelacion(false);
+    }
+  };
   const { codigos } = useTasas();
 
   useEffect(() => {
@@ -153,7 +205,7 @@ export default function HistorialTransaccionesModule() {
               {!cargando && operaciones.map((operacion) => (
                 <tr
                   key={operacion.id}
-                  onClick={() => setSeleccionada(operacion)}
+                  onClick={() => { setSeleccionada(operacion); setAviso(null); }}
                   className="cursor-pointer border-t border-[#edf2f7] bg-white hover:bg-[#f8fafc]"
                 >
                   <td className="px-4 py-3">
@@ -192,7 +244,7 @@ export default function HistorialTransaccionesModule() {
       </div>
 
       {seleccionada && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSeleccionada(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => !procesando && setSeleccionada(null)}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-4">
               <h3 className="text-xl font-bold text-[#0f172a]">Transacción #{seleccionada.id}</h3>
@@ -227,16 +279,60 @@ export default function HistorialTransaccionesModule() {
               </p>
             )}
 
-            <div className="mt-6 flex justify-end">
+            {seleccionada.estado === "PENDIENTE" && seleccionada.puedeGestionar && (
+              <p className="mt-4 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+                Esta operación quedó pendiente de pago. Podés terminar de pagarla
+                {seleccionada.pagoConTarjeta ? " (se vuelve a intentar el cobro con la misma tarjeta)" : ""} o cancelarla.
+                Si la cotización cambió desde que se creó, al pagar se cancela sin cobrar.
+              </p>
+            )}
+
+            {aviso && (
+              <p className={`mt-4 rounded-xl border px-4 py-3 text-sm ${aviso.tipo === "ok" ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+                {aviso.texto}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setSeleccionada(null)}
+                disabled={procesando}
                 className="rounded-xl border border-[#dbe3ee] bg-white px-4 py-2 text-sm font-semibold text-[#475569] hover:bg-[#f8fafc]"
               >
                 Cerrar
               </button>
+              {seleccionada.estado === "PENDIENTE" && seleccionada.puedeGestionar && (
+                <>
+                  <button
+                    onClick={() => setConfirmarCancelacion(true)}
+                    disabled={procesando}
+                    className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                  >
+                    Cancelar operación
+                  </button>
+                  <button
+                    onClick={() => void pagar(seleccionada)}
+                    disabled={procesando}
+                    className="rounded-xl bg-[#1a7eff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#146be7] disabled:bg-slate-300"
+                  >
+                    {procesando ? "Procesando..." : "Pagar ahora"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
+      )}
+      {confirmarCancelacion && seleccionada && (
+        <ConfirmacionModal
+          titulo={`¿Cancelar la operación #${seleccionada.id}?`}
+          mensaje="La operación queda cancelada y no se cobra nada. Para operar de nuevo vas a tener que crear una nueva."
+          textoConfirmar="Cancelar operación"
+          textoVolver="Volver"
+          procesando={procesando}
+          onConfirmar={() => void cancelar(seleccionada)}
+          onCancelar={() => setConfirmarCancelacion(false)}
+        />
       )}
     </div>
   );

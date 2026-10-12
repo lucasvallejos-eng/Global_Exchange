@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -7,6 +8,12 @@ class AperturaCaja(models.Model):
         CERRADA = "cerrada", "Cerrada"
 
     cajero_id = models.CharField(max_length=255)
+    # Para mostrar quién abrió la caja en el historial (cajero_id es el "sub"
+    # de Keycloak). Vacío en las aperturas anteriores a este campo.
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="aperturas_caja",
+    )
     fecha_hora_apertura = models.DateTimeField(auto_now_add=True)
     totales_consolidado = models.JSONField(default=dict)
     estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.ACTIVA)
@@ -41,6 +48,12 @@ class CompraCaja(models.Model):
     cotizacion_base = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True)
     tasa_preferencial_aplicada = models.DecimalField(max_digits=8, decimal_places=4, default=0)
     cotizacion_final = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True)
+    # Cobro con tarjeta en Stripe (pi_...). Vacío si se pagó en efectivo.
+    # Único: el mismo cobro no puede registrar dos operaciones.
+    stripe_payment_intent_id = models.CharField(max_length=255, null=True, blank=True, unique=True)
+    # Cómo pagó el cliente: EFECTIVO, TARJETA_STRIPE o la clave del tipo de
+    # medio de pago (transferencia, etc.). Decide qué entra al cajón en el arqueo.
+    forma_pago = models.CharField(max_length=30, blank=True)
     fecha_hora = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -61,6 +74,12 @@ class VentaCaja(models.Model):
     cotizacion_base = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True)
     tasa_preferencial_aplicada = models.DecimalField(max_digits=8, decimal_places=4, default=0)
     cotizacion_final = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True)
+    # Cobro con tarjeta en Stripe (pi_...). Vacío si se pagó en efectivo.
+    # Único: el mismo cobro no puede registrar dos operaciones.
+    stripe_payment_intent_id = models.CharField(max_length=255, null=True, blank=True, unique=True)
+    # Cómo pagó el cliente: EFECTIVO, TARJETA_STRIPE o la clave del tipo de
+    # medio de pago (transferencia, etc.). Decide qué entra al cajón en el arqueo.
+    forma_pago = models.CharField(max_length=30, blank=True)
     fecha_hora = models.DateTimeField(auto_now_add=True)
 
     class Meta:

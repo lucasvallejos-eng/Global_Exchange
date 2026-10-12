@@ -100,6 +100,10 @@ Del `global-exchange-web`, pestaña **Credentials**, copiar el **secret** y guar
 Después: **Realm settings → User registration → Default roles →** agregar **`cliente`**.
 (Así todo el que se registra queda como cliente por defecto.)
 
+`administrador` es un **rol compuesto**: **Clients → `global-exchange-web` → Roles →
+`administrador` → Associated roles →** `analista_cambiario` y `cajero`. Así todo administrador
+también puede operar la caja y las funciones del analista sin asignarle esos roles uno por uno.
+
 ---
 
 ## El mapper de roles ⚠️

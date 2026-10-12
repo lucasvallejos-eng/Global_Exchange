@@ -18,6 +18,18 @@ comisión que configura ``comisiones``):
 
 Los guaraníes se redondean a enteros: no hay centavos de guaraní en
 circulación, y cobrar fracciones que nadie puede pagar no tiene sentido.
+
+**Pago con tarjeta (Stripe).** Si el medio de pago es una tarjeta cargada con
+Stripe, al pagar se le cobra de verdad (en modo test):
+
+- En una **compra**, el total en guaraníes.
+- En una **venta**, el monto de divisa que entrega el cliente, en esa moneda.
+
+La operación queda ``PAGADA`` recién cuando Stripe aprueba el cobro. Si el
+banco pide 3D Secure, queda ``PENDIENTE`` hasta que el navegador completa la
+verificación y se llama a ``verificar_pago``. Si la tarjeta se rechaza, no se
+registra nada (la operación se deshace) y el cliente puede elegir otra.
+Con los demás medios de pago no se cobra nada: se registra como antes.
 """
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -27,6 +39,8 @@ from django.utils import timezone
 from clientes.models import Cliente
 from cotizaciones.models import Cotizacion
 from medios_pago.models import MedioPago
+from pagos import servicio as stripe_servicio
+from pagos.servicio import PagoRechazado
 
 from .models import Transaccion
 
@@ -238,6 +252,9 @@ def confirmar_operacion(usuario, cliente, tipo, moneda, monto_divisa, tasa_base_
             **_calcular(tipo, monto_divisa, tasa_vista, cliente.segmento),
         }
         if precio_actual == tasa_vista:
+            if _paga_con_tarjeta(medio_pago):
+                transaccion = Transaccion.objects.create(**datos)
+                return _cobrar_con_tarjeta(transaccion)
             return Transaccion.objects.create(
                 **datos, estado=Transaccion.Estado.PAGADA, fecha_pago=ahora
             )
@@ -338,6 +355,11 @@ def pagar(transaccion, usuario):
                 "solo se puede pagar una operación pendiente."
             )
 
+        # Si ya se había cobrado (3D Secure completado), solo falta registrarlo:
+        # se cobró con la cotización de ese momento.
+        if _cobro_previo_aprobado(transaccion):
+            return _marcar_pagada(transaccion)
+
         vigente = cotizacion_vigente(transaccion.moneda)
         precio_actual = tasa_base_de(vigente, transaccion.tipo) if vigente else None
 
@@ -355,9 +377,113 @@ def pagar(transaccion, usuario):
                     f"La cotización de {transaccion.moneda.codigo} cambió antes del pago: "
                     f"pasó de {transaccion.tasa_base} a {precio_actual}."
                 )
+        elif _paga_con_tarjeta(transaccion.medio_pago):
+            return _cobrar_con_tarjeta(transaccion)
         else:
             transaccion.estado = Transaccion.Estado.PAGADA
             transaccion.fecha_pago = timezone.now()
+        transaccion.save()
+    return transaccion
+
+
+def _paga_con_tarjeta(medio_pago):
+    return bool(medio_pago and medio_pago.stripe_payment_method_id)
+
+
+def monto_a_cobrar(transaccion):
+    """Cuánto y en qué moneda se cobra con tarjeta (ver el docstring del módulo).
+
+    Returns:
+        tuple: ``(monto, codigo_moneda)``.
+    """
+    if transaccion.tipo == Transaccion.Tipo.COMPRA:
+        return transaccion.total_guaranies, "PYG"
+    return transaccion.monto_divisa, transaccion.moneda.codigo
+
+
+def _cobro_previo_aprobado(transaccion):
+    """Resuelve el cobro con tarjeta que quedó de un intento anterior.
+
+    Pasa cuando el banco pidió 3D Secure y la verificación falló o no se
+    terminó. Antes de reintentar o cancelar hay que preguntarle a Stripe: si el
+    cliente sí completó la verificación (y se cerró la página antes de
+    avisarnos), el cobro ya está aprobado y no hay que cobrar de nuevo. Si no
+    se aprobó, se cancela en Stripe.
+
+    Returns:
+        bool: True si el cobro anterior ya está aprobado.
+    """
+    if not transaccion.stripe_payment_intent_id:
+        return False
+    monto, codigo = monto_a_cobrar(transaccion)
+    try:
+        stripe_servicio.verificar_cobro(transaccion.stripe_payment_intent_id, monto, codigo)
+        return True
+    except PagoRechazado:
+        stripe_servicio.cancelar_cobro(transaccion.stripe_payment_intent_id)
+        return False
+
+
+def _marcar_pagada(transaccion):
+    transaccion.estado = Transaccion.Estado.PAGADA
+    transaccion.fecha_pago = timezone.now()
+    transaccion.save()
+    return transaccion
+
+
+def _cobrar_con_tarjeta(transaccion):
+    """Cobra la operación con la tarjeta de Stripe de su medio de pago.
+
+    Se llama dentro de un ``atomic``: si la tarjeta se rechaza, la excepción
+    deshace la operación. Si Stripe pide 3D Secure, queda ``PENDIENTE`` y el
+    ``client_secret`` se deja en ``transaccion.client_secret_pendiente`` (no se
+    guarda en la base) para que el navegador complete la verificación.
+
+    Raises:
+        OperacionInvalida: si Stripe rechaza el cobro.
+    """
+    monto, codigo = monto_a_cobrar(transaccion)
+    try:
+        cobro = stripe_servicio.cobrar(
+            transaccion.medio_pago, monto, codigo,
+            descripcion=f"Global Exchange - Operación #{transaccion.pk} ({transaccion.get_tipo_display()})",
+            metadata={"transaccion_id": transaccion.pk, "cliente_id": transaccion.cliente_id},
+        )
+    except PagoRechazado as error:
+        raise OperacionInvalida(str(error)) from error
+    transaccion.stripe_payment_intent_id = cobro.id
+    if cobro.estado == "aprobado":
+        transaccion.estado = Transaccion.Estado.PAGADA
+        transaccion.fecha_pago = timezone.now()
+    else:
+        transaccion.client_secret_pendiente = cobro.client_secret
+    transaccion.save()
+    return transaccion
+
+
+def verificar_pago(transaccion, usuario):
+    """Completa el pago de una operación que esperaba la verificación 3D Secure.
+
+    Consulta a Stripe: si el cobro se aprobó, la operación pasa a ``PAGADA``.
+
+    Raises:
+        OperacionInvalida: si no está pendiente de un cobro con tarjeta, o
+            Stripe no lo aprobó.
+    """
+    if not puede_gestionar(usuario, transaccion):
+        raise OperacionInvalida("Esta operación no es de un cliente al que estés asociado.")
+    with transaccion_bd.atomic():
+        transaccion = Transaccion.objects.select_for_update().get(pk=transaccion.pk)
+        if (transaccion.estado != Transaccion.Estado.PENDIENTE
+                or not transaccion.stripe_payment_intent_id):
+            raise OperacionInvalida("Esta operación no tiene un pago con tarjeta pendiente.")
+        monto, codigo = monto_a_cobrar(transaccion)
+        try:
+            stripe_servicio.verificar_cobro(transaccion.stripe_payment_intent_id, monto, codigo)
+        except PagoRechazado as error:
+            raise OperacionInvalida(str(error)) from error
+        transaccion.estado = Transaccion.Estado.PAGADA
+        transaccion.fecha_pago = timezone.now()
         transaccion.save()
     return transaccion
 
@@ -377,6 +503,9 @@ def cancelar(transaccion, usuario):
         transaccion = Transaccion.objects.select_for_update().get(pk=transaccion.pk)
         if transaccion.estado != Transaccion.Estado.PENDIENTE:
             raise OperacionInvalida("Solo se puede cancelar una operación pendiente de pago.")
+        # Si Stripe ya cobró (3D Secure completado), no se puede cancelar: queda pagada.
+        if _cobro_previo_aprobado(transaccion):
+            return _marcar_pagada(transaccion)
         transaccion.estado = Transaccion.Estado.CANCELADA
         transaccion.motivo_cancelacion = "Cancelada por el usuario antes del pago."
         transaccion.fecha_cancelacion = timezone.now()

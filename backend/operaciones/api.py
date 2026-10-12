@@ -37,8 +37,12 @@ def _fecha(valor):
     return valor.isoformat() if valor else None
 
 
-def transaccion_a_dict(t):
-    """La operación en el formato que usa la maqueta (claves en camelCase)."""
+def transaccion_a_dict(t, puede_gestionar=False):
+    """La operación en el formato que usa la maqueta (claves en camelCase).
+
+    ``puede_gestionar``: si el usuario que pregunta puede pagarla o cancelarla
+    (la maqueta muestra esos botones solo en ese caso).
+    """
     return {
         "id": t.pk,
         "tipo": t.tipo,
@@ -56,12 +60,20 @@ def transaccion_a_dict(t):
         "comision": _numero(t.comision),
         "totalGuaranies": _numero(t.total_guaranies),
         "medioPago": t.medio_pago_descripcion or None,
+        "pagoConTarjeta": bool(t.stripe_payment_intent_id),
+        # Solo si Stripe pide 3D Secure: el navegador lo completa con este
+        # client_secret y después llama a /operaciones/<id>/verificar-pago/.
+        "pagoPendiente": (
+            {"clientSecret": t.client_secret_pendiente}
+            if getattr(t, "client_secret_pendiente", None) else None
+        ),
         "motivoCancelacion": t.motivo_cancelacion or None,
         "canceladaPorCotizacion": t.cancelada_por_cotizacion,
         "tasaBaseNueva": _numero(t.tasa_base_nueva),
         "fechaCreacion": _fecha(t.fecha_creacion),
         "fechaPago": _fecha(t.fecha_pago),
         "fechaCancelacion": _fecha(t.fecha_cancelacion),
+        "puedeGestionar": puede_gestionar,
     }
 
 
@@ -100,7 +112,8 @@ def historial(request):
     """
     visibles = servicios.transacciones_visibles(request.user)
     resultado = servicios.filtrar_historial(visibles, **filtros_de(request.GET))
-    lista = [transaccion_a_dict(t) for t in resultado]
+    gestionables = set(servicios.clientes_habilitados(request.user).values_list("pk", flat=True))
+    lista = [transaccion_a_dict(t, t.cliente_id in gestionables) for t in resultado]
     return JsonResponse({"operaciones": lista, "total": len(lista)})
 
 
@@ -122,7 +135,7 @@ def crear(request):
         )
     except OperacionInvalida as error:
         return _error(str(error))
-    return JsonResponse(transaccion_a_dict(t), status=201)
+    return JsonResponse(transaccion_a_dict(t, True), status=201)
 
 
 def _entrada_operacion(request):
@@ -212,7 +225,7 @@ def confirmar(request):
         )
     except OperacionInvalida as error:
         return _error(str(error))
-    return JsonResponse(transaccion_a_dict(t), status=201)
+    return JsonResponse(transaccion_a_dict(t, True), status=201)
 
 
 @require_GET
@@ -222,7 +235,7 @@ def detalle(request, pk):
     t = _transaccion_visible(request, pk)
     if t is None:
         return _error("No existe esa operación.", 404)
-    return JsonResponse(transaccion_a_dict(t))
+    return JsonResponse(transaccion_a_dict(t, servicios.puede_gestionar(request.user, t)))
 
 
 @require_POST
@@ -236,7 +249,7 @@ def pagar(request, pk):
         t = servicios.pagar(t, request.user)
     except OperacionInvalida as error:
         return _error(str(error))
-    return JsonResponse(transaccion_a_dict(t))
+    return JsonResponse(transaccion_a_dict(t, servicios.puede_gestionar(request.user, t)))
 
 
 @require_POST
@@ -250,4 +263,18 @@ def cancelar(request, pk):
         t = servicios.cancelar(t, request.user)
     except OperacionInvalida as error:
         return _error(str(error))
-    return JsonResponse(transaccion_a_dict(t))
+    return JsonResponse(transaccion_a_dict(t, servicios.puede_gestionar(request.user, t)))
+
+
+@require_POST
+@rol_requerido(*TODOS_LOS_ROLES)
+def verificar_pago(request, pk):
+    """Después del 3D Secure: consulta a Stripe y marca la operación pagada."""
+    t = _transaccion_visible(request, pk)
+    if t is None:
+        return _error("No existe esa operación.", 404)
+    try:
+        t = servicios.verificar_pago(t, request.user)
+    except OperacionInvalida as error:
+        return _error(str(error))
+    return JsonResponse(transaccion_a_dict(t, servicios.puede_gestionar(request.user, t)))

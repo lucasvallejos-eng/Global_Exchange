@@ -2,6 +2,7 @@
 import json
 import time
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -481,3 +482,154 @@ class ApiCotizarYConfirmarTest(BaseOperacionesTest):
         respuesta = self.post_json("api_operaciones_confirmar", self.cuerpo())
         self.assertEqual(respuesta.status_code, 400)
         self.assertFalse(Transaccion.objects.exists())
+
+
+class PagoConTarjetaTest(BaseOperacionesTest):
+    """Operaciones pagadas con una tarjeta de Stripe (Stripe simulado)."""
+
+    def setUp(self):
+        super().setUp()
+        self.tarjeta = MedioPago.objects.create(
+            usuario=self.usuario, tipo="TARJETA_CREDITO", alias="Visa",
+            stripe_payment_method_id="pm_1", banco_o_proveedor="Visa",
+            numero_cuenta_o_tarjeta="4242",
+        )
+
+    def _cobro(self, estado="aprobado"):
+        from pagos.servicio import Cobro
+        return Cobro("pi_1", estado, "pi_1_secret")
+
+    def _confirmar(self, tipo="COMPRA"):
+        self.entrar(self.usuario)
+        return self.client.post(
+            reverse("api_operaciones_confirmar"),
+            data=json.dumps({
+                "clienteId": self.cliente.pk, "tipo": tipo, "moneda": "USD",
+                "monto": "100", "medioPagoId": self.tarjeta.pk, "tasaBase": "7400" if tipo == "COMPRA" else "7300",
+            }),
+            content_type="application/json",
+        )
+
+    def test_compra_cobra_el_total_en_guaranies(self):
+        with patch("pagos.servicio.cobrar", return_value=self._cobro()) as cobrar:
+            respuesta = self._confirmar("COMPRA")
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.json()["estado"], "PAGADA")
+        self.assertTrue(respuesta.json()["pagoConTarjeta"])
+        medio, monto, moneda = cobrar.call_args.args
+        self.assertEqual((medio, monto, moneda), (self.tarjeta, Decimal("710030"), "PYG"))
+        self.assertEqual(Transaccion.objects.get().stripe_payment_intent_id, "pi_1")
+
+    def test_venta_cobra_la_divisa(self):
+        with patch("pagos.servicio.cobrar", return_value=self._cobro()) as cobrar:
+            respuesta = self._confirmar("VENTA")
+        self.assertEqual(respuesta.json()["estado"], "PAGADA")
+        _, monto, moneda = cobrar.call_args.args
+        self.assertEqual((monto, moneda), (Decimal("100"), "USD"))
+
+    def test_tarjeta_rechazada_no_registra_la_operacion(self):
+        from pagos.servicio import PagoRechazado
+        with patch("pagos.servicio.cobrar", side_effect=PagoRechazado("La tarjeta fue rechazada: sin fondos")):
+            respuesta = self._confirmar()
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("rechazada", respuesta.json()["error"])
+        self.assertFalse(Transaccion.objects.exists())
+
+    def test_cotizacion_cambiada_no_cobra(self):
+        self.cotizacion.precio_venta = Decimal("7500")
+        self.cotizacion.save()
+        with patch("pagos.servicio.cobrar") as cobrar:
+            respuesta = self._confirmar()
+        self.assertEqual(respuesta.json()["estado"], "CANCELADA")
+        cobrar.assert_not_called()
+
+    def test_3d_secure_queda_pendiente_y_se_verifica(self):
+        with patch("pagos.servicio.cobrar", return_value=self._cobro("requiere_accion")):
+            respuesta = self._confirmar()
+        datos = respuesta.json()
+        self.assertEqual(datos["estado"], "PENDIENTE")
+        self.assertEqual(datos["pagoPendiente"], {"clientSecret": "pi_1_secret"})
+
+        with patch("pagos.servicio.verificar_cobro", return_value=self._cobro()) as verificar:
+            respuesta = self.client.post(reverse("api_operaciones_verificar_pago", args=[datos["id"]]))
+        self.assertEqual(respuesta.json()["estado"], "PAGADA")
+        verificar.assert_called_once_with("pi_1", Decimal("710030"), "PYG")
+
+    def test_verificar_sin_pago_pendiente_es_error(self):
+        t = self.crear()
+        self.entrar(self.usuario)
+        respuesta = self.client.post(reverse("api_operaciones_verificar_pago", args=[t.pk]))
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_pagar_una_pendiente_con_tarjeta(self):
+        t = self.crear(medio_pago=self.tarjeta)
+        with patch("pagos.servicio.cobrar", return_value=self._cobro()):
+            t = servicios.pagar(t, self.usuario)
+        self.assertEqual(t.estado, Transaccion.Estado.PAGADA)
+        self.assertEqual(t.stripe_payment_intent_id, "pi_1")
+
+    def test_sin_tarjeta_no_se_llama_a_stripe(self):
+        with patch("pagos.servicio.cobrar") as cobrar:
+            t = self.crear()
+            servicios.pagar(t, self.usuario)
+        cobrar.assert_not_called()
+
+
+class PendienteConTarjetaTest(BaseOperacionesTest):
+    """Operaciones que quedaron pendientes porque el 3D Secure falló o no se terminó."""
+
+    # Misma tarjeta y cobro simulado que PagoConTarjetaTest, sin repetir sus tests.
+    _cobro = PagoConTarjetaTest._cobro
+
+    def setUp(self):
+        super().setUp()
+        self.tarjeta = MedioPago.objects.create(
+            usuario=self.usuario, tipo="TARJETA_CREDITO", alias="Visa",
+            stripe_payment_method_id="pm_1", banco_o_proveedor="Visa",
+            numero_cuenta_o_tarjeta="4242",
+        )
+        self.t = self.crear(medio_pago=self.tarjeta)
+        self.t.stripe_payment_intent_id = "pi_viejo"
+        self.t.save()
+
+    def _rechazado(self):
+        from pagos.servicio import PagoRechazado
+        return PagoRechazado("El pago no se completó")
+
+    def test_pagar_reintenta_y_cancela_el_cobro_viejo(self):
+        with patch("pagos.servicio.verificar_cobro", side_effect=self._rechazado()), \
+                patch("pagos.servicio.cancelar_cobro") as cancelar, \
+                patch("pagos.servicio.cobrar", return_value=self._cobro()) as cobrar:
+            t = servicios.pagar(self.t, self.usuario)
+        cancelar.assert_called_once_with("pi_viejo")
+        cobrar.assert_called_once()
+        self.assertEqual((t.estado, t.stripe_payment_intent_id), (Transaccion.Estado.PAGADA, "pi_1"))
+
+    def test_pagar_no_cobra_dos_veces_si_el_3ds_se_habia_completado(self):
+        with patch("pagos.servicio.verificar_cobro", return_value=self._cobro()), \
+                patch("pagos.servicio.cobrar") as cobrar:
+            t = servicios.pagar(self.t, self.usuario)
+        cobrar.assert_not_called()
+        self.assertEqual(t.estado, Transaccion.Estado.PAGADA)
+
+    def test_cancelar_cancela_tambien_en_stripe(self):
+        with patch("pagos.servicio.verificar_cobro", side_effect=self._rechazado()), \
+                patch("pagos.servicio.cancelar_cobro") as cancelar:
+            t = servicios.cancelar(self.t, self.usuario)
+        cancelar.assert_called_once_with("pi_viejo")
+        self.assertEqual(t.estado, Transaccion.Estado.CANCELADA)
+
+    def test_no_se_cancela_lo_que_stripe_ya_cobro(self):
+        with patch("pagos.servicio.verificar_cobro", return_value=self._cobro()):
+            t = servicios.cancelar(self.t, self.usuario)
+        self.assertEqual(t.estado, Transaccion.Estado.PAGADA)
+
+    def test_el_historial_dice_quien_puede_gestionar(self):
+        self.entrar(self.usuario)
+        [propia] = self.client.get(reverse("api_operaciones")).json()["operaciones"]
+        self.assertTrue(propia["puedeGestionar"])
+        cajero = Usuario.objects.create_user(username="cajero_ve")
+        cajero.groups.add(Group.objects.get_or_create(name="cajero")[0])
+        self.entrar(cajero)
+        [ajena] = self.client.get(reverse("api_operaciones")).json()["operaciones"]
+        self.assertFalse(ajena["puedeGestionar"])

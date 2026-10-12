@@ -13,7 +13,9 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
-from django.http import JsonResponse
+from django.db import transaction
+from django.db.models import ProtectedError
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from cotizaciones.models import Cotizacion, HistorialCotizacion
@@ -56,6 +58,7 @@ def _a_dict(moneda):
         "nombre": moneda.nombre,
         "simbolo": moneda.simbolo,
         "activo": moneda.activo,
+        "esLocal": moneda.es_local,
         "precioCompra": float(cotizacion.precio_compra) if cotizacion else None,
         "precioVenta": float(cotizacion.precio_venta) if cotizacion else None,
         "ultimaActualizacion": (
@@ -127,6 +130,16 @@ def monedas_lista(request):
     return _crear(request)
 
 
+def _error_moneda_local(es_local, excluir=None):
+    """Mensaje de error si ya hay otra moneda local; None si se puede."""
+    if not es_local:
+        return None
+    otra = Moneda.objects.filter(es_local=True).exclude(pk=getattr(excluir, "pk", None)).first()
+    if otra:
+        return f"Ya hay una moneda local ({otra.codigo}): solo puede haber una."
+    return None
+
+
 @rol_requerido(*GESTIONAN_MONEDAS)
 def _crear(request):
     datos = _cuerpo(request)
@@ -137,13 +150,21 @@ def _crear(request):
         return JsonResponse({"error": "El código y el nombre son obligatorios."}, status=400)
     if Moneda.objects.filter(codigo=codigo).exists():
         return JsonResponse({"error": f"Ya existe una moneda con el código {codigo}."}, status=400)
+    es_local = bool(datos.get("esLocal", False))
+    error = _error_moneda_local(es_local)
+    if error:
+        return JsonResponse({"error": error}, status=400)
 
     moneda = Moneda.objects.create(
         codigo=codigo,
         nombre=nombre,
         simbolo=(datos.get("simbolo") or codigo).strip(),
         activo=bool(datos.get("activo", True)),
+        es_local=es_local,
     )
+    if es_local:
+        # La moneda local no tiene cotización: los precios se ignoran.
+        return JsonResponse(_a_dict(moneda), status=201)
 
     error = _guardar_cotizacion(
         moneda,
@@ -183,7 +204,17 @@ def _actualizar(request, moneda):
         moneda.simbolo = (datos["simbolo"] or "").strip()
     if "activo" in datos:
         moneda.activo = bool(datos["activo"])
+    if "esLocal" in datos and bool(datos["esLocal"]) != moneda.es_local:
+        error = _error_moneda_local(bool(datos["esLocal"]), excluir=moneda)
+        if error:
+            return JsonResponse({"error": error}, status=400)
+        moneda.es_local = bool(datos["esLocal"])
+        if moneda.es_local:
+            # Pasa a ser la moneda local: deja de cotizarse.
+            moneda.cotizaciones.filter(activa=True).update(activa=False)
     moneda.save()
+    if moneda.es_local:
+        return JsonResponse(_a_dict(moneda))
 
     error = _guardar_cotizacion(
         moneda,
@@ -199,8 +230,21 @@ def _actualizar(request, moneda):
 
 @rol_requerido(*GESTIONAN_MONEDAS)
 def _borrar(request, moneda):
-    moneda.delete()
-    return JsonResponse({}, status=204)
+    """Elimina la moneda con sus cotizaciones y denominaciones.
+
+    Si ya tiene operaciones (de la web o de caja) no se puede: el historial
+    las necesita. En ese caso se responde 400 y se sugiere desactivarla.
+    """
+    try:
+        with transaction.atomic():
+            moneda.delete()
+    except ProtectedError:
+        return JsonResponse(
+            {"error": f"No se puede eliminar {moneda.codigo}: tiene operaciones registradas. "
+                      "Podés desactivarla para que no se use más."},
+            status=400,
+        )
+    return HttpResponse(status=204)
 
 
 # ==========================================
@@ -308,5 +352,5 @@ def _actualizar_denominacion(request, denominacion):
 @rol_requerido(*GESTIONAN_MONEDAS)
 def _borrar_denominacion(request, denominacion):
     denominacion.delete()
-    return JsonResponse({}, status=204)
+    return HttpResponse(status=204)
 

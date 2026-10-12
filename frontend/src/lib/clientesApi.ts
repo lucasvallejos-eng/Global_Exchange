@@ -1,26 +1,6 @@
 import { Client, UsuarioAsociable } from "../types";
 
-import { BACKEND } from "./api";
-
-function leerCookie(nombre: string): string {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${nombre}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : "";
-}
-
-async function unwrap<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const detalle = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${detalle}`);
-  }
-  return res.json();
-}
-
-function headersConCsrf(): HeadersInit {
-  return {
-    "Content-Type": "application/json",
-    "X-CSRFToken": leerCookie("csrftoken"),
-  };
-}
+import { BACKEND, headersConCsrf, unwrap } from "./api";
 
 export async function listClients(): Promise<Client[]> {
   const res = await fetch(`${BACKEND}/api/clientes/`, { credentials: "include" });
@@ -64,7 +44,7 @@ export async function deleteClient(id: Client["id"]): Promise<void> {
     credentials: "include",
     headers: headersConCsrf(),
   });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
+  if (!res.ok) await unwrap(res);
 }
 
 export async function listUsuariosAsociables(): Promise<UsuarioAsociable[]> {

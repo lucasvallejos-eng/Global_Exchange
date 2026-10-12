@@ -15,6 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Carga las variables desde backend/.env (ver .env.example).
 load_dotenv(BASE_DIR / ".env")
+# Claves de Stripe aparte: levantar_todo.py regenera .env y las borraría.
+load_dotenv(BASE_DIR / ".env.stripe")
 
 
 def _bool(valor: str, por_defecto: bool = False) -> bool:
@@ -66,6 +68,8 @@ INSTALLED_APPS = [
     "tasas",
     "operaciones",
     "caja",
+    # Cobros con tarjeta vía Stripe (modo test).
+    "pagos",
 ]
 
 MIDDLEWARE = [
@@ -206,3 +210,10 @@ STATIC_URL = "static/"
 STATIC_ROOT = os.environ.get("DJANGO_STATIC_ROOT", BASE_DIR / "staticfiles")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# --- Stripe (modo test) ------------------------------------------------------
+# En backend/.env.stripe (ver .env.example). Sin claves, los pagos con tarjeta
+# quedan deshabilitados y el resto del sistema funciona igual.
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")

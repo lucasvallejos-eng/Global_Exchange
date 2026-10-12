@@ -36,6 +36,9 @@ donde se validan del lado del servidor.
    :members:
    :undoc-members:
 
+.. automodule:: cuentas.views
+   :members:
+
 
 Clientes
 --------
@@ -57,6 +60,9 @@ Monedas
    :undoc-members:
 
 .. automodule:: monedas.views
+   :members:
+
+.. automodule:: monedas.api
    :members:
    :undoc-members:
 
@@ -96,6 +102,9 @@ Medios de pago
    
 
 .. automodule:: medios_pago.views
+   :members:
+
+.. automodule:: medios_pago.api
    :members:
    
 
@@ -146,6 +155,40 @@ pantallas de Django y la API de la maqueta solo las llaman.
    :members:
 
 .. automodule:: operaciones.api
+   :members:
+
+
+Caja (operativa presencial)
+---------------------------
+
+Apertura con arqueo por denominaciones, compra y venta en ventanilla, cierre
+con la diferencia entre el saldo teórico y el contado, e historial de cajas.
+El arqueo sigue también la moneda local (``Moneda.es_local``): las ventas en
+efectivo suman guaraníes al cajón y las compras los restan; lo cobrado con
+tarjeta no pasa por el cajón. Solo el rol ``cajero`` opera la caja.
+
+.. automodule:: caja.models
+   :members:
+
+.. automodule:: caja.api
+   :members:
+
+
+Pagos con tarjeta (Stripe)
+--------------------------
+
+Cobros con tarjeta en modo test. Las tarjetas se cargan con Stripe Elements:
+el número y el CVV van directo a Stripe y nunca pasan por este backend, que
+solo guarda el id del ``PaymentMethod``, la marca, los últimos 4 dígitos y el
+vencimiento. Ver ``docs/integracion-stripe.md``.
+
+.. automodule:: pagos.models
+   :members:
+
+.. automodule:: pagos.servicio
+   :members:
+
+.. automodule:: pagos.api
    :members:
 
 

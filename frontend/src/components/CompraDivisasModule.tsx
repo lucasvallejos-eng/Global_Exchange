@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { ClientType, getAppliedRate } from "../lib/clientRates";
 import { useTasas } from "../lib/useTasas";
 import { confirmarOperacion, cotizarOperacion, type NuevaOperacion, type Operacion, type Presupuesto } from "../lib/operacionesApi";
+import { etiquetaMedioPago, listarMediosPago, type MedioPago } from "../lib/mediosPagoApi";
+import { completarPagoOperacion } from "../lib/pagosApi";
 import AlertaCancelacionModal from "./AlertaCancelacionModal";
 
 
@@ -35,6 +37,21 @@ export default function CompraDivisasModule({
   const [procesando, setProcesando] = useState(false);
   // Operación que se canceló sola porque cambió la cotización (IS2GE-71).
   const [alerta, setAlerta] = useState<Operacion | null>(null);
+  // Tarjetas de Stripe del usuario: con una se cobra el total en guaraníes.
+  // "" = pagar por fuera (transferencia, etc.), como antes de Stripe.
+  const [tarjetas, setTarjetas] = useState<MedioPago[]>([]);
+  const [tarjetaId, setTarjetaId] = useState("");
+
+  useEffect(() => {
+    void listarMediosPago()
+      .then(({ medios }) => {
+        const conTarjeta = medios.filter((medio) => medio.activo && medio.tarjeta);
+        setTarjetas(conTarjeta);
+        if (conTarjeta.length > 0) setTarjetaId(String(conTarjeta[0].id));
+      })
+      .catch(() => setTarjetas([]));
+  }, []);
+  const tarjetaElegida = tarjetas.find((medio) => String(medio.id) === tarjetaId);
 
   // Cotizaciones reales de la base, en vez de una tabla fija.
   const { tasas, codigos, cargando } = useTasas();
@@ -65,6 +82,7 @@ export default function CompraDivisasModule({
       tipo: "COMPRA",
       moneda: currency,
       monto: numericAmount,
+      medioPagoId: tarjetaElegida?.id ?? null,
     };
     try {
       setOperacion(await cotizarOperacion(datos));
@@ -83,9 +101,16 @@ export default function CompraDivisasModule({
     try {
       // Recién acá se registra la operación. Si la cotización cambió desde el
       // cálculo, el backend la registra cancelada en vez de cobrarla.
-      const resultado = await confirmarOperacion({ ...pedido, tasaBase: operacion.tasaBase });
+      // Con tarjeta, el backend cobra en Stripe; si el banco pide 3D Secure,
+      // completarPagoOperacion muestra la verificación y confirma el pago.
+      const resultado = await completarPagoOperacion(
+        await confirmarOperacion({ ...pedido, tasaBase: operacion.tasaBase }),
+      );
       if (resultado.estado === "PAGADA") {
-        setSuccessMessage(`Operación #${resultado.id} pagada: ${formatCurrency(resultado.totalGuaranies)} PYG.`);
+        setSuccessMessage(
+          `Operación #${resultado.id} pagada: ${formatCurrency(resultado.totalGuaranies)} PYG` +
+          (resultado.pagoConTarjeta ? " cobrados a tu tarjeta." : "."),
+        );
       } else if (resultado.canceladaPorCotizacion) {
         setAlerta(resultado);
       } else {
@@ -160,6 +185,17 @@ export default function CompraDivisasModule({
           <p className="mt-1 text-2xl font-bold text-[#1a7eff]">{formatCurrency(totalInPyg)} PYG</p>
         </div>
 
+        <label className="mt-5 block">
+          <span className="mb-2 block text-sm font-medium text-[#374151]">Pagar con</span>
+          <select value={tarjetaId} onChange={(event) => setTarjetaId(event.target.value)} className="w-full rounded-xl border border-[#dbe3ee] bg-white px-3 py-2.5 text-sm">
+            {tarjetas.map((medio) => <option key={medio.id} value={medio.id}>{etiquetaMedioPago(medio)}</option>)}
+            <option value="">Otro medio (transferencia, sin cobro en línea)</option>
+          </select>
+          {tarjetas.length === 0 && (
+            <span className="mt-2 block text-xs text-[#64748b]">Para pagar con tarjeta, cargá una en «Configuración de Datos → Métodos de pago».</span>
+          )}
+        </label>
+
         {successMessage && (
           <div className="mt-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
             {successMessage}
@@ -226,7 +262,10 @@ export default function CompraDivisasModule({
             </div>
 
             <p className="mt-5 text-sm text-[#475569]">
-              Si los datos son correctos, presione Confirmar. Si la cotización cambia antes del pago, la operación se cancela sin cobrarle nada.
+              {pedido?.medioPagoId && tarjetaElegida
+                ? `Al confirmar se cobrarán ${formatCurrency(operacion.totalGuaranies)} PYG a ${etiquetaMedioPago(tarjetaElegida)}. `
+                : "Si los datos son correctos, presione Confirmar. "}
+              Si la cotización cambia antes del pago, la operación se cancela sin cobrarle nada.
             </p>
 
             <div className="mt-6 flex justify-end gap-3">
