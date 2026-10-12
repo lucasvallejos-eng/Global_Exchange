@@ -22,7 +22,7 @@ import PreferenciasNotificacionesModule from "./PreferenciasNotificacionesModule
 import ConfiguracionDatosModule from "./ConfiguracionDatosModule";
 import ReportesModule from "./ReportesModule";
 import TableroGananciasModule from "./TableroGananciasModule";
-import { CLIENT_TYPE_OPTIONS, ClientType } from "../lib/clientRates";
+import { ClientType } from "../lib/clientRates";
 import { obtenerEstadoDiario, type EstadoCaja, type EstadoDiario } from "../lib/cajaApi";
 
 interface Props {
@@ -113,7 +113,6 @@ export default function DashboardLayout({ user, onLogout }: Props) {
   const [activeSection, setActiveSection] = useState("inicio");
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [manualClientType, setManualClientType] = useState<ClientType>("Minorista");
   // Estado de caja del cajero: derivado del backend, persiste entre sesiones.
   // Arranca en ESPERANDO_ARQUEO hasta que el primer fetch del backend responda.
   const [estadoCaja, setEstadoCaja] = useState<EstadoCaja>("ESPERANDO_ARQUEO");
@@ -149,12 +148,9 @@ export default function DashboardLayout({ user, onLogout }: Props) {
   }, [assignedClients, activeClientId]);
   const activeClient = assignedClients.find((client) => client.id === activeClientId) ?? assignedClients[0];
   const userType = (activeClient?.tipoCliente ?? "Sin categoría") as ClientType;
-  const effectiveDiscount = user.role === "cajero"
-    ? CLIENT_TYPE_OPTIONS.indexOf(manualClientType) * 0.05 + 0.05
-    : activeClient?.descuentoCompra ?? 0;
+  const effectiveDiscount = activeClient?.descuentoCompra ?? 0;
 
   const showClientContext = assignedClients.length > 0;
-  const showManualClientType = user.role === "cajero";
 
   const renderContent = () => {
     if (activeSection === "inicio") {
@@ -379,21 +375,6 @@ export default function DashboardLayout({ user, onLogout }: Props) {
           </div>
 
           <div className="flex items-center gap-3">
-            {showManualClientType && (
-              <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b]">Tipo</span>
-                <select
-                  value={manualClientType}
-                  onChange={(e) => setManualClientType(e.target.value as ClientType)}
-                  className="bg-transparent text-sm font-semibold text-[#0f172a] outline-none"
-                >
-                  {CLIENT_TYPE_OPTIONS.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             {showClientContext && (
               <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b]">Tipo</span>

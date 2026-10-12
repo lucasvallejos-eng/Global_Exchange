@@ -85,6 +85,20 @@ class Factura(models.Model):
         return self.transaccion or self.compra_caja or self.venta_caja
 
     @property
+    def referencia(self):
+        """De qué operación es: ``Web #5``, ``Caja, compra #2`` o ``Caja, venta #2``.
+
+        Las compras y las ventas de la caja se numeran por separado, así que
+        el número solo no alcanza para distinguirlas. Como en el resto de la
+        caja, "compra" y "venta" van desde el lado de la casa.
+        """
+        if self.transaccion_id:
+            return f"Web #{self.transaccion_id}"
+        if self.compra_caja_id:
+            return f"Caja, compra #{self.compra_caja_id}"
+        return f"Caja, venta #{self.venta_caja_id}"
+
+    @property
     def numero_completo(self):
         """El número como se imprime: ``001-003-0000382``."""
         if self.numero is None:
