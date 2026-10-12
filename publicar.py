@@ -14,7 +14,8 @@ Uso, desde la raíz del repositorio y con Docker Desktop abierto:
 
 Las direcciones cambian cada vez que se crean los túneles: después de apagar,
 se vuelve a correr este script y da otras. Mientras los túneles sigan
-corriendo, volver a correrlo no las cambia.
+corriendo, volver a correrlo no las cambia; si Cloudflare los dio de baja (la
+PC se suspendió o se quedó sin internet un rato largo), los crea de nuevo.
 """
 import argparse
 import json
@@ -118,6 +119,16 @@ def direccion_tunel(servicio, espera=90):
              f"-f docker-compose.publico.yml --env-file .env.prod logs {servicio}")
 
 
+def tunel_caido(servicio):
+    """Si Cloudflare dio de baja el túnel aunque su contenedor siga corriendo.
+
+    Pasa cuando el túnel pierde la conexión un rato largo (la PC se suspendió
+    o se quedó sin internet): al volver, Cloudflare ya no lo reconoce y la
+    dirección que figura en el log dejó de existir.
+    """
+    return "Tunnel not found" in compose("logs", "--no-color", "--tail", "20", servicio, capturar=True)
+
+
 def esperar(url, espera=300):
     limite = time.time() + espera
     while time.time() < limite:
@@ -167,6 +178,9 @@ def main():
 
     log("Abriendo los túneles...")
     compose("up", "-d", "tunel-app", "tunel-keycloak")
+    if tunel_caido("tunel-app") or tunel_caido("tunel-keycloak"):
+        log("Los túneles anteriores ya no existen en Cloudflare: se crean de nuevo (cambian las direcciones).")
+        compose("up", "-d", "--force-recreate", "tunel-app", "tunel-keycloak")
     url_app = direccion_tunel("tunel-app")
     url_kc = direccion_tunel("tunel-keycloak")
     log(f"Aplicación: {url_app}")
