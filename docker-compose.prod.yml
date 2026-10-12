@@ -68,6 +68,10 @@ services:
       KEYCLOAK_WEB_CLIENT_SECRET: ${KEYCLOAK_WEB_CLIENT_SECRET:?falta KEYCLOAK_WEB_CLIENT_SECRET en .env.prod}
       MAQUETA_URL: ${URL_MAQUETA:?falta URL_MAQUETA en .env.prod}/
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      # Pagos con tarjeta (Stripe, modo test). Opcionales: sin claves, no se
+      # puede pagar con tarjeta y el resto funciona igual.
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
     ports:
       - "${PUERTO_BACKEND:-8000}:8000"
     volumes:

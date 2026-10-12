@@ -95,6 +95,8 @@ class Transaccion(models.Model):
         related_name="transacciones",
     )
     medio_pago_descripcion = models.CharField(max_length=150, blank=True)
+    # Cobro con tarjeta en Stripe (pi_...). Vacío si no se pagó con tarjeta.
+    stripe_payment_intent_id = models.CharField(max_length=255, blank=True)
 
     estado = models.CharField(
         max_length=10, choices=Estado.choices, default=Estado.PENDIENTE

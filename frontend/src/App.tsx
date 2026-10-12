@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Role, User } from "./types";
 import DashboardLayout from "./components/DashboardLayout";
+import AccesoDenegadoModal from "./components/AccesoDenegadoModal";
 import { BACKEND } from "./lib/api";
 
 // Si el usuario tiene varios roles, este orden decide cuál manda para el menú
@@ -85,5 +86,10 @@ export default function App() {
     );
   }
 
-  return <DashboardLayout user={usuario} onLogout={cerrarSesion} />;
+  return (
+    <>
+      <DashboardLayout user={usuario} onLogout={cerrarSesion} />
+      <AccesoDenegadoModal />
+    </>
+  );
 }

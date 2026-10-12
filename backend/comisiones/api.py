@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db.models import Count
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from cuentas.decorators import rol_requerido
@@ -150,7 +150,7 @@ def segmentos_detalle(request, pk):
                 status=400,
             )
         segmento.delete()
-        return JsonResponse({}, status=204)
+        return HttpResponse(status=204)
 
     datos = _cuerpo(request)
     if "nombre" in datos:

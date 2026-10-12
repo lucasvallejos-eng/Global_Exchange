@@ -13,7 +13,7 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -228,7 +228,7 @@ def cotizaciones_detalle(request, pk):
 
     if request.method == "DELETE":
         cotizacion.delete()
-        return JsonResponse({}, status=204)
+        return HttpResponse(status=204)
 
     datos = _cuerpo(request)
     cambia_precio = "precioCompra" in datos or "precioVenta" in datos

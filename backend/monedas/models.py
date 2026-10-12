@@ -12,6 +12,9 @@ class Moneda(models.Model):
         nombre (CharField): Nombre descriptivo completo de la divisa (ej. "Dólar estadounidense").
         simbolo (CharField): Símbolo tipográfico utilizado en las representaciones de precios (ej. "$").
         activo (BooleanField): Indica si la moneda está habilitada para realizar operaciones de compra/venta.
+        es_local (BooleanField): La moneda del país (el guaraní). Vale 1 a 1, así
+            que no tiene cotización ni se compra o vende: solo se usa en la caja
+            (apertura, arqueo y cierre). Puede haber una sola.
         fecha_creacion (DateTimeField): Fecha y hora en que se dio de alta el registro en el sistema.
         fecha_actualizacion (DateTimeField): Fecha y hora del último cambio realizado sobre el registro.
     """
@@ -19,8 +22,25 @@ class Moneda(models.Model):
     nombre = models.CharField(max_length=50)               # Ej: "Dólar estadounidense"
     simbolo = models.CharField(max_length=5)               # Ej: "$"
     activo = models.BooleanField(default=True)
+    es_local = models.BooleanField(
+        default=False,
+        help_text="Moneda local (guaraní): sin cotización, no se compra ni se vende.",
+    )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["es_local"], condition=models.Q(es_local=True),
+                name="una_sola_moneda_local",
+            ),
+        ]
+
+    @classmethod
+    def local(cls):
+        """La moneda local, o ``None`` si todavía no se cargó."""
+        return cls.objects.filter(es_local=True).first()
 
     def __str__(self):
         """Devuelve la representación en texto legible de la moneda.
@@ -72,4 +92,4 @@ class Denominacion(models.Model):
 
     def __str__(self):
         """Devuelve la representación legible de la denominación."""
-        return f"{self.moneda.codigo} {self.valor}"
+        return f"{self.moneda.codigo} {self.valor}"

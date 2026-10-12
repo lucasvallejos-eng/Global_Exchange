@@ -3,7 +3,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
@@ -196,7 +196,7 @@ def _borrar_cliente(request, cliente):
         JsonResponse: Respuesta vacía con código de estado HTTP 204 No Content.
     """
     cliente.delete()
-    return JsonResponse({}, status=204)
+    return HttpResponse(status=204)
 
 
 @login_required

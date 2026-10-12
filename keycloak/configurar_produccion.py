@@ -82,9 +82,21 @@ def main():
     if not respuesta.ok:
         sys.exit(f"Keycloak rechazó la configuración: {respuesta.status_code} {respuesta.text[:200]}")
 
+    # El administrador incluye a cajero y analista_cambiario (rol compuesto del
+    # realm-export). Un Keycloak creado antes de ese cambio no reimporta el
+    # realm, así que se asegura acá. Agregarlos de nuevo no cambia nada.
+    roles = f"{base}/admin/realms/{REALM}/clients/{client['id']}/roles"
+    incluidos = [requests.get(f"{roles}/{nombre}", headers=cabeceras, timeout=30).json()
+                 for nombre in ("analista_cambiario", "cajero")]
+    respuesta = requests.post(f"{roles}/administrador/composites", headers=cabeceras,
+                              json=incluidos, timeout=30)
+    if not respuesta.ok:
+        sys.exit(f"Keycloak rechazó el rol compuesto: {respuesta.status_code} {respuesta.text[:200]}")
+
     print(f"Client {CLIENT} configurado:")
     print(f"  vuelve a      {', '.join(client['redirectUris'])}")
     print(f"  secreto       el de KEYCLOAK_WEB_CLIENT_SECRET en {args.env_file}")
+    print("  administrador incluye analista_cambiario y cajero")
 
 
 if __name__ == "__main__":

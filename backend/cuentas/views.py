@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.views.defaults import permission_denied
 
 from clientes.models import Cliente
 
@@ -106,3 +107,22 @@ def inicio(request):
     """Página de inicio del backend (útil para depurar sin la maqueta)."""
     roles = list(request.user.groups.values_list("name", flat=True))
     return render(request, "inicio.html", {"roles": roles})
+
+
+def acceso_denegado(request, exception=None):
+    """Respuesta 403 (``handler403``) cuando se lanza ``PermissionDenied``.
+
+    En la API la maqueta necesita JSON para mostrar el modal "Acceso
+    denegado"; el ``codigo`` lo distingue de otros 403 (por ejemplo, un CSRF
+    vencido). Las páginas HTML de Django siguen con la página 403 de siempre.
+    """
+    if not request.path.startswith("/api/"):
+        return permission_denied(request, exception)
+    return JsonResponse(
+        {
+            "error": "No tenés permiso para realizar esta acción.",
+            "detalle": str(exception or ""),
+            "codigo": "acceso_denegado",
+        },
+        status=403,
+    )

@@ -23,6 +23,12 @@ export interface Operacion {
   comision: number;
   totalGuaranies: number;
   medioPago: string | null;
+  // Se cobró (o se está cobrando) con una tarjeta de Stripe.
+  pagoConTarjeta?: boolean;
+  // Solo si el banco pidió 3D Secure: ver completarPagoOperacion (pagosApi.ts).
+  pagoPendiente?: { clientSecret: string } | null;
+  // Si el usuario puede pagarla o cancelarla (está asociado al cliente).
+  puedeGestionar?: boolean;
   motivoCancelacion: string | null;
   // true si se canceló sola porque la cotización cambió antes del pago.
   canceladaPorCotizacion: boolean;

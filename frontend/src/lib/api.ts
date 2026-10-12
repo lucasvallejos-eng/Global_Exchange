@@ -21,6 +21,18 @@ export function headersConCsrf(): HeadersInit {
 }
 
 /**
+ * Evento que dispara la API cuando el backend rechaza un pedido por falta de
+ * rol (403 con codigo "acceso_denegado"). Lo escucha AccesoDenegadoModal, así
+ * el aviso es el mismo en cualquier módulo. Un 403 por CSRF vencido no trae
+ * ese código y no abre el modal.
+ */
+export const EVENTO_ACCESO_DENEGADO = "acceso-denegado";
+
+function avisarAccesoDenegado(detalle: string) {
+  window.dispatchEvent(new CustomEvent(EVENTO_ACCESO_DENEGADO, { detail: detalle }));
+}
+
+/**
  * Devuelve el JSON de la respuesta, o lanza un error con el mensaje del
  * backend. Las vistas mandan {"error": "..."} cuando falla una validación
  * (por ejemplo RN10), y ese texto es más útil que un código pelado.
@@ -28,6 +40,9 @@ export function headersConCsrf(): HeadersInit {
 export async function unwrap<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const detalle = await res.json().catch(() => null);
+    if (res.status === 403 && detalle?.codigo === "acceso_denegado") {
+      avisarAccesoDenegado(detalle.detalle ?? "");
+    }
     throw new Error(detalle?.error ?? `No se pudo completar la operación (${res.status}).`);
   }
   if (res.status === 204) return undefined as T;
@@ -38,13 +53,24 @@ export function get<T>(ruta: string): Promise<T> {
   return fetch(`${BACKEND}${ruta}`, { credentials: "include" }).then(unwrap<T>);
 }
 
+/**
+ * Evento para que la campanita se actualice ya, sin esperar su consulta
+ * periódica. Se dispara después de cada POST (compras, ventas, pagos...),
+ * que es cuando el backend puede haber creado una notificación.
+ */
+export const EVENTO_NOTIFICACIONES = "notificaciones-actualizar";
+
 export function post<T>(ruta: string, cuerpo: unknown): Promise<T> {
   return fetch(`${BACKEND}${ruta}`, {
     method: "POST",
     credentials: "include",
     headers: headersConCsrf(),
     body: JSON.stringify(cuerpo),
-  }).then(unwrap<T>);
+  })
+    .then(unwrap<T>)
+    .finally(() => {
+      if (!ruta.startsWith("/api/notificaciones/")) window.dispatchEvent(new Event(EVENTO_NOTIFICACIONES));
+    });
 }
 
 export function put<T>(ruta: string, cuerpo: unknown): Promise<T> {

@@ -10,6 +10,8 @@ export type MedioPago = {
   activo: boolean;
   usuario: string;
   detalle: Record<string, string>;
+  // Tarjeta cargada con Stripe: se puede cobrar con ella. null en los demás.
+  tarjeta: { marca: string; ultimos4: string; vencimiento: string } | null;
 };
 
 export type TipoMedioPago = { valor: string; texto: string; activo: boolean };
@@ -27,6 +29,7 @@ export type MedioPagoEntrada = {
 };
 
 export function etiquetaMedioPago(medio: MedioPago): string {
+  if (medio.tarjeta) return `${medio.alias} (${medio.tarjeta.marca} •••• ${medio.tarjeta.ultimos4})`;
   const numero = medio.detalle.numeroTarjeta;
   const identificador = numero ?? medio.detalle.numeroCuentaOrigen ?? medio.detalle.identificadorCuenta;
   const sufijo = identificador ? ` ${identificador.slice(-4)}` : "";

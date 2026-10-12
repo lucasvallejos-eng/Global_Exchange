@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   actualizarMoneda,
+  borrarMoneda,
   crearMoneda,
   listarMonedas,
   type Moneda,
 } from "../lib/monedasApi";
+import ConfirmacionModal from "./ConfirmacionModal";
 
 type CurrencyState = "Activo" | "Inactivo";
 
@@ -15,6 +17,7 @@ type CurrencyRow = {
   state: CurrencyState;
   buyRate: number;
   sellRate: number;
+  esLocal: boolean;
 };
 
 /** Pasa una moneda de la API a la fila que dibuja la tabla. */
@@ -26,6 +29,7 @@ function aFila(moneda: Moneda): CurrencyRow {
     state: moneda.activo ? "Activo" : "Inactivo",
     buyRate: moneda.precioCompra ?? 0,
     sellRate: moneda.precioVenta ?? 0,
+    esLocal: moneda.esLocal,
   };
 }
 
@@ -42,6 +46,8 @@ export default function MonedasModule() {
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false);
+  const [borrando, setBorrando] = useState(false);
 
   const selectedRow = useMemo(
     () => rows.find((row) => row.id === selectedId) ?? null,
@@ -78,6 +84,7 @@ export default function MonedasModule() {
     buyRate: "",
     sellRate: "",
     state: "Activo" as CurrencyState,
+    esLocal: false,
   });
 
   const openAddForm = () => {
@@ -88,6 +95,7 @@ export default function MonedasModule() {
       buyRate: "",
       sellRate: "",
       state: "Activo",
+      esLocal: false,
     });
     setShowForm(true);
   };
@@ -101,6 +109,7 @@ export default function MonedasModule() {
       buyRate: String(selectedRow.buyRate),
       sellRate: String(selectedRow.sellRate),
       state: selectedRow.state,
+      esLocal: selectedRow.esLocal,
     });
     setShowForm(true);
   };
@@ -117,8 +126,27 @@ export default function MonedasModule() {
     }
   };
 
+  // Si la moneda ya tiene operaciones, el backend no la deja borrar y explica
+  // que hay que desactivarla: ese mensaje es el que se muestra.
+  const handleEliminar = async () => {
+    if (!selectedRow) return;
+    setBorrando(true);
+    try {
+      await borrarMoneda(selectedRow.id);
+      setSelectedId(null);
+      await recargar();
+      avisar("Moneda eliminada.");
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudo eliminar la moneda.");
+    } finally {
+      setBorrando(false);
+      setConfirmarBorrado(false);
+    }
+  };
+
   const handleSave = async () => {
-    if (!formData.name || !formData.code || !formData.buyRate || !formData.sellRate) {
+    // La moneda local no tiene cotización: no se le piden precios.
+    if (!formData.name || !formData.code || (!formData.esLocal && (!formData.buyRate || !formData.sellRate))) {
       avisar("Completa todos los campos para continuar.");
       return;
     }
@@ -128,8 +156,9 @@ export default function MonedasModule() {
       codigo: formData.code,
       simbolo: formData.code,
       activo: formData.state === "Activo",
-      precioCompra: Number(formData.buyRate),
-      precioVenta: Number(formData.sellRate),
+      esLocal: formData.esLocal,
+      precioCompra: formData.esLocal ? null : Number(formData.buyRate),
+      precioVenta: formData.esLocal ? null : Number(formData.sellRate),
     };
 
     try {
@@ -173,6 +202,13 @@ export default function MonedasModule() {
               className="rounded-xl border border-[#dbe3ee] bg-white px-4 py-2.5 text-sm font-semibold text-[#374151] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Modificar Moneda
+            </button>
+            <button
+              onClick={() => setConfirmarBorrado(true)}
+              disabled={!selectedRow}
+              className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Eliminar Moneda
             </button>
           </div>
         </div>
@@ -219,18 +255,37 @@ export default function MonedasModule() {
                       {row.state}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-right font-medium text-[#0f172a]">
-                    {formatPyg(row.buyRate)} PYG
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium text-[#0f172a]">
-                    {formatPyg(row.sellRate)} PYG
-                  </td>
+                  {row.esLocal ? (
+                    <td colSpan={2} className="px-4 py-3 text-right text-sm text-[#64748b]">
+                      Moneda local · sin cotización (1 a 1)
+                    </td>
+                  ) : (
+                    <>
+                      <td className="px-4 py-3 text-right font-medium text-[#0f172a]">
+                        {formatPyg(row.buyRate)} PYG
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-[#0f172a]">
+                        {formatPyg(row.sellRate)} PYG
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {confirmarBorrado && selectedRow && (
+        <ConfirmacionModal
+          titulo={`¿Eliminar ${selectedRow.name} (${selectedRow.code})?`}
+          mensaje="También se borran sus cotizaciones y denominaciones. Si la moneda ya tiene operaciones registradas no se puede eliminar: en ese caso, desactivala."
+          textoConfirmar="Eliminar moneda"
+          procesando={borrando}
+          onConfirmar={() => void handleEliminar()}
+          onCancelar={() => setConfirmarBorrado(false)}
+        />
+      )}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
@@ -272,6 +327,22 @@ export default function MonedasModule() {
                 </select>
               </label>
 
+              <label className="flex items-start gap-3 rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={formData.esLocal}
+                  onChange={(event) => setFormData({ ...formData, esLocal: event.target.checked })}
+                  className="mt-1"
+                />
+                <span className="text-sm text-[#374151]">
+                  <span className="font-medium">Moneda local</span>
+                  <span className="block text-xs text-[#64748b]">
+                    El guaraní: vale 1 a 1, no tiene cotización y no se compra ni se vende. Se usa en la caja (apertura y cierre). Solo puede haber una.
+                  </span>
+                </span>
+              </label>
+
+              {!formData.esLocal && (<>
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-[#374151]">Tasa de Compra</span>
                 <input
@@ -293,6 +364,7 @@ export default function MonedasModule() {
                   placeholder="7700"
                 />
               </label>
+              </>)}
             </div>
 
             <div className="mt-6 flex justify-end gap-3">

@@ -64,6 +64,12 @@ class MedioPago(models.Model):
     numero_cuenta_o_tarjeta = models.CharField(max_length=50, blank=True, help_text="Número o alias/CBU codificado")
     banco_o_proveedor = models.CharField(max_length=100, blank=True, null=True)
     activo = models.BooleanField(default=True)
+    # Tarjetas cargadas con Stripe: el número y el CVV los guarda Stripe, acá
+    # solo el id del PaymentMethod (pm_...) para cobrar, y el vencimiento para
+    # mostrarlo. La marca va en banco_o_proveedor y los últimos 4 dígitos en
+    # numero_cuenta_o_tarjeta.
+    stripe_payment_method_id = models.CharField(max_length=255, blank=True)
+    tarjeta_vencimiento = models.CharField(max_length=5, blank=True, help_text="MM/YY")
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
