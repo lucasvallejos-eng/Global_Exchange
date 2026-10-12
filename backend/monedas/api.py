@@ -19,9 +19,9 @@ from django.views.decorators.http import require_http_methods
 from cotizaciones.models import Cotizacion, HistorialCotizacion
 from cuentas.decorators import rol_requerido
 
-from .models import Moneda
+from .models import Moneda, Denominacion
 
-# Quiénes administran monedas, igual que en las pantallas de Django.
+# Quiénes administran monedas y denominaciones, igual que en las pantallas de Django.
 GESTIONAN_MONEDAS = ("administrador", "analista_cambiario")
 
 
@@ -30,8 +30,26 @@ def _cotizacion_vigente(moneda):
     return moneda.cotizaciones.filter(activa=True).order_by("-fecha").first()
 
 
+def _denominacion_a_dict(denominacion):
+    """Serializa una denominación a diccionario JSON."""
+    return {
+        "id": denominacion.id,
+        "monedaId": denominacion.moneda_id,
+        "moneda_id": denominacion.moneda_id,
+        "monedaCodigo": denominacion.moneda.codigo,
+        "monedaNombre": denominacion.moneda.nombre,
+        "simbolo": denominacion.moneda.simbolo,
+        "valor": float(denominacion.valor),
+        "creadoEn": denominacion.creado_en.isoformat() if denominacion.creado_en else None,
+        "actualizadoEn": denominacion.actualizado_en.isoformat() if denominacion.actualizado_en else None,
+        "creado_en": denominacion.creado_en.isoformat() if denominacion.creado_en else None,
+        "actualizado_en": denominacion.actualizado_en.isoformat() if denominacion.actualizado_en else None,
+    }
+
+
 def _a_dict(moneda):
     cotizacion = _cotizacion_vigente(moneda)
+    denominaciones = list(moneda.denominaciones.all().order_by("valor"))
     return {
         "id": moneda.id,
         "codigo": moneda.codigo,
@@ -43,6 +61,7 @@ def _a_dict(moneda):
         "ultimaActualizacion": (
             moneda.fecha_actualizacion.isoformat() if cotizacion else None
         ),
+        "denominaciones": [_denominacion_a_dict(d) for d in denominaciones],
     }
 
 
@@ -103,7 +122,7 @@ def _guardar_cotizacion(moneda, compra, venta, administrador=None):
 @require_http_methods(["GET", "POST"])
 def monedas_lista(request):
     if request.method == "GET":
-        monedas = Moneda.objects.all().order_by("codigo")
+        monedas = Moneda.objects.all().prefetch_related("denominaciones").order_by("codigo")
         return JsonResponse([_a_dict(m) for m in monedas], safe=False)
     return _crear(request)
 
@@ -143,7 +162,7 @@ def _crear(request):
 @require_http_methods(["GET", "PATCH", "DELETE"])
 def monedas_detalle(request, pk):
     try:
-        moneda = Moneda.objects.get(pk=pk)
+        moneda = Moneda.objects.prefetch_related("denominaciones").get(pk=pk)
     except Moneda.DoesNotExist:
         return JsonResponse({"error": "No existe esa moneda."}, status=404)
 
@@ -182,3 +201,112 @@ def _actualizar(request, moneda):
 def _borrar(request, moneda):
     moneda.delete()
     return JsonResponse({}, status=204)
+
+
+# ==========================================
+# Endpoints de Denominaciones
+# ==========================================
+
+@require_http_methods(["GET", "POST"])
+def denominaciones_lista(request):
+    """Listado o creación de denominaciones."""
+    if request.method == "GET":
+        qs = Denominacion.objects.select_related("moneda").all()
+        moneda_id = request.GET.get("moneda_id") or request.GET.get("monedaId")
+        if moneda_id:
+            qs = qs.filter(moneda_id=moneda_id)
+        qs = qs.order_by("moneda__codigo", "valor")
+        return JsonResponse([_denominacion_a_dict(d) for d in qs], safe=False)
+    return _crear_denominacion(request)
+
+
+@rol_requerido(*GESTIONAN_MONEDAS)
+def _crear_denominacion(request):
+    datos = _cuerpo(request)
+    moneda_id = datos.get("moneda_id") or datos.get("monedaId") or datos.get("moneda")
+    raw_valor = datos.get("valor")
+
+    if moneda_id is None or str(moneda_id).strip() == "":
+        return JsonResponse({"error": "Debe seleccionar una moneda válida."}, status=400)
+
+    try:
+        moneda = Moneda.objects.get(pk=moneda_id)
+    except (Moneda.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({"error": "La moneda especificada no existe."}, status=404)
+
+    valor = _decimal(raw_valor)
+    if valor is None:
+        return JsonResponse({"error": "El valor nominal es obligatorio y debe ser un número."}, status=400)
+    if valor <= 0:
+        return JsonResponse({"error": "El valor nominal debe ser mayor a 0."}, status=400)
+
+    if Denominacion.objects.filter(moneda=moneda, valor=valor).exists():
+        return JsonResponse(
+            {"error": f"Ya existe la denominación {valor} para la moneda {moneda.codigo}."},
+            status=400,
+        )
+
+    denominacion = Denominacion(moneda=moneda, valor=valor)
+    try:
+        denominacion.full_clean()
+    except ValidationError as e:
+        return JsonResponse({"error": "; ".join(m for lista in e.message_dict.values() for m in lista)}, status=400)
+
+    denominacion.save()
+    return JsonResponse(_denominacion_a_dict(denominacion), status=201)
+
+
+@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
+def denominaciones_detalle(request, pk):
+    """Consulta, actualización o eliminación de una denominación."""
+    try:
+        denominacion = Denominacion.objects.select_related("moneda").get(pk=pk)
+    except Denominacion.DoesNotExist:
+        return JsonResponse({"error": "No existe esa denominación."}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(_denominacion_a_dict(denominacion))
+    if request.method in ("PUT", "PATCH"):
+        return _actualizar_denominacion(request, denominacion)
+    return _borrar_denominacion(request, denominacion)
+
+
+@rol_requerido(*GESTIONAN_MONEDAS)
+def _actualizar_denominacion(request, denominacion):
+    datos = _cuerpo(request)
+
+    if "moneda_id" in datos or "monedaId" in datos:
+        moneda_id = datos.get("moneda_id") or datos.get("monedaId")
+        try:
+            denominacion.moneda = Moneda.objects.get(pk=moneda_id)
+        except (Moneda.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"error": "La moneda especificada no existe."}, status=404)
+
+    if "valor" in datos:
+        valor = _decimal(datos.get("valor"))
+        if valor is None:
+            return JsonResponse({"error": "El valor nominal debe ser un número válido."}, status=400)
+        if valor <= 0:
+            return JsonResponse({"error": "El valor nominal debe ser mayor a 0."}, status=400)
+
+        if Denominacion.objects.filter(moneda=denominacion.moneda, valor=valor).exclude(pk=denominacion.pk).exists():
+            return JsonResponse(
+                {"error": f"Ya existe la denominación {valor} para la moneda {denominacion.moneda.codigo}."},
+                status=400,
+            )
+        denominacion.valor = valor
+
+    try:
+        denominacion.full_clean()
+    except ValidationError as e:
+        return JsonResponse({"error": "; ".join(m for lista in e.message_dict.values() for m in lista)}, status=400)
+
+    denominacion.save()
+    return JsonResponse(_denominacion_a_dict(denominacion))
+
+
+@rol_requerido(*GESTIONAN_MONEDAS)
+def _borrar_denominacion(request, denominacion):
+    denominacion.delete()
+    return JsonResponse({}, status=204)
+

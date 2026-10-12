@@ -42,8 +42,8 @@ def _bool_value(value):
 
 
 def _visibles_para(usuario):
-    if _administrador(usuario):
-        return MedioPago.objects.all()
+    if _administrador(usuario) or usuario.groups.filter(name="cajero").exists():
+        return MedioPago.objects.filter(activo=True)
     return MedioPago.objects.filter(usuario=usuario, tipo__in=_tipos_activos())
 
 

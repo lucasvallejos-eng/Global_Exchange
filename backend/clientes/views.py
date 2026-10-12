@@ -104,6 +104,20 @@ def _crear_cliente(request):
 
 
 @login_required
+@require_http_methods(["GET"])
+def cliente_tasa_preferencial(request, pk):
+    cliente = Cliente.objects.select_related("segmento").filter(pk=pk).first()
+    if cliente is None:
+        return JsonResponse({"detail": "No encontrado."}, status=404)
+    porcentaje = cliente.porcentaje_comision or 0
+    return JsonResponse({
+        "clienteId": cliente.id,
+        "categoria": cliente.segmento.nombre if cliente.segmento else None,
+        "porcentajePreferencial": str(porcentaje),
+    })
+
+
+@login_required
 @require_http_methods(["GET", "PATCH", "DELETE"])
 @csrf_protect
 def clientes_detalle(request, pk):
@@ -200,13 +214,14 @@ def usuarios_lista(request):
         nombre completo y email (200 OK).
     """
     User = get_user_model()
-    usuarios = User.objects.all().order_by("username")
+    usuarios = User.objects.prefetch_related("groups").all().order_by("username")
     data = [
         {
             "id": u.id,
             "username": u.username,
             "nombre": u.get_full_name() or u.username,
             "email": u.email,
+            "roles": list(u.groups.values_list("name", flat=True)),
         }
         for u in usuarios
     ]
