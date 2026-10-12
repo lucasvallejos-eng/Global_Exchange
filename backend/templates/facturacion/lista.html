@@ -1,0 +1,98 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Facturas electrónicas de las operaciones pagadas. Solo consulta: cada fila
+lleva al detalle, que es donde se descarga o se consulta el estado.
+{% endcomment %}
+
+{% block titulo_pagina %}Facturas — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <style>
+    .filtros { display: flex; gap: 12px; align-items: end; margin-bottom: 24px; }
+    .filtros .campo, .filtros .botonera { margin: 0; }
+    .etiqueta.simulada { background: #f1f5f9; color: var(--texto-suave); }
+    .etiqueta.enviada, .etiqueta.sin_confirmar { background: #fef3c7; color: #92400e; }
+    .etiqueta.error, .etiqueta.rechazada, .etiqueta.cancelada { background: #fee2e2; color: #991b1b; }
+    .etiqueta.aprobada { background: #dcfce7; color: var(--verde); }
+    .paginas { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 20px; font-size: 14px; }
+    .paginas a { color: var(--azul); font-weight: 600; text-decoration: none; }
+  </style>
+
+  <div class="cabecera">
+    <h1>Facturas</h1>
+  </div>
+
+  <p class="ayuda" style="margin:0 0 20px">
+    {% if emite %}
+      Las facturas se emiten de verdad en Factura Segura.
+      Quedan {{ numeros_libres }} número{{ numeros_libres|pluralize }} del rango asignado.
+    {% else %}
+      La emisión está apagada: las facturas quedan simuladas y no gastan números del rango asignado.
+    {% endif %}
+  </p>
+
+  <form method="get" class="filtros">
+    <div class="campo">
+      <label for="estado">Estado</label>
+      <select id="estado" name="estado">
+        <option value="">Todos</option>
+        {% for valor, nombre in estados %}
+          <option value="{{ valor }}" {% if estado == valor %}selected{% endif %}>{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="botonera">
+      <button type="submit" class="boton">Filtrar</button>
+      {% if estado %}<a class="boton secundario" href="{% url 'listar_facturas' %}">Limpiar</a>{% endif %}
+    </div>
+  </form>
+
+  {% if pagina.object_list %}
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Fecha</th>
+            <th>Cliente</th>
+            <th>Operación</th>
+            <th class="numero">Total PYG</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in pagina.object_list %}
+            <tr>
+              <td style="white-space:nowrap">{{ f.numero_completo }}</td>
+              <td style="white-space:nowrap">{{ f.fecha_creacion|date:"d/m/Y H:i" }}</td>
+              <td>{{ f.receptor_nombre }}</td>
+              <td><a href="{% url 'detalle_operacion' f.transaccion.pk %}">#{{ f.transaccion.pk }}</a> {{ f.transaccion.get_tipo_display }}</td>
+              <td class="numero">{{ f.total|floatformat:"0g" }}</td>
+              <td><span class="etiqueta {{ f.estado|lower }}">{{ f.get_estado_display }}</span></td>
+              <td class="acciones"><a href="{% url 'detalle_factura' f.pk %}">Ver</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pagina.has_other_pages %}
+      <div class="paginas">
+        {% if pagina.has_previous %}
+          <a href="?{% if estado %}estado={{ estado }}&amp;{% endif %}pagina={{ pagina.previous_page_number }}">← Anterior</a>
+        {% endif %}
+        <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        {% if pagina.has_next %}
+          <a href="?{% if estado %}estado={{ estado }}&amp;{% endif %}pagina={{ pagina.next_page_number }}">Siguiente →</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="ayuda">
+      Todavía no hay facturas{% if estado %} con ese estado{% endif %}.
+      Se genera una por cada operación pagada.
+    </p>
+  {% endif %}
+{% endblock %}

@@ -192,6 +192,34 @@ vencimiento. Ver ``docs/integracion-stripe.md``.
    :members:
 
 
+Facturación electrónica (Factura Segura)
+----------------------------------------
+
+Cada operación pagada genera su factura electrónica a nombre del **cliente**
+(no del usuario que la cargó). La emite y la firma Factura Segura, que es
+quien habla con el SIFEN de la DNIT; el sistema guarda el número, el CDC y el
+estado, y permite descargar el KuDE (PDF) y el XML firmado.
+
+La cátedra asignó pocos números de factura, así que por defecto **no se emite
+nada**: las facturas quedan simuladas hasta que se prende
+``FACTURA_SEGURA_EMITIR``. Ver ``docs/integracion-factura-segura.md``.
+
+.. automodule:: facturacion.models
+   :members:
+
+.. automodule:: facturacion.servicio
+   :members:
+
+.. automodule:: facturacion.senales
+   :members:
+
+.. automodule:: facturacion.api
+   :members:
+
+.. automodule:: facturacion.views
+   :members:
+
+
 Notificaciones
 --------------
 
