@@ -22,6 +22,7 @@ AAAA-MM-DD-tema-corto.md
 
 | Fecha | Archivo | Tema |
 |---|---|---|
+| 2026-10-19 | [recopilacion-antigravity-fpuna.md](recopilacion-antigravity-fpuna.md) | Recopilación completa de conversaciones de Lucas Vallejos con Google Antigravity (Gemini) — Cuenta FPUNA |
 | 2026-10-16 | [recopilacion-antigravity.md](recopilacion-antigravity.md) | Recopilación detallada de las conversaciones de Lucas Vallejos con Google Antigravity (Gemini) |
 | 2026-10-13 | [recopilacion-completa.md](recopilacion-completa.md) | Recopilación detallada de las conversaciones de Lucas Vallejos con Copilot CLI |
 | 2026-09-03 | [2026-09-03-hito4-preparacion.md](2026-09-03-hito4-preparacion.md) | Diagnóstico y correcciones para la entrega del Hito 4 |
