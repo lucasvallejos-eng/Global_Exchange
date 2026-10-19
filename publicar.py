@@ -19,8 +19,10 @@ PC se suspendió o se quedó sin internet un rato largo), los crea de nuevo.
 """
 import argparse
 import json
+import os
 import re
 import secrets
+import socket
 import subprocess
 import sys
 import time
@@ -161,6 +163,63 @@ def esperar_dns(url, espera=120):
     return False
 
 
+def python_con_requests():
+    """Python para scripts auxiliares: prioriza backend/.venv si tiene requests."""
+    candidatos = []
+    venv = RAIZ / "backend" / ".venv"
+    if os.name == "nt":
+        candidatos.append(venv / "Scripts" / "python.exe")
+    else:
+        candidatos.append(venv / "bin" / "python")
+    candidatos.append(Path(sys.executable))
+
+    for python in candidatos:
+        if not python.exists():
+            continue
+        prueba = subprocess.run([str(python), "-c", "import requests"], capture_output=True)
+        if prueba.returncode == 0:
+            return str(python)
+    sys.exit("[publicar] Falta 'requests' para configurar Keycloak. "
+             "Usá backend/.venv/Scripts/python publicar.py o instalá backend/requirements.txt.")
+
+
+def direcciones_dns_locales():
+    """Nombres e IPs de la máquina donde corre el script (sin duplicados)."""
+    candidatas = []
+    hostname = socket.gethostname().strip()
+    fqdn = socket.getfqdn().strip()
+    if hostname:
+        candidatas.append(hostname)
+    if fqdn and fqdn != hostname:
+        candidatas.append(fqdn)
+    for nombre in (hostname, fqdn):
+        if not nombre:
+            continue
+        try:
+            for _, _, _, _, sockaddr in socket.getaddrinfo(nombre, None, family=socket.AF_INET):
+                ip = sockaddr[0]
+                if ip and not ip.startswith("127."):
+                    candidatas.append(ip)
+        except socket.gaierror:
+            pass
+    try:
+        # Fuerza a elegir la interfaz de salida sin enviar tráfico real.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip_salida = s.getsockname()[0]
+            if ip_salida and not ip_salida.startswith("127."):
+                candidatas.append(ip_salida)
+    except OSError:
+        pass
+    vistas, unicas = set(), []
+    for valor in ["localhost", "127.0.0.1", *candidatas]:
+        normalizado = valor.lower()
+        if normalizado and normalizado not in vistas:
+            vistas.add(normalizado)
+            unicas.append(valor)
+    return unicas
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--demo", action="store_true", help="crea un usuario por rol y carga datos de ejemplo")
@@ -183,14 +242,16 @@ def main():
         compose("up", "-d", "--force-recreate", "tunel-app", "tunel-keycloak")
     url_app = direccion_tunel("tunel-app")
     url_kc = direccion_tunel("tunel-keycloak")
+    dns_locales = direcciones_dns_locales()
     log(f"Aplicación: {url_app}")
     log(f"Keycloak:   {url_kc}")
+    log("Servidor local detectado en: " + ", ".join(dns_locales))
 
     escribir_env({
         "URL_BACKEND": url_app,
         "URL_MAQUETA": f"{url_app}/app",
         "URL_KEYCLOAK": url_kc,
-        "DJANGO_ALLOWED_HOSTS": ".trycloudflare.com",
+        "DJANGO_ALLOWED_HOSTS": ",".join([".trycloudflare.com", *dns_locales]),
         "DJANGO_HTTPS": "1",
     })
     copiar_claves_stripe()
@@ -200,14 +261,15 @@ def main():
 
     env = leer_env()
     kc_local = f"http://127.0.0.1:{env.get('PUERTO_KEYCLOAK_LOCAL', '18080')}"
+    python_aux = python_con_requests()
     log("Esperando a Keycloak...")
     esperar(f"{kc_local}/realms/GlobalExchange")
 
-    subprocess.run([sys.executable, "keycloak/configurar_produccion.py", "--env-file", ".env.prod",
+    subprocess.run([python_aux, "keycloak/configurar_produccion.py", "--env-file", ".env.prod",
                     "--keycloak", kc_local], cwd=RAIZ, check=True)
 
     if args.demo:
-        subprocess.run([sys.executable, "keycloak/crear_usuarios_prueba.py", "--url", kc_local,
+        subprocess.run([python_aux, "keycloak/crear_usuarios_prueba.py", "--url", kc_local,
                         "--admin-user", env.get("KC_BOOTSTRAP_ADMIN_USERNAME", "admin"),
                         "--admin-password", env["KC_BOOTSTRAP_ADMIN_PASSWORD"]], cwd=RAIZ, check=True)
         cargado = subprocess.run(COMPOSE + ["exec", "-T", "backend", "python", "manage.py", "loaddata",
@@ -219,6 +281,9 @@ def main():
     if not (esperar_dns(url_app) and esperar_dns(url_kc)):
         log("Cloudflare todavía no publicó las direcciones; si el link no abre, esperá un minuto.")
 
+    puerto_backend = env.get("PUERTO_BACKEND", "8000")
+    accesos_locales = [f"http://{host}:{puerto_backend}" for host in dns_locales]
+
     print(f"""
 ==============================================================
   Global Exchange está en internet. Entrá (y compartí):
@@ -227,6 +292,7 @@ def main():
 
   Maqueta:   {url_app}/app/
   Keycloak:  {url_kc}   (admin: los datos están en .env.prod)
+  Servidor local: {", ".join(accesos_locales)}
 
   Para apagar:  {comando_python()} publicar.py --apagar
 ==============================================================""", flush=True)
