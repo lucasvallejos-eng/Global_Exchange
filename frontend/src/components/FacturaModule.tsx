@@ -98,11 +98,11 @@ export default function FacturaModule() {
         <div className="mb-5">
           <p className="text-sm font-medium text-[#64748b]">Facturación</p>
           <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">Facturas</h2>
-          {emision === "simulada" && (
-            <p className="mt-1 text-sm text-[#64748b]">
-              La emisión está apagada: las facturas quedan simuladas y no gastan números.
-            </p>
-          )}
+          <p className="mt-1 text-sm text-[#64748b]">
+            {emision === "simulada"
+              ? "La emisión está apagada: las facturas quedan simuladas y no gastan números."
+              : "La emisión está prendida: cada factura se emite cuando el administrador toca Emitir."}
+          </p>
           {error && <p className="mt-2 text-sm font-medium text-red-600">{error}</p>}
         </div>
 

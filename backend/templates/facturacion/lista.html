@@ -25,8 +25,8 @@ lleva al detalle, que es donde se descarga o se consulta el estado.
 
   <p class="ayuda" style="margin:0 0 20px">
     {% if emite %}
-      Las facturas se emiten de verdad en Factura Segura.
-      Quedan {{ numeros_libres }} número{{ numeros_libres|pluralize }} del rango asignado.
+      La emisión está prendida: cada factura se emite en Factura Segura cuando el
+      administrador toca "Emitir de verdad" en su detalle. Quedan {{ numeros_libres }} número{{ numeros_libres|pluralize }} del rango asignado.
     {% else %}
       La emisión está apagada: las facturas quedan simuladas y no gastan números del rango asignado.
     {% endif %}

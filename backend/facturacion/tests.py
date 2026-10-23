@@ -71,6 +71,10 @@ class BaseFacturacionTest(base.BaseOperacionesTest):
     def operaciones_pedidas(self):
         return [llamada.args[0] for llamada in self.pedir.call_args_list]
 
+    def emitida(self, origen=None):
+        """Lo que pasa en pantalla: el pago la deja simulada y el administrador la emite."""
+        return servicio.reintentar(servicio.facturar(origen or self.pagada()))
+
 
 class DigitoVerificadorTest(base.TestCase):
     def test_ruc_de_ejemplo_de_la_especificacion(self):
@@ -185,36 +189,45 @@ class SinGastarNumerosTest(BaseFacturacionTest):
 class EmisionTest(BaseFacturacionTest):
     """Con la emisión prendida."""
 
+    def test_un_pago_no_emite_solo(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            transaccion = self.pagada()
+        factura = transaccion.factura
+        self.assertEqual((factura.estado, factura.numero), (Factura.Estado.SIMULADA, None))
+        self.assertIn("Falta que el administrador la emita", factura.detalle)
+        self.assertEqual(self.operaciones_pedidas(), ["calcular_de"])
+
     def test_emite_con_el_primer_numero_del_rango(self):
-        factura = servicio.facturar(self.pagada())
+        factura = self.emitida()
         self.assertEqual(factura.estado, Factura.Estado.ENVIADA)
         self.assertEqual(factura.numero, 382)
         self.assertEqual(factura.numero_completo, "001-003-0000382")
         self.assertEqual(factura.cdc, CDC)
-        self.assertEqual(self.operaciones_pedidas(), ["calcular_de", "generar_de"])
+        # Se valida al pagar, y al emitir se vuelve a calcular y se genera.
+        self.assertEqual(self.operaciones_pedidas(), ["calcular_de", "calcular_de", "generar_de"])
         # A generar_de va el documento que devolvió calcular_de.
         self.assertEqual(self.pedir.call_args.args[1]["DE"]["dTotGralOpe"], "calculado")
 
     def test_cada_factura_toma_el_numero_siguiente(self):
-        numeros = [servicio.facturar(self.pagada()).numero for _ in range(3)]
+        numeros = [self.emitida().numero for _ in range(3)]
         self.assertEqual(numeros, [382, 383, 384])
 
-    def test_facturar_dos_veces_no_emite_dos_veces(self):
-        transaccion = self.pagada()
-        primera = servicio.facturar(transaccion)
-        segunda = servicio.facturar(transaccion)
-        self.assertEqual(primera.pk, segunda.pk)
+    def test_emitir_dos_veces_no_gasta_dos_numeros(self):
+        factura = self.emitida()
+        self.assertEqual(servicio.facturar(factura.transaccion).pk, factura.pk)
+        with self.assertRaises(FacturaInvalida):
+            servicio.reintentar(factura)
         self.assertEqual(self.operaciones_pedidas().count("generar_de"), 1)
 
     def test_si_factura_segura_dice_que_no_el_numero_queda_libre(self):
         self.pedir.side_effect = ErrorFacturaSegura("El valor del campo iTiOpe no es permitido")
-        fallida = servicio.facturar(self.pagada())
+        fallida = self.emitida()
         self.assertEqual(fallida.estado, Factura.Estado.ERROR)
         self.assertIsNone(fallida.numero)
         self.assertIn("iTiOpe", fallida.detalle)
 
         self.pedir.side_effect = respuesta_de_factura_segura
-        self.assertEqual(servicio.facturar(self.pagada()).numero, 382)
+        self.assertEqual(self.emitida().numero, 382)
 
     def test_si_no_hay_respuesta_al_generar_conserva_el_numero(self):
         def se_corta_al_generar(operation, params):
@@ -223,12 +236,14 @@ class EmisionTest(BaseFacturacionTest):
             return respuesta_de_factura_segura(operation, params)
 
         self.pedir.side_effect = se_corta_al_generar
-        factura = servicio.facturar(self.pagada())
+        factura = self.emitida()
         self.assertEqual(factura.estado, Factura.Estado.SIN_CONFIRMAR)
         self.assertEqual(factura.numero, 382)
         # Otra factura no le saca el número...
         self.pedir.side_effect = respuesta_de_factura_segura
-        self.assertEqual(servicio.facturar(self.pagada()).numero, 383)
+        self.assertEqual(self.emitida().numero, 383)
+        # ...un segundo aviso de pago no la toca...
+        self.assertEqual(servicio.facturar(factura.transaccion).estado, Factura.Estado.SIN_CONFIRMAR)
         # ...y el reintento manda el mismo.
         reintentada = servicio.reintentar(factura)
         self.assertEqual((reintentada.numero, reintentada.estado), (382, Factura.Estado.ENVIADA))
@@ -241,7 +256,7 @@ class EmisionTest(BaseFacturacionTest):
             return respuesta_de_factura_segura(operation, params)
 
         self.pedir.side_effect = se_corta_al_generar
-        factura = servicio.facturar(self.pagada())
+        factura = self.emitida()
         self.pedir.side_effect = respuesta_de_factura_segura
         return factura
 
@@ -261,7 +276,7 @@ class EmisionTest(BaseFacturacionTest):
         self.assertIn("ya existe", reintentada.detalle)
 
         self.pedir.side_effect = respuesta_de_factura_segura
-        self.assertEqual(servicio.facturar(self.pagada()).numero, 383)
+        self.assertEqual(self.emitida().numero, 383)
 
     def test_una_sin_confirmar_no_se_vuelve_simulada_con_la_emision_apagada(self):
         factura = self.sin_confirmar()
@@ -274,22 +289,23 @@ class EmisionTest(BaseFacturacionTest):
 
     def test_si_se_corta_al_calcular_no_queda_nada_sin_confirmar(self):
         self.pedir.side_effect = SinConfirmar("No hubo respuesta de Factura Segura.")
-        factura = servicio.facturar(self.pagada())
+        factura = self.emitida()
         self.assertEqual(factura.estado, Factura.Estado.ERROR)
         self.assertIsNone(factura.numero)
 
     def test_cuando_se_acaban_los_numeros_no_se_emite(self):
         with override_settings(FACTURA_SEGURA_NUMERACION={**NUMERACION, "factura_hasta": 382}):
-            servicio.facturar(self.pagada())
-            self.pedir.reset_mock()
+            self.emitida()
             factura = servicio.facturar(self.pagada())
+            self.pedir.reset_mock()
+            factura = servicio.reintentar(factura)
         self.assertEqual(factura.estado, Factura.Estado.ERROR)
         self.assertIn("Se acabaron los números", factura.detalle)
         self.pedir.assert_not_called()
 
     def test_sin_datos_del_emisor_no_se_llama_a_factura_segura(self):
         with override_settings(FACTURA_SEGURA_EMISOR={**EMISOR, "ruc": ""}):
-            factura = servicio.facturar(self.pagada())
+            factura = self.emitida()
         self.assertEqual(factura.estado, Factura.Estado.ERROR)
         self.assertIn("ruc", factura.detalle)
         self.assertIsNone(factura.numero)
@@ -311,7 +327,7 @@ class EstadoSifenTest(BaseFacturacionTest):
 
     def setUp(self):
         super().setUp()
-        self.factura = servicio.facturar(self.pagada())
+        self.factura = self.emitida()
 
     def consultar(self, **estado):
         self.pedir.side_effect = None

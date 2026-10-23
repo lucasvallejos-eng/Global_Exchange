@@ -14,8 +14,11 @@ que por defecto **no se emite nada**. Hay tres modos, según la configuración
 - **Con token y ``FACTURA_SEGURA_EMITIR`` apagado:** se valida el documento
   con ``calcular_de``, que no genera nada ni gasta números, y la factura
   queda ``SIMULADA``.
-- **Con token y ``FACTURA_SEGURA_EMITIR`` prendido:** se reserva un número
-  del rango y se emite de verdad con ``generar_de``.
+- **Con token y ``FACTURA_SEGURA_EMITIR`` prendido:** la factura de cada
+  operación pagada igual queda ``SIMULADA`` (validada); se emite de verdad
+  con ``generar_de``, reservando un número del rango, **solo cuando el
+  administrador la emite a pedido** (``reintentar``). Así ningún pago gasta
+  un número sin que nadie lo decida.
 
 Qué se factura (supuestos a confirmar con la cátedra):
 
@@ -447,6 +450,10 @@ def _siguiente_numero():
 def facturar(origen):
     """Genera la factura de una operación pagada. Se puede llamar más de una vez.
 
+    **Nunca emite de verdad**, aunque la emisión esté prendida: la deja
+    simulada (validada, si hay token) y el administrador la emite a pedido con
+    ``reintentar``.
+
     Nunca lanza una excepción por un problema con la factura: la operación ya
     está pagada y eso no la puede deshacer. Lo que haya pasado queda en el
     ``estado`` y el ``detalle`` de la factura, y se puede reintentar.
@@ -465,15 +472,17 @@ def facturar(origen):
     factura = Factura.objects.filter(**{campo: origen}).first()
     if factura is None:
         factura = Factura(**{campo: origen}, cliente=origen.cliente)
-    elif not factura.se_puede_reintentar:
+    elif not factura.se_puede_reintentar or factura.estado == Factura.Estado.SIN_CONFIRMAR:
+        # Una sin confirmar pudo haberse emitido: solo se toca a pedido.
         return factura
-    return _emitir(factura)
+    return _emitir(factura, de_verdad=False)
 
 
 def reintentar(factura):
     """Vuelve a emitir una factura que falló (por ejemplo, después de cargarle
     el RUC al cliente), o emite una simulada cuando la emisión está prendida.
-    Reusa el número que ya tenía reservado, si tenía.
+    Es la única forma de emitir de verdad. Reusa el número que ya tenía
+    reservado, si tenía.
 
     Raises:
         FacturaInvalida: si la factura no está en un estado que se pueda reintentar.
@@ -482,7 +491,7 @@ def reintentar(factura):
         raise FacturaInvalida(
             f"La factura está {factura.get_estado_display().lower()}: no hay nada que reintentar."
         )
-    return _emitir(factura)
+    return _emitir(factura, de_verdad=emite())
 
 
 def se_puede_emitir(factura):
@@ -494,7 +503,7 @@ def se_puede_emitir(factura):
     )
 
 
-def _emitir(factura):
+def _emitir(factura, de_verdad):
     # Una factura sin confirmar pudo haberse emitido: su número puede estar
     # gastado. No se suelta ni se la vuelve simulada hasta saber qué pasó.
     venia_sin_confirmar = factura.estado == Factura.Estado.SIN_CONFIRMAR
@@ -505,7 +514,7 @@ def _emitir(factura):
     factura.total = operacion.total
     factura.cdc = ""
     try:
-        if emite():
+        if de_verdad:
             _emitir_de_verdad(factura, operacion)
         elif venia_sin_confirmar:
             raise FacturaInvalida("La emisión está apagada: no se puede confirmar esta factura.")
@@ -534,7 +543,11 @@ def _simular(factura, operacion):
     if habilitado():
         _validar_configuracion()
         de = _calcular(de)
-        factura.detalle = "Validada por Factura Segura. No se emitió: la emisión está apagada."
+        factura.detalle = (
+            "Validada por Factura Segura. Falta que el administrador la emita."
+            if emite()
+            else "Validada por Factura Segura. No se emitió: la emisión está apagada."
+        )
     else:
         factura.detalle = "No se emitió: Factura Segura no está configurado."
     factura.de = de
