@@ -223,8 +223,15 @@ class TransaccionConFacturaEmitidaTest(BaseTransaccionCompleta):
     def test_de_la_compra_al_kude_aprobado(self):
         self.comprar()
 
-        # La factura se emitió con el primer número del rango.
+        # El pago la deja validada, sin gastar número: el cliente no la puede emitir.
         factura = self.client.get(reverse("api_facturas")).json()["facturas"][0]
+        self.assertEqual((factura["estado"], factura["numero"]), ("SIMULADA", "Sin número"))
+        self.assertFalse(factura["sePuedeEmitir"])
+
+        # La emite el administrador, con el primer número del rango.
+        self.entrar(self.admin)
+        self.assertTrue(self.client.get(reverse("api_facturas")).json()["facturas"][0]["sePuedeEmitir"])
+        factura = self.post("api_facturas_reintentar", kwargs={"pk": factura["id"]}).json()
         self.assertEqual(factura["numero"], "001-003-0000382")
         self.assertEqual(factura["estado"], "ENVIADA")
         self.assertEqual(factura["cdc"], CDC)
@@ -236,7 +243,7 @@ class TransaccionConFacturaEmitidaTest(BaseTransaccionCompleta):
         aprobada = self.post("api_facturas_actualizar", kwargs={"pk": factura["id"]}).json()
         self.assertEqual(aprobada["estado"], "APROBADA")
 
-        # El cliente descarga el KuDE y el XML.
+        # Se descargan el KuDE y el XML.
         with patch("facturacion.servicio._bajar", return_value=b"%PDF-1.4"):
             pdf = self.client.get(reverse("api_facturas_descargar", args=[factura["id"], "kude"]))
             xml = self.client.get(reverse("api_facturas_descargar", args=[factura["id"], "xml"]))

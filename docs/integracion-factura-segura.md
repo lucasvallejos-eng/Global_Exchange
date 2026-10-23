@@ -23,7 +23,7 @@ Cada factura emitida gasta un número. Por eso **por defecto no se emite nada**:
 |---|---|
 | Sin token | La factura queda **simulada**. No se llama a Factura Segura. |
 | Con token, `FACTURA_SEGURA_EMITIR=0` | Se **valida** con `calcular_de` (no genera nada ni gasta números) y queda simulada. |
-| Con token, `FACTURA_SEGURA_EMITIR=1` | Se reserva un número del rango y se **emite de verdad** con `generar_de`. |
+| Con token, `FACTURA_SEGURA_EMITIR=1` | Al pagar, igual queda simulada (validada). Recién cuando el **administrador** toca "Emitir" se reserva un número del rango y se **emite de verdad** con `generar_de`. |
 
 Los tests nunca emiten ni salen a la red: `config/settings.py` apaga el token
 y la emisión cuando se corre `manage.py test`.
@@ -83,9 +83,11 @@ operación.
    caminos) o una compra o venta de la caja. La señal `facturacion.senales`
    llama a `servicio.facturar` después del `commit`.
 2. Se arma el documento resumido (`armar_de`) y se completa con `calcular_de`.
-3. Si la emisión está prendida, se reserva el número y se manda `generar_de`.
-   Factura Segura devuelve el **CDC** (44 dígitos) y la factura queda
-   **enviada**.
+   La factura queda **simulada**, aunque la emisión esté prendida: un pago
+   nunca gasta un número por su cuenta.
+3. Con la emisión prendida, el **administrador** toca "Emitir" en la factura:
+   se reserva el número y se manda `generar_de`. Factura Segura devuelve el
+   **CDC** (44 dígitos) y la factura queda **enviada**.
 4. Un minuto después se consulta `get_estado_sifen` (botón "Consultar
    estado"): **aprobada**, **rechazada** o todavía en proceso.
 5. Con CDC se descargan el **KuDE** (PDF) y el **XML** firmado. El backend los
@@ -107,8 +109,8 @@ estado y el detalle de la factura.
 | Cancelada | Se canceló o inutilizó en el SIFEN | Usado |
 
 **Reintentar** vuelve a mandar las que fallaron, con el mismo número si ya
-tenían uno. Las simuladas no se emiten solas al prender la emisión: hay que
-pedirlo con el botón "Emitir", una por una.
+tenían uno. Las simuladas nunca se emiten solas, ni al pagar ni al prender
+la emisión: hay que pedirlo con el botón "Emitir", una por una.
 
 Una factura **sin confirmar** no suelta su número aunque el reintento reciba
 un "no" (por ejemplo, "el documento ya existe": la primera vez sí se había
