@@ -111,6 +111,14 @@ def python_del_proyecto(raiz):
 
 
 def main():
+    # 0. Verificación mandatoria de credenciales.rar
+    raiz_posible = AQUI if (AQUI / ".git").exists() else AQUI / "Global_Exchange"
+    if not (AQUI / "credenciales.rar").exists() and not (raiz_posible / "credenciales.rar").exists():
+        sys.exit(
+            "[desplegar] ERROR: No se encontró el archivo 'credenciales.rar'. "
+            "El programa presentará problemas si no se tiene el archivo de credenciales.rar."
+        )
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--ambiente", required=True, choices=["desarrollo", "produccion"])
     parser.add_argument("--tag", help="versión a desplegar (por ejemplo v5.0); por defecto, la que esté")

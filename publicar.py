@@ -33,6 +33,13 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent
 ENV = RAIZ / ".env.prod"
 EJEMPLO = RAIZ / ".env.prod.example"
+
+try:
+    from inyectar_credenciales import inyectar_credenciales
+except ImportError:
+    sys.path.insert(0, str(RAIZ))
+    from inyectar_credenciales import inyectar_credenciales
+
 COMPOSE = ["docker", "compose", "-f", "docker-compose.prod.yml",
            "-f", "docker-compose.publico.yml", "--env-file", ".env.prod"]
 PATRON_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
@@ -221,6 +228,13 @@ def direcciones_dns_locales():
 
 
 def main():
+    # 0. Verificación mandatoria de credenciales.rar
+    if not (RAIZ / "credenciales.rar").exists():
+        sys.exit(
+            "[publicar] ERROR: No se encontró el archivo 'credenciales.rar' en la raíz del proyecto. "
+            "El programa presentará problemas si no se tiene el archivo de credenciales.rar."
+        )
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--demo", action="store_true", help="crea un usuario por rol y carga datos de ejemplo")
     parser.add_argument("--apagar", action="store_true", help="baja todo (los datos quedan)")
@@ -254,6 +268,7 @@ def main():
         "DJANGO_ALLOWED_HOSTS": ",".join([".trycloudflare.com", *dns_locales]),
         "DJANGO_HTTPS": "1",
     })
+    inyectar_credenciales(RAIZ, log_fn=log, archivo_prod=ENV)
     copiar_claves_stripe()
 
     log("Levantando el sistema (la primera vez tarda unos minutos)...")

@@ -8,6 +8,13 @@ build/
 !.env.prod.example
 !.env.stripe.example
 !.env.facturasegura.example
+
+# Credenciales confidenciales (no se suben al repositorio)
+credenciales.rar
+credenciales.zip
+credenciales.txt
+credenciales.text
+/text
 .venv/
 **/.venv/
 __pycache__/
