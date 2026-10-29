@@ -45,10 +45,13 @@ def descomprimir_credenciales_zip(raiz: Path, log_fn=print) -> bool:
                 log_fn(f"[credenciales] ERROR al extraer el ZIP '{ruta_rar.name}': {e}.")
                 return False
         # RAR no está soportado por las herramientas estándar de Python. Priorizar
-        # 7-Zip/UnRAR (comunes en Windows) y dejar tar como alternativa compatible.
+        # 7-Zip/UnRAR. En Windows, usar el tar del sistema antes que el de Git Bash:
+        # GNU tar interpreta una ruta C:\\... como un host remoto ("C:").
         extractor_7z = shutil.which("7z") or shutil.which("7zz")
         extractor_unrar = shutil.which("unrar")
-        extractor_tar = shutil.which("tar")
+        tar_sistema = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "tar.exe"
+        extractor_tar = (str(tar_sistema) if os.name == "nt" and tar_sistema.exists()
+                         else shutil.which("tar"))
         if extractor_7z:
             comando = [extractor_7z, "x", "-y", f"-o{raiz}", str(ruta_rar)]
         elif extractor_unrar:
@@ -98,6 +101,12 @@ def buscar_archivo_credenciales(raiz: Path) -> Path | None:
         ruta = raiz / nombre
         if ruta.exists():
             return ruta
+    # El RAR distribuido guarda el archivo bajo credenciales/credenciales/.
+    # Buscar en subdirectorios permite usar esa estructura sin mover el archivo.
+    for nombre in ("credenciales.txt", "text", "credenciales.text"):
+        coincidencias = sorted(raiz.glob(f"**/{nombre}"))
+        if coincidencias:
+            return coincidencias[0]
     return None
 
 
