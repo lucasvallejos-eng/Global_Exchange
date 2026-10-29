@@ -7,6 +7,7 @@ etc.) lo agregan las demás historias del equipo.
 """
 from pathlib import Path
 import os
+import sys
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
@@ -17,6 +18,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 # Claves de Stripe aparte: levantar_todo.py regenera .env y las borraría.
 load_dotenv(BASE_DIR / ".env.stripe")
+# Lo mismo para Factura Segura (facturación electrónica).
+load_dotenv(BASE_DIR / ".env.facturasegura")
 
 
 def _bool(valor: str, por_defecto: bool = False) -> bool:
@@ -72,6 +75,10 @@ INSTALLED_APPS = [
     "pagos",
     # Notificaciones de la campanita (operaciones y cotizaciones).
     "notificaciones",
+    # Facturación electrónica (Factura Segura / SIFEN).
+    "facturacion",
+    # Reportes de transacciones y ganancias (solo lectura, sin modelos).
+    "reportes",
 ]
 
 MIDDLEWARE = [
@@ -219,3 +226,45 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # quedan deshabilitados y el resto del sistema funciona igual.
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+
+
+# --- Factura Segura (facturación electrónica) --------------------------------
+# En backend/.env.facturasegura (ver .env.facturasegura.example). Sin token no
+# se llama a Factura Segura, y sin FACTURA_SEGURA_EMITIR no se emite ninguna
+# factura: quedan simuladas. La cátedra asignó pocos números, así que emitir
+# es algo que se prende a propósito.
+FACTURA_SEGURA_URL = os.environ.get("FACTURA_SEGURA_URL", "https://apitest.facturasegura.com.py")
+FACTURA_SEGURA_TOKEN = os.environ.get("FACTURA_SEGURA_TOKEN", "")
+FACTURA_SEGURA_EMITIR = _bool(os.environ.get("FACTURA_SEGURA_EMITIR"))
+# Los tests no pueden gastar números ni salir a la red, tenga lo que tenga el
+# .env de quien los corre.
+if "test" in sys.argv:
+    FACTURA_SEGURA_TOKEN = ""
+    FACTURA_SEGURA_EMITIR = False
+
+FACTURA_SEGURA_EMISOR = {
+    "ruc": os.environ.get("FACTURA_SEGURA_EMISOR_RUC", ""),
+    "dv": os.environ.get("FACTURA_SEGURA_EMISOR_DV", ""),
+    # iTipCont: 1 = persona física, 2 = persona jurídica.
+    "tipo_contribuyente": os.environ.get("FACTURA_SEGURA_EMISOR_TIPO_CONTRIBUYENTE", "2"),
+    "nombre": os.environ.get("FACTURA_SEGURA_EMISOR_NOMBRE", ""),
+    "direccion": os.environ.get("FACTURA_SEGURA_EMISOR_DIRECCION", ""),
+    "numero_casa": os.environ.get("FACTURA_SEGURA_EMISOR_NUMERO_CASA", "0"),
+    "departamento_codigo": os.environ.get("FACTURA_SEGURA_EMISOR_DEPARTAMENTO_CODIGO", "1"),
+    "departamento": os.environ.get("FACTURA_SEGURA_EMISOR_DEPARTAMENTO", "CAPITAL"),
+    "ciudad_codigo": os.environ.get("FACTURA_SEGURA_EMISOR_CIUDAD_CODIGO", "1"),
+    "ciudad": os.environ.get("FACTURA_SEGURA_EMISOR_CIUDAD", "ASUNCION (DISTRITO)"),
+    "telefono": os.environ.get("FACTURA_SEGURA_EMISOR_TELEFONO", ""),
+    "email": os.environ.get("FACTURA_SEGURA_EMISOR_EMAIL", ""),
+    "actividad_codigo": os.environ.get("FACTURA_SEGURA_EMISOR_ACTIVIDAD_CODIGO", ""),
+    "actividad": os.environ.get("FACTURA_SEGURA_EMISOR_ACTIVIDAD", ""),
+}
+# Rango de facturas que la cátedra le asignó al equipo: 001-003-0000382 a 0000393.
+FACTURA_SEGURA_NUMERACION = {
+    "timbrado": os.environ.get("FACTURA_SEGURA_TIMBRADO", ""),
+    "timbrado_inicio": os.environ.get("FACTURA_SEGURA_TIMBRADO_INICIO", ""),
+    "establecimiento": os.environ.get("FACTURA_SEGURA_ESTABLECIMIENTO", "001"),
+    "punto_expedicion": os.environ.get("FACTURA_SEGURA_PUNTO_EXPEDICION", "003"),
+    "factura_desde": int(os.environ.get("FACTURA_SEGURA_FACTURA_DESDE", "382")),
+    "factura_hasta": int(os.environ.get("FACTURA_SEGURA_FACTURA_HASTA", "393")),
+}

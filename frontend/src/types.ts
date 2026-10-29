@@ -39,6 +39,9 @@ export interface Client {
   direccion: string;
   cuentaAcreditar: string;
   correo: string;
+  // RUC con dígito verificador (1234567-8) o cédula: a nombre de quién sale
+  // la factura electrónica. Opcional.
+  ruc?: string;
   usuarios: number[];
   // Lo calcula el backend a partir del segmento; solo se muestra.
   porcentajeComision?: string | null;

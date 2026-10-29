@@ -22,7 +22,11 @@ AAAA-MM-DD-tema-corto.md
 
 | Fecha | Archivo | Tema |
 |---|---|---|
+| 2026-10-19 | [recopilacion-antigravity-fpuna.md](recopilacion-antigravity-fpuna.md) | Recopilación completa de conversaciones de Lucas Vallejos con Google Antigravity (Gemini) — Cuenta FPUNA |
+| 2026-10-16 | [recopilacion-antigravity.md](recopilacion-antigravity.md) | Recopilación detallada de las conversaciones de Lucas Vallejos con Google Antigravity (Gemini) |
+| 2026-10-13 | [recopilacion-completa.md](recopilacion-completa.md) | Recopilación detallada de las conversaciones de Lucas Vallejos con Copilot CLI |
 | 2026-09-03 | [2026-09-03-hito4-preparacion.md](2026-09-03-hito4-preparacion.md) | Diagnóstico y correcciones para la entrega del Hito 4 |
 | 2026-10-02 | [2026-10-02-hito5-operaciones.md](2026-10-02-hito5-operaciones.md) | Operaciones de compra/venta, cancelación, historial y producción (Hito 5) |
 | 2026-10-02 | [2026-10-02-fixes-pre-tag.md](2026-10-02-fixes-pre-tag.md) | Arranque con un solo botón (`levantar_todo.py`) y correcciones de la maqueta antes del tag (IS2GE-110) |
 | 2026-10-12 | [2026-10-12-integracion-stripe.md](2026-10-12-integracion-stripe.md) | Revisión de IS2GE-105, correcciones de permisos e integración con Stripe (IS2GE-98) |
+| 2026-10-12 | [2026-10-12-facturacion-y-reportes.md](2026-10-12-facturacion-y-reportes.md) | Facturación electrónica con Factura Segura (Hito 7), reportes y tablero de ganancias (Hito 8) |

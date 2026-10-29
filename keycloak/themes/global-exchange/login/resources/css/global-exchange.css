@@ -1,0 +1,265 @@
+/* Inicio de sesión de Global Exchange.
+ *
+ * Mismos colores y formas que la maqueta (frontend/): fondo gris azulado,
+ * tarjeta blanca redondeada y azul #1a7eff. Se carga después de la hoja de
+ * Keycloak (keycloak.v2, PatternFly 5), así que solo pisa el aspecto.
+ */
+
+:root {
+  --ge-azul: #1a7eff;
+  --ge-azul-oscuro: #1565d8;
+  --ge-fondo: #f0f4f8;
+  --ge-texto: #1a202c;
+  --ge-texto-suave: #718096;
+  --ge-borde: #e2e8f0;
+
+  /* PatternFly toma de acá los enlaces y el botón principal. */
+  --pf-v5-global--primary-color--100: var(--ge-azul);
+  --pf-v5-global--primary-color--200: var(--ge-azul-oscuro);
+  --pf-v5-global--link--Color: var(--ge-azul);
+  --pf-v5-global--link--Color--hover: var(--ge-azul-oscuro);
+  --pf-v5-global--FontFamily--text: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --pf-v5-global--FontFamily--heading: var(--pf-v5-global--FontFamily--text);
+}
+
+html,
+body#keycloak-bg,
+.pf-v5-c-login {
+  background: var(--ge-fondo);
+  color: var(--ge-texto);
+  font-family: var(--pf-v5-global--FontFamily--text);
+}
+
+.pf-v5-c-login {
+  min-height: 100vh;
+  padding: 2.5rem 1rem;
+}
+
+.pf-v5-c-login__container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 28rem;
+  min-height: calc(100vh - 5rem);
+  margin: 0 auto;
+  padding: 0;
+}
+
+/* --- Marca: círculo azul con el signo y el nombre ------------------------- */
+
+#kc-header {
+  min-height: 0;
+  padding: 0 0 2rem;
+  line-height: 1;
+  text-align: center;
+}
+
+/* El tema de Keycloak pone la marca en blanco (va sobre un fondo oscuro). */
+.pf-v5-c-login #kc-header-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0;
+  color: var(--ge-azul) !important;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+#kc-header-wrapper::before {
+  content: "$";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: var(--ge-azul);
+  color: #fff;
+  font-size: 1.125rem;
+  letter-spacing: 0;
+  box-shadow: 0 10px 15px -3px rgba(26, 126, 255, 0.35);
+}
+
+/* --- Tarjeta --------------------------------------------------------------- */
+
+.pf-v5-c-login__main {
+  width: 100%;
+  margin: 0;
+  background: #fff;
+  border: 1px solid var(--ge-borde);
+  border-radius: 1rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.pf-v5-c-login__main-header {
+  padding: 2rem 2rem 0.5rem;
+  border: 0;
+}
+
+.pf-v5-c-login__main-body {
+  padding: 1rem 2rem 2rem;
+}
+
+#kc-page-title {
+  color: var(--ge-texto);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+/* --- Campos ---------------------------------------------------------------- */
+
+.pf-v5-c-form__label-text {
+  color: #374151;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--BackgroundColor: #fff;
+  border-radius: 0.5rem;
+}
+
+/* PatternFly dibuja el borde con ::before y la línea de abajo con ::after. */
+.pf-v5-c-form-control::before {
+  border: 1px solid var(--ge-borde);
+  border-radius: 0.5rem;
+}
+
+.pf-v5-c-form-control::after {
+  border: 0;
+}
+
+.pf-v5-c-form-control:focus-within::before {
+  border-color: var(--ge-azul);
+  box-shadow: 0 0 0 2px rgba(26, 126, 255, 0.25);
+}
+
+.pf-v5-c-form-control > input,
+.pf-v5-c-form-control > select {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.pf-v5-c-form-control > input[aria-invalid="true"] ~ *,
+.pf-v5-c-form-control.pf-m-error::before {
+  border-color: #ef4444;
+}
+
+/* Contraseña con el botón de mostrar: un solo campo redondeado. */
+.pf-v5-c-input-group {
+  gap: 0.5rem;
+}
+
+.pf-v5-c-button.pf-m-control {
+  --pf-v5-c-button--BorderRadius: 0.5rem;
+  --pf-v5-c-button--after--BorderColor: var(--ge-borde);
+  --pf-v5-c-button--after--BorderWidth: 1px;
+  color: #9ca3af;
+  border-radius: 0.5rem;
+}
+
+.pf-v5-c-button.pf-m-control::after {
+  border: 1px solid var(--ge-borde);
+  border-radius: 0.5rem;
+}
+
+.pf-v5-c-button.pf-m-control:hover {
+  color: #6b7280;
+}
+
+.pf-v5-c-check__label {
+  color: #4b5563;
+  font-size: 0.875rem;
+}
+
+.pf-v5-c-check__input {
+  accent-color: var(--ge-azul);
+}
+
+/* --- Botones y enlaces ----------------------------------------------------- */
+
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--ge-azul);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--ge-azul-oscuro);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--ge-azul-oscuro);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--ge-azul-oscuro);
+  --pf-v5-c-button--BorderRadius: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+.pf-v5-c-button.pf-m-secondary,
+.pf-v5-c-button.pf-m-link {
+  --pf-v5-c-button--BorderRadius: 0.5rem;
+  border-radius: 0.5rem;
+}
+
+a,
+.pf-v5-c-button.pf-m-link {
+  color: var(--ge-azul);
+}
+
+a:hover {
+  color: var(--ge-azul-oscuro);
+}
+
+.pf-v5-c-helper-text__item-text a {
+  font-size: 0.8125rem;
+}
+
+/* --- Pie de la tarjeta (registro) y avisos --------------------------------- */
+
+.pf-v5-c-login__main-footer {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.pf-v5-c-login__main-footer:empty {
+  display: none;
+}
+
+.pf-v5-c-login__main-footer-band {
+  display: block;
+  margin: 0;
+  padding: 0.875rem 1rem !important;
+  background: #f8fafc;
+  border: 1px solid var(--ge-borde);
+  border-radius: 0.5rem;
+  color: var(--ge-texto-suave);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.pf-v5-c-login__main-footer-band-item {
+  padding: 0;
+}
+
+.pf-v5-c-alert {
+  border-radius: 0.5rem;
+  box-shadow: none;
+}
+
+@media (max-width: 480px) {
+  .pf-v5-c-login__main-header {
+    padding: 1.5rem 1.25rem 0.5rem;
+  }
+
+  .pf-v5-c-login__main-body {
+    padding: 1rem 1.25rem 1.5rem;
+  }
+}

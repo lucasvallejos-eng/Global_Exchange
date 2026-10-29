@@ -232,6 +232,18 @@ class CotizacionPermisosAnalistaTest(TestCase):
     def test_no_puede_configurar_comisiones(self):
         self.assertEqual(self.client.get(reverse('listar_segmentos')).status_code, 403)
 
+    def test_las_vigentes_traen_una_sola_por_moneda_la_mas_reciente(self):
+        """Si una moneda quedó con dos cotizaciones activas (por ejemplo, al
+        recargar los datos de ejemplo después de cambiar un precio), la API
+        muestra la misma con la que se opera: la más reciente."""
+        nueva = Cotizacion.objects.create(moneda=self.moneda, precio_compra=7350, precio_venta=7450)
+        self.assertEqual(Cotizacion.objects.filter(moneda=self.moneda, activa=True).count(), 2)
+
+        vigentes = self.client.get(reverse('api_cotizaciones_lista') + '?activas=1').json()
+        self.assertEqual([(c['id'], c['precioVenta']) for c in vigentes], [(nueva.pk, 7450)])
+        # El historial sigue trayendo todas.
+        self.assertEqual(len(self.client.get(reverse('api_cotizaciones_lista')).json()), 2)
+
 
 class CotizacionSoftDeleteTest(TestCase):
     def setUp(self):

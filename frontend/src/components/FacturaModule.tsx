@@ -1,29 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type FacturaEstado = "Pagado" | "Pendiente" | "Cancelada";
-
-type Factura = {
-  id: number;
-  numero: string;
-  estado: FacturaEstado;
-  fecha: string;
-  monto: number;
-};
-
-const FACTURAS_SEED: Factura[] = [
-  { id: 1, numero: "001-001-0000123", estado: "Pagado", fecha: "12/03/2026", monto: 574280 },
-  { id: 2, numero: "001-001-0000124", estado: "Pendiente", fecha: "18/03/2026", monto: 238900 },
-  { id: 3, numero: "001-001-0000125", estado: "Pagado", fecha: "21/03/2026", monto: 890450 },
-  { id: 4, numero: "001-001-0000126", estado: "Cancelada", fecha: "28/03/2026", monto: 321150 },
-  { id: 5, numero: "001-001-0000127", estado: "Pagado", fecha: "02/04/2026", monto: 610000 },
-  { id: 6, numero: "001-001-0000128", estado: "Pendiente", fecha: "06/04/2026", monto: 475500 },
-  { id: 7, numero: "001-001-0000129", estado: "Pagado", fecha: "11/04/2026", monto: 990100 },
-  { id: 8, numero: "001-001-0000130", estado: "Cancelada", fecha: "15/04/2026", monto: 280400 },
-  { id: 9, numero: "001-001-0000131", estado: "Pagado", fecha: "18/04/2026", monto: 700320 },
-  { id: 10, numero: "001-001-0000132", estado: "Pendiente", fecha: "22/04/2026", monto: 420800 },
-  { id: 11, numero: "001-001-0000133", estado: "Pagado", fecha: "25/04/2026", monto: 1250000 },
-  { id: 12, numero: "001-001-0000134", estado: "Pagado", fecha: "28/04/2026", monto: 655300 },
-];
+import {
+  actualizarFactura,
+  listarFacturas,
+  reintentarFactura,
+  urlDescarga,
+  type EstadoFactura,
+  type Factura,
+} from "../lib/facturasApi";
 
 const formatPyg = (value: number) =>
   new Intl.NumberFormat("es-PY", {
@@ -31,27 +15,59 @@ const formatPyg = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const estadoColors: Record<FacturaEstado, string> = {
-  Pagado: "bg-green-100 text-green-700",
-  Pendiente: "bg-yellow-100 text-yellow-700",
-  Cancelada: "bg-red-100 text-red-700",
+const formatFecha = (iso: string) => new Date(iso).toLocaleDateString("es-PY");
+
+const estadoColors: Record<EstadoFactura, string> = {
+  SIMULADA: "bg-slate-100 text-slate-600",
+  ENVIADA: "bg-yellow-100 text-yellow-700",
+  SIN_CONFIRMAR: "bg-yellow-100 text-yellow-700",
+  APROBADA: "bg-green-100 text-green-700",
+  ERROR: "bg-red-100 text-red-700",
+  RECHAZADA: "bg-red-100 text-red-700",
+  CANCELADA: "bg-red-100 text-red-700",
 };
 
+const ESTADOS: { valor: EstadoFactura; texto: string }[] = [
+  { valor: "APROBADA", texto: "Aprobada" },
+  { valor: "ENVIADA", texto: "Enviada" },
+  { valor: "SIMULADA", texto: "Simulada" },
+  { valor: "RECHAZADA", texto: "Rechazada" },
+  { valor: "ERROR", texto: "No se pudo emitir" },
+  { valor: "SIN_CONFIRMAR", texto: "Sin confirmar" },
+  { valor: "CANCELADA", texto: "Cancelada" },
+];
+
 export default function FacturaModule() {
-  const [facturas] = useState<Factura[]>(FACTURAS_SEED);
+  const [facturas, setFacturas] = useState<Factura[]>([]);
+  const [emision, setEmision] = useState<"real" | "simulada">("simulada");
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState<"Todos" | FacturaEstado>("Todos");
+  const [estadoFilter, setEstadoFilter] = useState<"Todos" | EstadoFactura>("Todos");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
+  useEffect(() => {
+    listarFacturas()
+      .then((datos) => {
+        setFacturas(datos.facturas);
+        setEmision(datos.emision);
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setCargando(false));
+  }, []);
+
   const filteredFacturas = useMemo(() => {
+    const texto = search.toLowerCase();
     return facturas.filter((factura) => {
-      const matchesSearch = factura.numero.toLowerCase().includes(search.toLowerCase());
+      const matchesSearch =
+        factura.numero.toLowerCase().includes(texto) || factura.cliente.toLowerCase().includes(texto);
       const matchesEstado = estadoFilter === "Todos" || factura.estado === estadoFilter;
 
-      const facturaDate = factura.fecha;
+      // Las dos en AAAA-MM-DD: se comparan como texto.
+      const facturaDate = factura.fecha.slice(0, 10);
       const fromOk = !dateFrom || facturaDate >= dateFrom;
       const toOk = !dateTo || facturaDate <= dateTo;
 
@@ -64,16 +80,16 @@ export default function FacturaModule() {
 
   const paginatedFacturas = filteredFacturas.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  const handleDownload = (formato: "PDF" | "XML", factura: Factura) => {
-    const nombre = `${factura.numero}-${formato.toLowerCase()}`;
-    const contenido = `Factura ${factura.numero}\nEstado: ${factura.estado}\nMonto: ${formatPyg(factura.monto)} PYG\nFormato: ${formato}`;
-    const blob = new Blob([contenido], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${nombre}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // El archivo lo baja el backend de Factura Segura: acá solo se abre el enlace.
+  const handleDownload = (formato: "kude" | "xml", factura: Factura) => {
+    window.open(urlDescarga(factura.id, formato), "_blank");
+  };
+
+  const reemplazar = (pedido: Promise<Factura>) => {
+    setError("");
+    pedido
+      .then((nueva) => setFacturas((lista) => lista.map((f) => (f.id === nueva.id ? nueva : f))))
+      .catch((e: Error) => setError(e.message));
   };
 
   return (
@@ -82,6 +98,12 @@ export default function FacturaModule() {
         <div className="mb-5">
           <p className="text-sm font-medium text-[#64748b]">Facturación</p>
           <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">Facturas</h2>
+          <p className="mt-1 text-sm text-[#64748b]">
+            {emision === "simulada"
+              ? "La emisión está apagada: las facturas quedan simuladas y no gastan números."
+              : "La emisión está prendida: cada factura se emite cuando el administrador toca Emitir."}
+          </p>
+          {error && <p className="mt-2 text-sm font-medium text-red-600">{error}</p>}
         </div>
 
         <div className="mb-5 grid gap-3 lg:grid-cols-[1.4fr_0.8fr_1fr_1fr]">
@@ -95,7 +117,7 @@ export default function FacturaModule() {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="001-001-0000123"
+              placeholder="001-003-0000382 o cliente"
               className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
             />
           </label>
@@ -107,15 +129,15 @@ export default function FacturaModule() {
             <select
               value={estadoFilter}
               onChange={(event) => {
-                setEstadoFilter(event.target.value as "Todos" | FacturaEstado);
+                setEstadoFilter(event.target.value as "Todos" | EstadoFactura);
                 setPage(1);
               }}
               className="w-full rounded-xl border border-[#dbe3ee] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#1f2937] outline-none focus:border-[#1a7eff]"
             >
               <option value="Todos">Todos</option>
-              <option value="Pagado">Pagado</option>
-              <option value="Pendiente">Pendiente</option>
-              <option value="Cancelada">Cancelada</option>
+              {ESTADOS.map((estado) => (
+                <option key={estado.valor} value={estado.valor}>{estado.texto}</option>
+              ))}
             </select>
           </label>
 
@@ -153,7 +175,9 @@ export default function FacturaModule() {
         {filteredFacturas.length === 0 ? (
           <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-[#dbe3ee] bg-[#f8fafc]">
             <div className="text-center">
-              <p className="text-lg font-semibold text-[#0f172a]">Aún no registras facturas emitidas.</p>
+              <p className="text-lg font-semibold text-[#0f172a]">
+                {cargando ? "Cargando facturas..." : "Aún no hay facturas. Se genera una por cada operación pagada."}
+              </p>
             </div>
           </div>
         ) : (
@@ -163,6 +187,7 @@ export default function FacturaModule() {
                 <thead className="bg-[#f8fafc] text-[#475569]">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Número de Factura</th>
+                    <th className="px-4 py-3 font-semibold">Cliente</th>
                     <th className="px-4 py-3 font-semibold">Estado de Factura</th>
                     <th className="px-4 py-3 font-semibold">Fecha</th>
                     <th className="px-4 py-3 text-right font-semibold">Monto en PYG</th>
@@ -173,29 +198,62 @@ export default function FacturaModule() {
                   {paginatedFacturas.map((factura) => (
                     <tr key={factura.id} className="border-t border-[#edf2f7] bg-white hover:bg-[#f8fafc]">
                       <td className="px-4 py-3 font-medium text-[#0f172a]">{factura.numero}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${estadoColors[factura.estado]}`}>
-                          {factura.estado}
+                      <td className="px-4 py-3 text-[#475569]">
+                        {factura.cliente}
+                        <span className="block text-xs text-[#94a3b8]">
+                          {factura.operacion} · {factura.referencia}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-[#475569]">{factura.fecha}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          title={factura.detalle ?? undefined}
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${estadoColors[factura.estado]}`}
+                        >
+                          {factura.estadoTexto}
+                        </span>
+                        {factura.detalle && factura.estado !== "APROBADA" && (
+                          <span className="mt-1 block max-w-[260px] text-xs text-[#94a3b8]">{factura.detalle}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[#475569]">{formatFecha(factura.fecha)}</td>
                       <td className="px-4 py-3 text-right font-medium text-[#0f172a]">
                         {formatPyg(factura.monto)} PYG
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => handleDownload("PDF", factura)}
-                            className="rounded-lg bg-[#eaf3ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff] hover:bg-[#dfeeff]"
-                          >
-                            PDF
-                          </button>
-                          <button
-                            onClick={() => handleDownload("XML", factura)}
-                            className="rounded-lg bg-[#eef2ff] px-3 py-1.5 text-xs font-semibold text-[#4f46e5] hover:bg-[#e0e7ff]"
-                          >
-                            XML
-                          </button>
+                          {factura.descargable && (
+                            <>
+                              <button
+                                onClick={() => handleDownload("kude", factura)}
+                                className="rounded-lg bg-[#eaf3ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff] hover:bg-[#dfeeff]"
+                              >
+                                PDF
+                              </button>
+                              <button
+                                onClick={() => handleDownload("xml", factura)}
+                                className="rounded-lg bg-[#eef2ff] px-3 py-1.5 text-xs font-semibold text-[#4f46e5] hover:bg-[#e0e7ff]"
+                              >
+                                XML
+                              </button>
+                              <button
+                                onClick={() => reemplazar(actualizarFactura(factura.id))}
+                                className="rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-[#e2e8f0]"
+                              >
+                                Consultar estado
+                              </button>
+                            </>
+                          )}
+                          {factura.sePuedeEmitir && (
+                            <button
+                              onClick={() => reemplazar(reintentarFactura(factura.id))}
+                              className="rounded-lg bg-[#eaf3ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff] hover:bg-[#dfeeff]"
+                            >
+                              {factura.estado === "SIMULADA" ? "Emitir" : "Reintentar"}
+                            </button>
+                          )}
+                          {!factura.descargable && !factura.sePuedeEmitir && (
+                            <span className="text-xs text-[#94a3b8]">Sin archivos</span>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -1,0 +1,95 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Detalle de una factura: a nombre de quién salió, sus ítems y su estado. Los
+archivos (KuDE y XML) existen solo si se emitió de verdad en Factura Segura.
+{% endcomment %}
+
+{% block titulo_pagina %}Factura {{ f.numero_completo }} — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <style>
+    .detalle { display: grid; grid-template-columns: max-content 1fr; gap: 10px 24px; margin: 0 0 24px; font-size: 15px; }
+    .detalle dt { color: var(--texto-suave); }
+    .detalle dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .total { font-size: 28px; font-weight: 700; margin: 20px 0 4px; font-variant-numeric: tabular-nums; }
+    .etiqueta.simulada { background: #f1f5f9; color: var(--texto-suave); }
+    .etiqueta.enviada, .etiqueta.sin_confirmar { background: #fef3c7; color: #92400e; }
+    .etiqueta.error, .etiqueta.rechazada, .etiqueta.cancelada { background: #fee2e2; color: #991b1b; }
+    .etiqueta.aprobada { background: #dcfce7; color: var(--verde); }
+  </style>
+
+  <div class="cabecera">
+    <h1>Factura {{ f.numero_completo }}</h1>
+    <span class="etiqueta {{ f.estado|lower }}">{{ f.get_estado_display }}</span>
+  </div>
+
+  {% if error %}
+    <div class="errores">{{ error }}</div>
+  {% endif %}
+  {% if f.detalle %}
+    <p class="ayuda" style="margin:0 0 20px">{{ f.detalle }}</p>
+  {% endif %}
+
+  <dl class="detalle">
+    <dt>A nombre de</dt><dd>{{ f.receptor_nombre }}</dd>
+    <dt>RUC / cédula</dt><dd>{{ f.receptor_documento|default:"Sin cargar" }}</dd>
+    <dt>Operación</dt>
+    <dd>
+      {% if f.transaccion_id %}
+        <a href="{% url 'detalle_operacion' f.transaccion_id %}">#{{ f.transaccion_id }}</a> (web)
+      {% else %}
+        {{ f.referencia }}
+      {% endif %}
+      {{ operacion }}
+    </dd>
+    <dt>Fecha</dt><dd>{{ f.fecha_creacion|date:"d/m/Y H:i" }}</dd>
+    {% if f.cdc %}<dt>CDC</dt><dd>{{ f.cdc }}</dd>{% endif %}
+  </dl>
+
+  {% if items %}
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Descripción</th>
+            <th>IVA</th>
+            <th class="numero">Precio</th>
+            <th class="numero">Descuento</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+            <tr>
+              <td>{{ item.dDesProSer }}</td>
+              <td>{% if item.iAfecIVA == "1" %}{{ item.dTasaIVA }} %{% else %}Exento{% endif %}</td>
+              <td class="numero">{{ item.dPUniProSer|floatformat:"0g" }}</td>
+              <td class="numero">{{ item.dDescItem|floatformat:"0g" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <p class="ayuda" style="margin:20px 0 0">Total</p>
+  <p class="total">{{ f.total|floatformat:"0g" }} PYG</p>
+
+  <div class="botonera">
+    {% if f.emitida %}
+      <a class="boton" href="{% url 'api_facturas_descargar' f.pk 'kude' %}">Descargar PDF (KuDE)</a>
+      <a class="boton secundario" href="{% url 'api_facturas_descargar' f.pk 'xml' %}">Descargar XML</a>
+      <form method="post" action="{% url 'actualizar_factura' f.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="boton secundario">Consultar estado en el SIFEN</button>
+      </form>
+    {% endif %}
+    {% if se_puede_emitir %}
+      <form method="post" action="{% url 'reintentar_factura' f.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="boton">{% if f.estado == 'SIMULADA' %}Emitir de verdad{% else %}Reintentar{% endif %}</button>
+      </form>
+    {% endif %}
+    <a class="boton secundario" href="{% url 'listar_facturas' %}">Volver a facturas</a>
+  </div>
+{% endblock %}

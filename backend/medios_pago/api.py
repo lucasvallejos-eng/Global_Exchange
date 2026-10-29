@@ -1,6 +1,7 @@
 """API JSON de métodos de pago con CRUD por usuario y control administrativo."""
 import json
 
+import stripe
 from django.db import transaction
 from django.db.models import ProtectedError
 
@@ -241,6 +242,11 @@ def tarjetas_preparar(request):
         return JsonResponse({"clientSecret": stripe_servicio.preparar_tarjeta(request.user)})
     except PagoRechazado as error:
         return JsonResponse({"error": str(error)}, status=400)
+    except stripe.APIConnectionError:
+        return JsonResponse(
+            {"error": "No se pudo conectar con Stripe desde el servidor. Intentá de nuevo más tarde."},
+            status=503,
+        )
 
 
 @require_http_methods(["POST"])
@@ -263,6 +269,11 @@ def tarjetas_registrar(request):
         tarjeta = stripe_servicio.tarjeta_registrada(request.user, datos.get("setupIntentId") or "")
     except PagoRechazado as error:
         return JsonResponse({"error": str(error)}, status=400)
+    except stripe.APIConnectionError:
+        return JsonResponse(
+            {"error": "No se pudo conectar con Stripe desde el servidor. Intentá de nuevo más tarde."},
+            status=503,
+        )
     medio = MedioPago.objects.create(
         usuario=request.user,
         tipo=tipo,

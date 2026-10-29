@@ -50,6 +50,8 @@ services:
       - "${PUERTO_KEYCLOAK:-8080}:8080"
     volumes:
       - ./keycloak/realm-export:/opt/keycloak/data/import:ro
+      # Tema propio del inicio de sesión (ver keycloak/themes/global-exchange).
+      - ./keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -72,6 +74,11 @@ services:
       # puede pagar con tarjeta y el resto funciona igual.
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+    # Facturación electrónica (Factura Segura). Es el mismo archivo que usa
+    # desarrollo; opcional: sin él las facturas quedan simuladas.
+    env_file:
+      - path: ./backend/.env.facturasegura
+        required: false
     ports:
       - "${PUERTO_BACKEND:-8000}:8000"
     volumes:

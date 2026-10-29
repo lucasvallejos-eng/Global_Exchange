@@ -1,15 +1,17 @@
 """Levanta todo Global Exchange con un solo comando (o un solo Play en PyCharm).
 
 Orden:
-  1. Limpia y remueve contenedores/volúmenes antiguos de Keycloak (docker compose down -v).
-  2. Borra todos los archivos .env existentes en el proyecto.
-  3. Crea/reconstruye los .env desde sus plantillas (.env.example).
-  4. Keycloak + Postgres + Mailpit  (docker compose up -d, en keycloak/)
-  5. Espera a que el realm GlobalExchange responda en http://localhost:8080
-  6. Obtiene y regenera automáticamente el Client Secret de Keycloak e inyecta en .env.
-  7. Crea/asegura los usuarios de prueba en Keycloak con sus roles (administrador, analista_cambiario, cajero, cliente).
-  8. Backend Django: Verifica/Crea .venv, instala requirements, realiza migrate + loaddata + runserver 8000
-  9. Frontend (maqueta): pnpm dev en 8443
+  1. Fase Pre-flight: Descomprime credenciales.zip (o busca credenciales.txt/text), valida claves de Stripe y Facturación Segura ESI (con fallback interactivo en bucle si faltan o son inválidas).
+  2. Limpia y remueve contenedores/volúmenes antiguos de Keycloak (docker compose down -v).
+  3. Borra todos los archivos .env existentes en el proyecto.
+  4. Crea/reconstruye los .env desde sus plantillas (.env.example).
+  5. Keycloak + Postgres + Mailpit  (docker compose up -d, en keycloak/)
+  6. Espera a que el realm GlobalExchange responda en http://localhost:8080
+  7. Obtiene y regenera automáticamente el Client Secret de Keycloak e inyecta en .env.
+  8. Crea/asegura los usuarios de prueba en Keycloak con sus roles (administrador, analista_cambiario, cajero, cliente).
+  9. Inyección garantizada de credenciales validadas de Stripe y Facturación Segura ESI en backend/.env, frontend/.env y .env de la raíz.
+ 10. Backend Django: Verifica/Crea .venv, instala requirements, realiza migrate + loaddata + runserver 8000
+ 11. Frontend (maqueta): pnpm dev en 8443
 """
 import glob
 import json
@@ -30,6 +32,22 @@ RAIZ = Path(__file__).resolve().parent
 BACKEND = RAIZ / "backend"
 FRONTEND = RAIZ / "frontend"
 KEYCLOAK = RAIZ / "keycloak"
+
+try:
+    from inyectar_credenciales import (
+        descomprimir_credenciales_zip,
+        buscar_archivo_credenciales,
+        obtener_y_validar_credenciales,
+        inyectar_credenciales,
+    )
+except ImportError:
+    sys.path.insert(0, str(RAIZ))
+    from inyectar_credenciales import (
+        descomprimir_credenciales_zip,
+        buscar_archivo_credenciales,
+        obtener_y_validar_credenciales,
+        inyectar_credenciales,
+    )
 
 ESPERA_KEYCLOAK_SEG = 180
 PUERTOS = {8000: "backend", 8443: "frontend"}
@@ -411,7 +429,22 @@ def actualizar_o_crear_env(path_env: Path, path_example: Path, cambios: dict):
     path_env.write_text("\n".join(nuevas_lineas) + "\n", encoding="utf-8")
 
 
-def fase1_preparar_envs():
+def preflight_credenciales(raiz: Path) -> dict:
+    """Fase Pre-flight:
+    1. Busca y descomprime credenciales.rar o credenciales.zip en la raíz del proyecto.
+    2. Emite alerta en consola si no se encuentra y continúa con modo interactivo.
+    3. Lee y parsea de forma unificada credenciales.txt (o text en su defecto).
+    4. Valida prefijos y rangos de longitud de Stripe y Facturación Segura ESI.
+    5. Si faltan o son inválidas, solicita ingreso interactivo con validación en bucle.
+    Retorna el diccionario de credenciales validadas.
+    """
+    log("Fase Pre-flight: Verificando archivo de credenciales (.rar/.zip) y claves...")
+    descomprimir_credenciales_zip(raiz, log_fn=log)
+    credenciales_validadas = obtener_y_validar_credenciales(raiz, log_fn=log, interactivo=True)
+    return credenciales_validadas
+
+
+def fase1_preparar_envs(credenciales_validadas: dict | None = None):
     """Fase 1: Creación y Verificación Previa de .env.
     Crea los .env que falten e inyecta credenciales fijas de admin en Keycloak."""
     log("Fase 1: Recreando y preparando archivos .env...")
@@ -435,6 +468,12 @@ def fase1_preparar_envs():
 
     # Root .env
     actualizar_o_crear_env(RAIZ / ".env", RAIZ / ".env.example", {})
+
+    # Inyección de integraciones validadas
+    if credenciales_validadas:
+        inyectar_credenciales(RAIZ, log_fn=log, datos_validados=credenciales_validadas)
+    else:
+        inyectar_credenciales(RAIZ, log_fn=log)
     log("Archivos .env recreados y credenciales fijas inyectadas (Keycloak: admin / admin123).")
 
 
@@ -535,6 +574,11 @@ def detener(procesos):
 
 
 def main():
+    # 0. Las credenciales pueden venir en un archivo comprimido o de texto.
+    # El preflight también permite ingresarlas interactivamente si no hay archivo.
+    if not any((RAIZ / nombre).exists() for nombre in ("credenciales.rar", "credenciales.zip")) and not buscar_archivo_credenciales(RAIZ):
+        log("Aviso: no se encontró archivo de credenciales; se solicitarán por consola si hacen falta.")
+
     global _trabajo
     ocupados = [f"{p} ({nombre})" for p, nombre in PUERTOS.items() if puerto_ocupado(p)]
     if ocupados:
@@ -548,19 +592,26 @@ def main():
         except Exception as error:
             log(f"Aviso: no se pudo crear el Job Object de Windows ({error}).")
 
-    # 1. Bajar y limpiar contenedores/volúmenes antiguos de Keycloak
+    # 1. Fase Pre-flight: Descompresión de credenciales.zip y validación de claves
+    credenciales_validadas = preflight_credenciales(RAIZ)
+
+    # 2. Bajar y limpiar contenedores/volúmenes antiguos de Keycloak
     limpiar_docker_keycloak()
 
-    # 2. Borrado de todos los archivos .env existentes
+    # 3. Borrado de todos los archivos .env existentes
     borrar_archivos_env()
 
-    # 3. Fase 1: Creación y Verificación Previa de .env
-    fase1_preparar_envs()
+    # 4. Fase 1: Creación y Verificación Previa de .env
+    fase1_preparar_envs(credenciales_validadas)
 
-    # 4. Fase 2: Levantar Infraestructura, Obtener Secret y Crear Usuarios
+    # 5. Fase 2: Levantar Infraestructura, Obtener Secret y Crear Usuarios
     fase2_infraestructura_y_secret()
 
-    # 5. Fase 3: Arranque de Servicios Restantes
+    # 6. Inyección de credenciales validadas posterior al levantamiento e inicialización base de Docker/Keycloak
+    log("Inyectando credenciales validadas (Stripe y Facturación Segura ESI) en backend/.env, frontend/.env y raíz .env...")
+    inyectar_credenciales(RAIZ, log_fn=log, datos_validados=credenciales_validadas)
+
+    # 7. Fase 3: Arranque de Servicios Restantes
     log("Fase 3: Arrancando servicios restantes (Backend + Frontend)...")
 
     # Garantizar que el .venv exista y tenga sus dependencias

@@ -34,3 +34,25 @@ Resultado esperado: **6/6 OK**.
 Estos tests **no** prueban el login real contra Keycloak — eso requeriría levantar un servidor Keycloak y mockear el intercambio OIDC (authorization code, tokens, etc.).
 
 Lo que sí prueban es el comportamiento del backend **asumiendo que la sincronización de usuario/roles ya ocurrió**, que es exactamente lo que hace `cuentas.auth.BackendOIDCKeycloak` en producción.
+
+## Simulación completa de transacciones (`test_transaccion_completa.py`)
+
+Recorre una transacción entera **por la API**, como la maqueta, con cada rol
+haciendo su parte: el administrador da de alta al cliente con su RUC y le
+asocia un usuario; el usuario cotiza y confirma (o el cajero registra la
+operación en la ventanilla); la operación queda pagada o cancelada; llega la
+notificación; se genera la factura a nombre del cliente, que la ve y la
+descarga; y el analista la encuentra en el reporte de ganancias.
+
+Cubre la compra y la venta por la web, la cancelación por cambio de
+cotización, la operación pendiente que se paga o se cancela, el cliente sin
+RUC, la caída de Factura Segura (la operación se paga igual) y la compra y la
+venta en la caja. Nada sale a la red: se paga sin tarjeta y Factura Segura se
+reemplaza por un doble.
+
+```bash
+cd backend
+.venv/bin/python manage.py test tests.test_transaccion_completa
+```
+
+Resultado esperado: **12/12 OK**.

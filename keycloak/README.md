@@ -151,6 +151,26 @@ chocar con un **lock de H2** ("Database may be already in use"). Dos alternativa
 
 ---
 
+## Tema del inicio de sesión
+
+El formulario de login lo dibuja Keycloak (RN05), pero con un tema propio para
+que se vea como la maqueta: `themes/global-exchange/login/`.
+
+- `theme.properties`: hereda del tema de Keycloak (`keycloak.v2`). Las pantallas
+  y los textos son los de siempre; solo cambia el aspecto.
+- `resources/css/global-exchange.css`: colores, tarjeta, campos y botones.
+
+Los dos `docker-compose` montan `themes/` en `/opt/keycloak/themes`, y el realm
+lo usa por `"loginTheme": "global-exchange"` en el `realm-export.json`. Un
+Keycloak que ya tenía el realm no lo reimporta: en producción lo aplica
+`configurar_produccion.py`, y a mano se elige en la consola en **Realm settings
+→ Themes → Login theme**.
+
+En desarrollo (`start-dev`) los cambios al CSS se ven recargando la página. En
+producción Keycloak guarda los temas en caché: hay que reiniciar el contenedor.
+
+---
+
 ## Secretos
 
 - `.env` está en `.gitignore` (`.env*`). Ahí va el client secret de Keycloak y el de Google.

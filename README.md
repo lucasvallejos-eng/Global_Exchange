@@ -29,18 +29,106 @@ Global_Exchange/
 
 ## Requisitos (instalar una vez)
 
-- **Docker Desktop** (para Keycloak)
+- **Docker Desktop** (para Keycloak y contenedores de producción)
 - **Python 3.12+** (marcá "Add python.exe to PATH" al instalar)
 - **Node.js 20+** (usamos `pnpm` vía `npx`, no hace falta instalarlo global)
+- **Git**
 
-## Puesta en marcha (primera vez)
+---
 
-> **Atajo:** una vez hecha la configuración de abajo (los `.env`, el `.venv` y
-> Docker), `levantar_todo.py` levanta las tres piezas con un solo comando o con
-> el Play de PyCharm / VS Code. Ver la guía en
-> [`docs/conversaciones-ia/2026-10-02-fixes-pre-tag.md`](docs/conversaciones-ia/2026-10-02-fixes-pre-tag.md#guía-levantar_todopy-en-cada-sistema-e-ide).
+## Puesta en marcha rápida (Scripts recomendados)
 
-Se levantan **3 piezas, en este orden**. Cada comando en su propia terminal.
+El proyecto cuenta con scripts en Python que automatizan todo el proceso: configuración de entornos virtuales, archivos `.env`, regeneración e inyección de secretos de Keycloak, credenciales externas (Stripe, Facturación Segura), migraciones, usuarios de prueba y levantado de servicios.
+
+### 1) Levantar todo el entorno local — `levantar_todo.py`
+
+Es la forma más rápida y recomendada para desarrollo diario. Con **Docker Desktop abierto**, ejecutá en la terminal desde la raíz del proyecto:
+
+```bash
+python levantar_todo.py
+```
+
+*(También podés presionar directamente el botón **Play / Run** en PyCharm o VS Code sobre `levantar_todo.py`).*
+
+**¿Qué hace automáticamente?**
+1. **Limpia contenedores previos:** Ejecuta `docker compose down -v` en `keycloak/` para garantizar un estado limpio.
+2. **Genera archivos `.env`:** Reconstruye automáticamente los `.env` necesarios a partir de sus `.env.example`.
+3. **Inyecta credenciales:** Si tenés el archivo `credenciales.text` (o `credenciales.txt`) en la raíz del proyecto, extrae e inyecta de forma transparente las credenciales de Stripe y Facturación Segura ESI en backend y frontend (`inyectar_credenciales.py`).
+4. **Levanta infraestructura:** Inicia Keycloak, PostgreSQL y Mailpit con Docker Compose.
+5. **Configura Keycloak:** Espera a que el realm `GlobalExchange` responda, regenera el Client Secret y lo inyecta automáticamente en `backend/.env`.
+6. **Crea usuarios de prueba:** Registra los usuarios de prueba con sus roles (`admin.test`, `analista.test`, `cajero.test`, `cliente.test` con contraseña `Prueba2026!`).
+7. **Prepara Backend Django:** Verifica/crea el entorno virtual `backend/.venv`, instala las dependencias (`requirements.txt`), ejecuta `python manage.py migrate` y carga los fixtures (`fixtures/demo.json`).
+8. **Prepara Frontend:** Verifica e instala dependencias (`pnpm install`) si hiciera falta.
+9. **Inicia los servidores en simultáneo:**
+   - **Backend Django:** [http://localhost:8000](http://localhost:8000) (acceso principal con redirección al login de Keycloak)
+   - **Frontend (Maqueta React):** [http://localhost:8443](http://localhost:8443)
+   - **Consola Keycloak:** [http://localhost:8080](http://localhost:8080) (`admin` / `admin123`)
+   - **Mailpit (bandeja de correo local):** [http://localhost:8025](http://localhost:8025)
+
+Para detener todo, simplemente presioná `Ctrl+C` en la terminal (o botón Stop en tu IDE).
+
+---
+
+### 2) Publicar en Internet — `publicar.py`
+
+Levanta el proyecto en **modo producción** (`docker-compose.prod.yml`) y genera **túneles Cloudflare** (`docker-compose.publico.yml`), permitiendo acceder al sistema desde cualquier dispositivo en internet mediante URLs HTTPS públicas seguras, sin necesidad de abrir puertos ni tener dominio o IP fija.
+
+Con **Docker Desktop abierto**:
+
+```bash
+python publicar.py          # Levanta producción y publica los túneles Cloudflare
+python publicar.py --demo   # Además carga datos de demo y usuarios de prueba listos
+python publicar.py --apagar # Detiene y apaga los contenedores y los túneles
+```
+
+- Inyecta automáticamente credenciales desde `credenciales.text` en `.env.prod`.
+- Al terminar, imprime en la consola la URL pública temporal `https://...trycloudflare.com` para ingresar.
+- Para más información sobre arquitectura y resolución de problemas, ver [`docs/levantar-en-internet.md`](docs/levantar-en-internet.md).
+
+---
+
+### 3) Despliegue automático unificado — `desplegar.py`
+
+`desplegar.py` permite gestionar el despliegue tanto para desarrollo como para producción en un único comando. Se encarga de:
+1. **Código fuente:** Descargar o sincronizar el tag de release solicitado.
+2. **Base de datos:** Correr migraciones o reconstruir desde cero (`--base-nueva`).
+3. **Población:** Cargar datos de prueba y usuarios demo listos para operar.
+
+Con **Docker Desktop abierto**:
+
+```bash
+# Entorno de desarrollo local (orquesta levantar_todo.py)
+python desplegar.py --ambiente desarrollo
+
+# Despliegue de un release específico en producción (orquesta publicar.py)
+python desplegar.py --ambiente produccion --tag v5.0
+
+# Desarrollo arrancando con base de datos limpia de cero
+python desplegar.py --ambiente desarrollo --base-nueva
+```
+
+| Opción | Qué hace |
+|---|---|
+| `--ambiente` | `desarrollo` (usa `levantar_todo.py`) o `produccion` (usa `publicar.py`). **Obligatoria**. |
+| `--tag` | Versión a desplegar (`v4.0`, `v5.0`...). Requiere no tener cambios sin commitear. |
+| `--base-nueva` | Borra la base antes de desplegar. En producción borra también la de Keycloak. |
+| `--sin-datos` | Producción: no carga los datos de ejemplo ni los usuarios de prueba. |
+
+> **Tip:** También sirve en una máquina limpia sin el proyecto clonado: copiando únicamente `desplegar.py` a una carpeta vacía, clona el repositorio en `./Global_Exchange` y ejecuta el despliegue automáticamente.
+
+---
+
+### 4) Inyección automática de credenciales (`credenciales.text`)
+
+Si disponés de credenciales para servicios externos (pasarela de pagos **Stripe** y facturación electrónica **Facturación Segura ESI**):
+1. Colocá el archivo `credenciales.text` (o `credenciales.txt`) en la raíz del proyecto.
+2. Al ejecutar `levantar_todo.py` o `publicar.py`, el script auxiliar `inyectar_credenciales.py` detectará los bloques correspondientes y distribuirá automáticamente las variables de entorno necesarias (`backend/.env`, `frontend/.env`, `backend/.env.stripe`, `backend/.env.facturasegura`, `.env.prod`). No es necesario copiar ni pegar claves manualmente.
+
+---
+
+## Puesta en marcha manual (Paso a paso alternativo)
+
+Si preferís levantar cada pieza de forma individual en terminales separadas para depuración granular, podés seguir estos pasos:
 
 ### 1) Keycloak (identidad) — puerto 8080
 
@@ -111,31 +199,11 @@ vez (Django crea su usuario en el primer login).
 Abrí **http://localhost:8000** y seguí el flujo. También podés abrir la maqueta
 directo en http://localhost:8443 (si no hay sesión, te manda al login).
 
-### Producción
-
-Todo el sistema se levanta junto con `docker-compose.prod.yml` (Keycloak en
-modo producción, Django con gunicorn, la maqueta con nginx). Paso a paso en
-[`docs/despliegue-produccion.md`](docs/despliegue-produccion.md).
-
-Para ponerlo **en internet desde esta misma PC**, sin servidor (Docker Desktop
-abierto):
-
-```bash
-backend\.venv\Scripts\python publicar.py --demo
-```
-
-Imprime una dirección `https://...trycloudflare.com` que abre desde cualquier
-lado. Para apagarlo: `backend\.venv\Scripts\python publicar.py --apagar`.
-Paso a paso, usuarios y problemas comunes en
-[`docs/levantar-en-internet.md`](docs/levantar-en-internet.md).
-
 ---
 
 ## Notas para el equipo
 
-- **Los `.env` no se commitean** (están en `.gitignore`). Cada uno crea el suyo
-  desde el `.env.example` correspondiente. El **secret de Keycloak** se copia de
-  la consola, no se sube al repo.
+- **Los `.env` y credenciales no se commitean** (están en `.gitignore`). Los scripts automatizados (`levantar_todo.py`, `publicar.py`) se encargan de generarlos e inyectar el secret de Keycloak y credenciales externas automáticamente. Si configurás manualmente, creá cada archivo desde su correspondiente `.env.example`.
 - **Roles** (nombres de la ERS): `administrador`, `analista_cambiario`, `cajero`,
   `cliente`, `cliente_general`. Keycloak es la fuente de verdad; el backend los
   valida (nunca se confía en el navegador).

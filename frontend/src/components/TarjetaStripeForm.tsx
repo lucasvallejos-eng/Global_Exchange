@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { obtenerStripe, prepararTarjeta, registrarTarjeta } from "../lib/pagosApi";
+import { obtenerErrorStripe, obtenerStripe, prepararTarjeta, registrarTarjeta } from "../lib/pagosApi";
 
 type Props = {
   tipo: string;
@@ -31,6 +31,17 @@ function Formulario({ tipo, alias, onGuardada, onCancelar }: Props) {
   const [titular, setTitular] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [errorInicializacionStripe, setErrorInicializacionStripe] = useState<string | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    obtenerStripe().then((instancia) => {
+      if (activo && !instancia) {
+        setErrorInicializacionStripe(obtenerErrorStripe() ?? "No se pudo inicializar Stripe.");
+      }
+    });
+    return () => { activo = false; };
+  }, []);
 
   const guardar = async () => {
     const tarjeta = elements?.getElement(CardElement);
@@ -62,6 +73,13 @@ function Formulario({ tipo, alias, onGuardada, onCancelar }: Props) {
       <p className="mt-2 text-xs text-[#64748b]">
         Los datos de la tarjeta los guarda Stripe de forma segura; Global Exchange solo ve la marca y los últimos 4 dígitos.
       </p>
+      {!stripe && (
+        <p className={`mt-2 text-sm ${errorInicializacionStripe ? "text-red-700" : "text-[#64748b]"}`}>
+          {errorInicializacionStripe
+            ? `No se pudo conectar con Stripe: ${errorInicializacionStripe}`
+            : "Conectando con Stripe…"}
+        </p>
+      )}
       {error && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="mt-5 flex justify-end gap-3">
         <button onClick={onCancelar} disabled={guardando} className="rounded-xl border px-4 py-2">Cancelar</button>
