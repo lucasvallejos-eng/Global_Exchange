@@ -31,12 +31,8 @@ def facturas_visibles(usuario):
 
 
 def puede_emitir(usuario):
-    """Si el usuario puede pedir que se emita (o reintente) una factura.
-
-    Con la emisión prendida eso gasta un número del rango, que son pocos: solo
-    el administrador. Con la emisión apagada no se gasta nada y puede cualquiera.
-    """
-    return not servicio.emite() or usuario.groups.filter(name="administrador").exists()
+    """Solo el administrador puede emitir o reintentar facturas."""
+    return usuario.groups.filter(name="administrador").exists()
 
 
 def descripcion_de(factura):

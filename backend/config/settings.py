@@ -28,6 +28,15 @@ def _bool(valor: str, por_defecto: bool = False) -> bool:
     return valor.strip().lower() in {"1", "true", "yes", "on", "si", "sí"}
 
 
+def _env(*nombres, default=""):
+    """Devuelve la primera variable de entorno no vacía."""
+    for nombre in nombres:
+        valor = os.environ.get(nombre, "").strip()
+        if valor:
+            return valor
+    return default
+
+
 # --- Básico ------------------------------------------------------------------
 CLAVE_DE_DESARROLLO = "clave-insegura-solo-para-desarrollo"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", CLAVE_DE_DESARROLLO)
@@ -233,31 +242,50 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 # se llama a Factura Segura, y sin FACTURA_SEGURA_EMITIR no se emite ninguna
 # factura: quedan simuladas. La cátedra asignó pocos números, así que emitir
 # es algo que se prende a propósito.
-FACTURA_SEGURA_URL = os.environ.get("FACTURA_SEGURA_URL", "https://apitest.facturasegura.com.py")
-FACTURA_SEGURA_TOKEN = os.environ.get("FACTURA_SEGURA_TOKEN", "")
+FACTURA_SEGURA_URL = _env(
+    "FACTURA_SEGURA_URL", "ESI_FACTURACION_URL", "FACTURASEGURA_URL",
+    default="https://apitest.facturasegura.com.py",
+)
+FACTURA_SEGURA_TOKEN = _env(
+    "FACTURA_SEGURA_TOKEN", "ESI_FACTURACION_API_KEY",
+    "FACTURASEGURA_API_KEY", "FACTURASEGURA_SECRET",
+)
+# En modo local se conserva la factura y su flujo de estados, pero no se hacen
+# llamadas HTTP a Factura Segura. Se puede desactivar al habilitar TEST real.
+FACTURA_SEGURA_LOCAL_ONLY = _bool(os.environ.get("FACTURA_SEGURA_LOCAL_ONLY"))
 FACTURA_SEGURA_EMITIR = _bool(os.environ.get("FACTURA_SEGURA_EMITIR"))
 # Los tests no pueden gastar números ni salir a la red, tenga lo que tenga el
 # .env de quien los corre.
 if "test" in sys.argv:
     FACTURA_SEGURA_TOKEN = ""
+    FACTURA_SEGURA_LOCAL_ONLY = True
     FACTURA_SEGURA_EMITIR = False
 
+_ruc_emisor = _env("FACTURA_SEGURA_EMISOR_RUC", default="")
+_ruc_con_dv = _env("ESI_RUC_EMISOR", default="")
+if not _ruc_emisor and "-" in _ruc_con_dv:
+    _ruc_emisor, _ruc_dv = _ruc_con_dv.split("-", 1)
+else:
+    _ruc_dv = ""
+
 FACTURA_SEGURA_EMISOR = {
-    "ruc": os.environ.get("FACTURA_SEGURA_EMISOR_RUC", ""),
-    "dv": os.environ.get("FACTURA_SEGURA_EMISOR_DV", ""),
+    "ruc": _ruc_emisor,
+    "dv": _env("FACTURA_SEGURA_EMISOR_DV", default=_ruc_dv),
     # iTipCont: 1 = persona física, 2 = persona jurídica.
     "tipo_contribuyente": os.environ.get("FACTURA_SEGURA_EMISOR_TIPO_CONTRIBUYENTE", "2"),
-    "nombre": os.environ.get("FACTURA_SEGURA_EMISOR_NOMBRE", ""),
-    "direccion": os.environ.get("FACTURA_SEGURA_EMISOR_DIRECCION", ""),
+    "nombre": _env("FACTURA_SEGURA_EMISOR_NOMBRE", "ESI_EMISOR_NOMBRE"),
+    "direccion": _env("FACTURA_SEGURA_EMISOR_DIRECCION", "ESI_EMISOR_DIRECCION"),
     "numero_casa": os.environ.get("FACTURA_SEGURA_EMISOR_NUMERO_CASA", "0"),
     "departamento_codigo": os.environ.get("FACTURA_SEGURA_EMISOR_DEPARTAMENTO_CODIGO", "1"),
     "departamento": os.environ.get("FACTURA_SEGURA_EMISOR_DEPARTAMENTO", "CAPITAL"),
     "ciudad_codigo": os.environ.get("FACTURA_SEGURA_EMISOR_CIUDAD_CODIGO", "1"),
     "ciudad": os.environ.get("FACTURA_SEGURA_EMISOR_CIUDAD", "ASUNCION (DISTRITO)"),
-    "telefono": os.environ.get("FACTURA_SEGURA_EMISOR_TELEFONO", ""),
-    "email": os.environ.get("FACTURA_SEGURA_EMISOR_EMAIL", ""),
-    "actividad_codigo": os.environ.get("FACTURA_SEGURA_EMISOR_ACTIVIDAD_CODIGO", ""),
-    "actividad": os.environ.get("FACTURA_SEGURA_EMISOR_ACTIVIDAD", ""),
+    "telefono": _env("FACTURA_SEGURA_EMISOR_TELEFONO", "ESI_EMISOR_TELEFONO"),
+    "email": _env("FACTURA_SEGURA_EMISOR_EMAIL", "ESI_EMISOR_EMAIL"),
+    "actividad_codigo": _env(
+        "FACTURA_SEGURA_EMISOR_ACTIVIDAD_CODIGO", "ESI_EMISOR_ACTIVIDAD_CODIGO"
+    ),
+    "actividad": _env("FACTURA_SEGURA_EMISOR_ACTIVIDAD", "ESI_EMISOR_ACTIVIDAD"),
 }
 # Rango de facturas que la cátedra le asignó al equipo: 001-003-0000382 a 0000393.
 FACTURA_SEGURA_NUMERACION = {

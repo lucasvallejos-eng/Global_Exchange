@@ -31,6 +31,12 @@ REPOSITORIO = "https://github.com/lucasvallejos-eng/Global_Exchange.git"
 AQUI = Path(__file__).resolve().parent
 ES_WINDOWS = os.name == "nt"
 
+try:
+    from inyectar_credenciales import preflight_credenciales_estricto
+except ImportError:
+    sys.path.insert(0, str(AQUI))
+    from inyectar_credenciales import preflight_credenciales_estricto
+
 for flujo in (sys.stdout, sys.stderr):
     try:
         flujo.reconfigure(errors="replace")
@@ -111,14 +117,6 @@ def python_del_proyecto(raiz):
 
 
 def main():
-    # 0. Verificación mandatoria de credenciales.rar
-    raiz_posible = AQUI if (AQUI / ".git").exists() else AQUI / "Global_Exchange"
-    if not (AQUI / "credenciales.rar").exists() and not (raiz_posible / "credenciales.rar").exists():
-        sys.exit(
-            "[desplegar] ERROR: No se encontró el archivo 'credenciales.rar'. "
-            "El programa presentará problemas si no se tiene el archivo de credenciales.rar."
-        )
-
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--ambiente", required=True, choices=["desarrollo", "produccion"])
     parser.add_argument("--tag", help="versión a desplegar (por ejemplo v5.0); por defecto, la que esté")
@@ -128,8 +126,12 @@ def main():
                         help="producción: no cargar los datos de ejemplo ni los usuarios de prueba")
     args = parser.parse_args()
 
-    revisar_requisitos(args.ambiente)
     raiz = codigo_fuente(args.tag)
+    try:
+        preflight_credenciales_estricto(raiz, log_fn=log)
+    except RuntimeError as error:
+        sys.exit(str(error))
+    revisar_requisitos(args.ambiente)
     if args.base_nueva:
         borrar_base(raiz, args.ambiente)
 

@@ -35,10 +35,10 @@ ENV = RAIZ / ".env.prod"
 EJEMPLO = RAIZ / ".env.prod.example"
 
 try:
-    from inyectar_credenciales import inyectar_credenciales
+    from inyectar_credenciales import inyectar_credenciales, preflight_credenciales_estricto
 except ImportError:
     sys.path.insert(0, str(RAIZ))
-    from inyectar_credenciales import inyectar_credenciales
+    from inyectar_credenciales import inyectar_credenciales, preflight_credenciales_estricto
 
 COMPOSE = ["docker", "compose", "-f", "docker-compose.prod.yml",
            "-f", "docker-compose.publico.yml", "--env-file", ".env.prod"]
@@ -49,6 +49,8 @@ PATRON_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 CLAVES = ("DJANGO_SECRET_KEY", "KC_BOOTSTRAP_ADMIN_PASSWORD", "POSTGRES_PASSWORD",
           "KEYCLOAK_WEB_CLIENT_SECRET")
 STRIPE = ("STRIPE_PUBLISHABLE_KEY", "STRIPE_SECRET_KEY")
+KEYCLOAK_ADMIN_USER = "admin"
+KEYCLOAK_ADMIN_PASSWORD = "admin123"
 
 for flujo in (sys.stdout, sys.stderr):
     try:
@@ -95,9 +97,17 @@ def escribir_env(cambios):
 
 def asegurar_env():
     if ENV.exists():
+        escribir_env({
+            "KC_BOOTSTRAP_ADMIN_USERNAME": KEYCLOAK_ADMIN_USER,
+            "KC_BOOTSTRAP_ADMIN_PASSWORD": KEYCLOAK_ADMIN_PASSWORD,
+        })
         return
     ENV.write_text(EJEMPLO.read_text(encoding="utf-8"), encoding="utf-8")
-    escribir_env({clave: secrets.token_urlsafe(32) for clave in CLAVES})
+    escribir_env({
+        **{clave: secrets.token_urlsafe(32) for clave in CLAVES},
+        "KC_BOOTSTRAP_ADMIN_USERNAME": KEYCLOAK_ADMIN_USER,
+        "KC_BOOTSTRAP_ADMIN_PASSWORD": KEYCLOAK_ADMIN_PASSWORD,
+    })
     log(f"Creado {ENV.name} con claves nuevas (está en .gitignore, no se sube).")
 
 
@@ -138,17 +148,55 @@ def tunel_caido(servicio):
     return "Tunnel not found" in compose("logs", "--no-color", "--tail", "20", servicio, capturar=True)
 
 
-def esperar(url, espera=300):
+def diagnostico_keycloak():
+    try:
+        salida = compose("logs", "--no-color", "--tail", "80", "keycloak", capturar=True)
+    except SystemExit:
+        return ""
+    lineas = [
+        linea for linea in salida.splitlines()
+        if any(texto in linea.lower() for texto in (
+            "error", "failed", "exception", "password authentication",
+            "started in", "listening on",
+        ))
+    ]
+    return "\n".join(lineas[-20:])
+
+
+def esperar(url, espera=600, servicio=None):
     limite = time.time() + espera
+    no_disponible_desde = None
     while time.time() < limite:
         try:
             with urllib.request.urlopen(url, timeout=5) as respuesta:
                 if respuesta.status == 200:
                     return
+                no_disponible_desde = None
+        except urllib.error.HTTPError as error:
+            if error.code == 503 and servicio == "keycloak":
+                no_disponible_desde = no_disponible_desde or time.time()
+                if time.time() - no_disponible_desde >= 180:
+                    detalle = diagnostico_keycloak()
+                    mensaje = f"[publicar] Keycloak sigue devolviendo HTTP 503 en {url}."
+                    if detalle:
+                        mensaje += "\nDiagnóstico de Keycloak:\n" + detalle
+                    sys.exit(mensaje)
+            else:
+                no_disponible_desde = None
         except Exception:
-            pass
+            no_disponible_desde = None
         time.sleep(3)
-    sys.exit(f"[publicar] {url} no respondió a tiempo.")
+    detalle = diagnostico_keycloak() if servicio == "keycloak" else ""
+    mensaje = f"[publicar] {url} no respondió a tiempo."
+    if detalle:
+        mensaje += "\nDiagnóstico de Keycloak:\n" + detalle
+        if "password authentication failed" in detalle.lower():
+            mensaje += (
+                "\nLa contraseña de PostgreSQL no coincide con la almacenada en el volumen "
+                "keycloak-db. Conserva el volumen si contiene datos; actualiza POSTGRES_PASSWORD "
+                "en .env.prod con la contraseña original o recrea únicamente ese volumen."
+            )
+    sys.exit(mensaje)
 
 
 def esperar_dns(url, espera=120):
@@ -190,6 +238,34 @@ def python_con_requests():
              "Usá backend/.venv/Scripts/python publicar.py o instalá backend/requirements.txt.")
 
 
+def recrear_datos_keycloak():
+    """Recrea solo la base persistente de Keycloak."""
+    log("Credenciales admin inválidas: recreando únicamente el almacenamiento de Keycloak...")
+    compose("stop", "keycloak", "keycloak-db")
+    compose("rm", "-sf", "keycloak", "keycloak-db")
+    volumenes = subprocess.run(
+        COMPOSE + ["ps", "-aq", "keycloak-db"],
+        cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if volumenes.returncode != 0:
+        sys.exit("[publicar] No se pudo localizar el contenedor de PostgreSQL de Keycloak.")
+    volumenes = subprocess.run(
+        ["docker", "volume", "ls", "-q",
+         "--filter", "label=com.docker.compose.project=global-exchange-prod",
+         "--filter", "label=com.docker.compose.volume=keycloak-db"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    nombres = [linea.strip() for linea in volumenes.stdout.splitlines() if linea.strip()]
+    if not nombres:
+        sys.exit("[publicar] No se encontró el volumen persistente keycloak-db.")
+    resultado = subprocess.run(["docker", "volume", "rm", *nombres],
+                               cwd=RAIZ, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace")
+    if resultado.returncode != 0:
+        sys.exit(f"[publicar] No se pudo eliminar keycloak-db: {resultado.stderr.strip()}")
+    compose("up", "-d", "keycloak-db", "keycloak")
+
+
 def direcciones_dns_locales():
     """Nombres e IPs de la máquina donde corre el script (sin duplicados)."""
     candidatas = []
@@ -227,13 +303,33 @@ def direcciones_dns_locales():
     return unicas
 
 
+def direccion_red_local(direcciones):
+    """Devuelve la dirección IPv4 utilizable por Docker y por el equipo local."""
+    try:
+        # La interfaz elegida por la ruta por defecto es más fiable que una
+        # dirección devuelta primero por DNS (por ejemplo, una interfaz Docker).
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            direccion = sock.getsockname()[0]
+            if direccion and not direccion.startswith("127."):
+                return direccion
+    except OSError:
+        pass
+    for direccion in direcciones:
+        if direccion not in ("localhost", "127.0.0.1") and re.fullmatch(
+                r"(?:\d{1,3}\.){3}\d{1,3}", direccion):
+            return direccion
+    for direccion in direcciones:
+        if direccion != "localhost":
+            return direccion
+    return "127.0.0.1"
+
+
 def main():
-    # 0. Verificación mandatoria de credenciales.rar
-    if not (RAIZ / "credenciales.rar").exists():
-        sys.exit(
-            "[publicar] ERROR: No se encontró el archivo 'credenciales.rar' en la raíz del proyecto. "
-            "El programa presentará problemas si no se tiene el archivo de credenciales.rar."
-        )
+    try:
+        credenciales_validadas = preflight_credenciales_estricto(RAIZ, log_fn=log)
+    except RuntimeError as error:
+        sys.exit(str(error))
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--demo", action="store_true", help="crea un usuario por rol y carga datos de ejemplo")
@@ -257,31 +353,50 @@ def main():
     url_app = direccion_tunel("tunel-app")
     url_kc = direccion_tunel("tunel-keycloak")
     dns_locales = direcciones_dns_locales()
+    dns_equipo = direccion_red_local(dns_locales)
     log(f"Aplicación: {url_app}")
     log(f"Keycloak:   {url_kc}")
     log("Servidor local detectado en: " + ", ".join(dns_locales))
+    log(f"Dirección de red usada para Keycloak local: {dns_equipo}")
 
     escribir_env({
         "URL_BACKEND": url_app,
         "URL_MAQUETA": f"{url_app}/app",
         "URL_KEYCLOAK": url_kc,
         "DJANGO_ALLOWED_HOSTS": ",".join([".trycloudflare.com", *dns_locales]),
+        "KEYCLOAK_LOCAL_HOST": dns_equipo,
         "DJANGO_HTTPS": "1",
     })
-    inyectar_credenciales(RAIZ, log_fn=log, archivo_prod=ENV)
+    inyectar_credenciales(RAIZ, log_fn=log, archivo_prod=ENV,
+                          datos_validados=credenciales_validadas, interactivo=False)
     copiar_claves_stripe()
 
     log("Levantando el sistema (la primera vez tarda unos minutos)...")
     compose("up", "-d", "--build")
 
     env = leer_env()
-    kc_local = f"http://127.0.0.1:{env.get('PUERTO_KEYCLOAK_LOCAL', '18080')}"
+    kc_local = (
+        f"http://{env.get('KEYCLOAK_LOCAL_HOST', dns_equipo)}:"
+        f"{env.get('PUERTO_KEYCLOAK_LOCAL', '18080')}"
+    )
     python_aux = python_con_requests()
     log("Esperando a Keycloak...")
-    esperar(f"{kc_local}/realms/GlobalExchange")
+    esperar(f"{kc_local}/realms/GlobalExchange", servicio="keycloak")
 
-    subprocess.run([python_aux, "keycloak/configurar_produccion.py", "--env-file", ".env.prod",
-                    "--keycloak", kc_local], cwd=RAIZ, check=True)
+    comando_keycloak = [python_aux, "keycloak/configurar_produccion.py", "--env-file", ".env.prod",
+                        "--keycloak", kc_local]
+    configuracion = subprocess.run(
+        comando_keycloak, cwd=RAIZ, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
+    salida = (configuracion.stdout or "") + (configuracion.stderr or "")
+    if configuracion.returncode != 0 and "Invalid user credentials" in salida:
+        print(salida, end="")
+        recrear_datos_keycloak()
+        esperar(f"{kc_local}/realms/GlobalExchange", servicio="keycloak")
+        configuracion = subprocess.run(comando_keycloak, cwd=RAIZ, check=False)
+    if configuracion.returncode != 0:
+        sys.exit("[publicar] No se pudo configurar Keycloak. Revisá las credenciales y los logs.")
 
     if args.demo:
         subprocess.run([python_aux, "keycloak/crear_usuarios_prueba.py", "--url", kc_local,

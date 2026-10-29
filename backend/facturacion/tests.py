@@ -39,6 +39,7 @@ NUMERACION = {
 }
 CONFIGURADO = {
     "FACTURA_SEGURA_TOKEN": "token-de-prueba",
+    "FACTURA_SEGURA_LOCAL_ONLY": False,
     "FACTURA_SEGURA_EMISOR": EMISOR,
     "FACTURA_SEGURA_NUMERACION": NUMERACION,
 }
@@ -145,6 +146,16 @@ class SinGastarNumerosTest(BaseFacturacionTest):
         self.assertEqual(factura.estado, Factura.Estado.SIMULADA)
         self.assertIsNone(factura.numero)
         self.assertEqual(factura.cdc, "")
+        self.pedir.assert_not_called()
+
+    @override_settings(**{
+        **CONFIGURADO, "FACTURA_SEGURA_LOCAL_ONLY": True, "FACTURA_SEGURA_EMITIR": True,
+    })
+    def test_modo_local_no_llama_a_factura_segura_aunque_emision_este_prendida(self):
+        factura = servicio.facturar(self.pagada())
+        self.assertEqual(factura.estado, Factura.Estado.SIMULADA)
+        self.assertIsNone(factura.numero)
+        self.assertIsNone(factura.cdc or None)
         self.pedir.assert_not_called()
 
     @override_settings(**CONFIGURADO, FACTURA_SEGURA_EMITIR=False)
@@ -495,10 +506,10 @@ class PantallasYApiTest(BaseFacturacionTest):
         self.cliente.save()
         self.entrar(self.usuario)
         respuesta = self.client.post(reverse("api_facturas_reintentar", args=[fallida.pk]))
-        self.assertEqual(respuesta.json()["estado"], "SIMULADA")
+        self.assertEqual(respuesta.status_code, 403)
         # Una que no falló no se reintenta.
         respuesta = self.client.post(reverse("api_facturas_reintentar", args=[self.factura.pk]))
-        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.status_code, 403)
 
     @override_settings(**CONFIGURADO, FACTURA_SEGURA_EMITIR=True)
     def test_con_la_emision_prendida_el_cliente_no_puede_emitir(self):

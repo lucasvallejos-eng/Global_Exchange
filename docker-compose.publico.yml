@@ -13,10 +13,11 @@
 
 services:
   keycloak:
-    # Solo para que publicar.py lo configure desde esta máquina. Atado a
-    # 127.0.0.1: desde afuera se entra únicamente por el túnel.
+    # Solo para que publicar.py lo configure desde esta máquina. Se enlaza a
+    # la dirección de red detectada por publicar.py; desde afuera se entra por
+    # el túnel, no por este puerto local.
     ports: !override
-      - "127.0.0.1:${PUERTO_KEYCLOAK_LOCAL:-18080}:8080"
+      - "${KEYCLOAK_LOCAL_HOST:-127.0.0.1}:${PUERTO_KEYCLOAK_LOCAL:-18080}:8080"
     environment:
       # Detrás del túnel: Keycloak toma el https y la IP real del cliente de
       # las cabeceras X-Forwarded-* que agrega Cloudflare.

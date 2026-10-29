@@ -186,6 +186,10 @@ export default function DashboardLayout({ user, onLogout }: Props) {
       return <ReportesModule />;
     }
 
+    if (activeSection === "facturas") {
+      return <FacturaModule user={user} />;
+    }
+
     if (activeSection === "preferencias-notificaciones") {
       return <PreferenciasNotificacionesModule />;
     }
@@ -247,10 +251,6 @@ export default function DashboardLayout({ user, onLogout }: Props) {
 
     if (activeSection === "medios-pago") {
       return <MediosPagoModule adminMode />;
-    }
-
-    if (activeSection === "facturas") {
-      return <FacturaModule />;
     }
 
     if (activeSection === "configuracion") {

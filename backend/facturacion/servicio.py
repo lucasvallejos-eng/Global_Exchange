@@ -11,6 +11,8 @@ que por defecto **no se emite nada**. Hay tres modos, según la configuración
 (``backend/.env.facturasegura``):
 
 - **Sin token:** la factura queda ``SIMULADA`` y no se llama a nadie.
+- **Con ``FACTURA_SEGURA_LOCAL_ONLY=1``:** se arma y guarda localmente, sin
+  llamadas HTTP, y queda ``SIMULADA``.
 - **Con token y ``FACTURA_SEGURA_EMITIR`` apagado:** se valida el documento
   con ``calcular_de``, que no genera nada ni gasta números, y la factura
   queda ``SIMULADA``.
@@ -92,7 +94,7 @@ class SinConfirmar(ErrorFacturaSegura):
 
 def habilitado():
     """Si hay token: se puede llamar a Factura Segura."""
-    return bool(settings.FACTURA_SEGURA_TOKEN)
+    return bool(settings.FACTURA_SEGURA_TOKEN) and not settings.FACTURA_SEGURA_LOCAL_ONLY
 
 
 def emite():
@@ -178,6 +180,14 @@ def operacion_de(origen):
 
 # --- Comunicación con Factura Segura ------------------------------------------
 
+def _url_base():
+    """Acepta tanto la URL base como la URL completa del recurso ESI."""
+    url = settings.FACTURA_SEGURA_URL.rstrip("/")
+    if url.endswith(RECURSO):
+        return url[:-len(RECURSO)].rstrip("/")
+    return url
+
+
 def _pedir(operation, params):
     """Manda una operación al recurso ESI y devuelve su lista ``results``.
 
@@ -186,7 +196,7 @@ def _pedir(operation, params):
         SinConfirmar: si no se pudo saber qué respondió.
     """
     pedido = urllib.request.Request(
-        settings.FACTURA_SEGURA_URL.rstrip("/") + RECURSO,
+        _url_base() + RECURSO,
         data=json.dumps({"operation": operation, "params": params}).encode("utf-8"),
         headers={
             "accept": "application/json",
@@ -222,7 +232,7 @@ def _bajar(operation, factura):
     """Descarga el KuDE o el XML de una factura emitida (``dwn_kude`` / ``dwn_xml``)."""
     ruc = settings.FACTURA_SEGURA_EMISOR["ruc"]
     pedido = urllib.request.Request(
-        f"{settings.FACTURA_SEGURA_URL.rstrip('/')}{RECURSO}/{operation}/{ruc}/{factura.cdc}",
+        f"{_url_base()}{RECURSO}/{operation}/{ruc}/{factura.cdc}",
         headers={"Authentication-Token": settings.FACTURA_SEGURA_TOKEN},
     )
     try:

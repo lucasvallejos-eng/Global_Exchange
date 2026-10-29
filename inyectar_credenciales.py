@@ -21,6 +21,19 @@ import sys
 import zipfile
 from pathlib import Path
 
+GOOGLE_DRIVE_FILE_ID = "16zYnoHtzSuXUMJud1I4GQCj_36pHHVO4"
+GOOGLE_DRIVE_DOWNLOAD_URLS = (
+    "https://drive.usercontent.google.com/download"
+    f"?id={GOOGLE_DRIVE_FILE_ID}&export=download&confirm=t",
+    "https://drive.google.com/uc"
+    f"?export=download&id={GOOGLE_DRIVE_FILE_ID}&confirm=t",
+)
+ARCHIVOS_CREDENCIALES = ("credenciales.rar", "credenciales.zip")
+NOMBRES_CREDENCIALES = ("credenciales.txt", "text", "credenciales.text")
+PLACEHOLDERS = (
+    "cambiar-por", "change-me", "placeholder", "tu-key", "your-key",
+    "your-secret", "example.com", "reemplazar",
+)
 
 # =============================================================================
 # 1. Descompresión y Localización de Archivos
@@ -87,6 +100,186 @@ def descomprimir_credenciales_zip(raiz: Path, log_fn=print) -> bool:
 
     log_fn("[credenciales] ALERTA: No se encontró 'credenciales.rar' ni 'credenciales.zip' en la raíz del proyecto. Continuando con modo interactivo...")
     return False
+
+
+def descargar_credenciales(raiz: Path, log_fn=print) -> Path:
+    """Garantiza un archivo local RAR/ZIP; el enlace público entrega RAR."""
+    for nombre in ARCHIVOS_CREDENCIALES:
+        archivo = raiz / nombre
+        if not archivo.exists():
+            continue
+        if nombre.endswith(".zip") and not zipfile.is_zipfile(archivo):
+            raise RuntimeError(
+                "[CRITICAL ERROR] Error al descomprimir o extraer archivos desde "
+                f"'{nombre}'. Abortando proceso."
+            )
+        return archivo
+
+    destino = raiz / "credenciales.rar"
+    log_fn("[credenciales] Descargando 'credenciales.rar' desde Google Drive...")
+    temporal = destino.with_suffix(".rar.download")
+    try:
+        import urllib.request
+        ultimo_error = None
+        for url in GOOGLE_DRIVE_DOWNLOAD_URLS:
+            try:
+                solicitud = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Global-Exchange-credentials-bootstrap/1.0"},
+                )
+                with urllib.request.urlopen(solicitud, timeout=60) as respuesta, \
+                        temporal.open("wb") as salida:
+                    shutil.copyfileobj(respuesta, salida)
+                firma = temporal.read_bytes()[:7]
+                if firma.startswith(b"Rar!\x1a\x07") or zipfile.is_zipfile(temporal):
+                    break
+            except Exception as error:
+                ultimo_error = error
+        else:
+            raise RuntimeError("No se pudo descargar desde Google Drive.") from ultimo_error
+        if not temporal.exists() or temporal.stat().st_size == 0:
+            raise RuntimeError("La descarga no produjo un archivo válido.")
+        firma = temporal.read_bytes()[:7]
+        if firma.startswith(b"Rar!\x1a\x07"):
+            destino = raiz / "credenciales.rar"
+        elif zipfile.is_zipfile(temporal):
+            destino = raiz / "credenciales.zip"
+        else:
+            raise RuntimeError("La descarga no produjo un RAR o ZIP válido.")
+        temporal.replace(destino)
+        return destino
+    except Exception as error:
+        try:
+            temporal.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise RuntimeError(
+            "[CRITICAL ERROR] No se detectó ni pudo descargarse 'credenciales.rar'. "
+            "La ejecución se ha detenido. Sin este archivo el programa no puede "
+            "correr adecuadamente."
+        ) from error
+
+
+def descargar_credenciales_zip(raiz: Path, log_fn=print) -> Path:
+    """Compatibilidad: descarga el archivo de credenciales en formato RAR/ZIP."""
+    return descargar_credenciales(raiz, log_fn=log_fn)
+
+
+def extraer_credenciales(raiz: Path, log_fn=print) -> Path:
+    """Extrae el RAR/ZIP en la raíz y devuelve el archivo de credenciales."""
+    archivo = next(
+        (raiz / nombre for nombre in ARCHIVOS_CREDENCIALES if (raiz / nombre).exists()),
+        None,
+    )
+    if archivo is None:
+        raise RuntimeError(
+            "[CRITICAL ERROR] No se detectó ni pudo descargarse 'credenciales.rar'. "
+            "La ejecución se ha detenido. Sin este archivo el programa no puede "
+            "correr adecuadamente."
+        )
+
+    if archivo.suffix.lower() == ".rar" and not zipfile.is_zipfile(archivo):
+        if not descomprimir_credenciales_zip(raiz, log_fn=log_fn):
+            raise RuntimeError(
+                "[CRITICAL ERROR] Error al descomprimir o extraer archivos desde "
+                "'credenciales.rar'. Abortando proceso."
+            )
+        credenciales = buscar_archivo_credenciales(raiz)
+        if credenciales is None:
+            raise RuntimeError(
+                "[CRITICAL ERROR] Error al descomprimir o extraer archivos desde "
+                "'credenciales.rar'. Abortando proceso."
+            )
+        log_fn(f"[credenciales] Archivo interno detectado: '{credenciales}'.")
+        return credenciales
+
+    return extraer_credenciales_zip(raiz, log_fn=log_fn)
+
+
+def extraer_credenciales_zip(raiz: Path, log_fn=print) -> Path:
+    """Extrae un ZIP en la raíz y devuelve el archivo de credenciales."""
+    archivo_zip = raiz / "credenciales.zip"
+    try:
+        with zipfile.ZipFile(archivo_zip) as zf:
+            raiz_resuelta = raiz.resolve()
+            miembros = zf.infolist()
+            contiene_credenciales = any(
+                Path(miembro.filename).name in NOMBRES_CREDENCIALES
+                for miembro in miembros
+                if not miembro.is_dir()
+            )
+            if not contiene_credenciales:
+                raise ValueError("El ZIP no contiene un archivo de credenciales.")
+            for miembro in miembros:
+                destino = (raiz / miembro.filename).resolve()
+                if destino != raiz_resuelta and raiz_resuelta not in destino.parents:
+                    raise ValueError(f"Ruta de extracción inválida: {miembro.filename}")
+            zf.extractall(raiz)
+    except Exception as error:
+        raise RuntimeError(
+            "[CRITICAL ERROR] Error al descomprimir o extraer archivos desde "
+            "'credenciales.zip'. Abortando proceso."
+        ) from error
+
+    archivo = buscar_archivo_credenciales(raiz)
+    if archivo is None:
+        raise RuntimeError(
+            "[CRITICAL ERROR] Error al descomprimir o extraer archivos desde "
+            "'credenciales.zip'. Abortando proceso."
+        )
+    log_fn(f"[credenciales] Archivo interno detectado: '{archivo}'.")
+    return archivo
+
+
+def _valor_real(valor):
+    texto = str(valor or "").strip().lower()
+    return bool(texto) and not any(marca in texto for marca in PLACEHOLDERS)
+
+
+def preflight_credenciales_estricto(raiz: Path, log_fn=print) -> dict:
+    """Descarga, extrae y valida credenciales sin permitir continuación parcial."""
+    try:
+        descargar_credenciales(raiz, log_fn=log_fn)
+        extraer_credenciales(raiz, log_fn=log_fn)
+        datos = obtener_y_validar_credenciales(raiz, log_fn=log_fn, interactivo=False)
+        stripe = datos["stripe"]
+        factura = datos["facturasegura"]
+
+        obligatorias_stripe = ("STRIPE_PUBLIC_KEY", "STRIPE_SECRET_KEY")
+        obligatorias_factura = (
+            "FACTURA_SEGURA_TOKEN", "FACTURA_SEGURA_URL",
+            "FACTURA_SEGURA_EMISOR_RUC", "FACTURA_SEGURA_EMISOR_NOMBRE",
+            "FACTURA_SEGURA_EMISOR_DIRECCION", "FACTURA_SEGURA_EMISOR_TELEFONO",
+            "FACTURA_SEGURA_EMISOR_ACTIVIDAD_CODIGO", "FACTURA_SEGURA_EMISOR_ACTIVIDAD",
+            "FACTURA_SEGURA_ESTABLECIMIENTO", "FACTURA_SEGURA_PUNTO_EXPEDICION",
+        )
+        faltantes = [
+            clave for clave in obligatorias_stripe
+            if not _valor_real(stripe.get(clave))
+        ]
+        faltantes += [
+            clave for clave in obligatorias_factura
+            if not _valor_real(factura.get(clave))
+        ]
+        if faltantes:
+            raise ValueError("Variables obligatorias ausentes o con placeholders: " + ", ".join(faltantes))
+        valido_url, motivo_url = validar_esi_facturacion_url(factura["FACTURA_SEGURA_URL"])
+        if not valido_url:
+            raise ValueError(motivo_url)
+        valido_ruc, motivo_ruc = validar_esi_ruc(
+            factura.get("ESI_RUC_EMISOR") or factura["FACTURA_SEGURA_EMISOR_RUC"]
+        )
+        if not valido_ruc:
+            raise ValueError(motivo_ruc)
+        log_fn("[credenciales] ZIP, extracción, parseo y validación completados.")
+        return datos
+    except Exception as error:
+        if isinstance(error, RuntimeError) and str(error).startswith("[CRITICAL ERROR]"):
+            raise
+        raise RuntimeError(
+            "[CRITICAL ERROR] Error durante el parseo de credenciales de Stripe / "
+            "Facturación Segura ESI. Abortando ejecucion."
+        ) from error
 
 
 def buscar_archivo_credenciales(raiz: Path) -> Path | None:
@@ -314,7 +507,11 @@ def parsear_credenciales(ruta_archivo: Path) -> dict:
         factura["FACTURA_SEGURA_URL"] = url
         factura["FACTURASEGURA_URL"] = url
 
-    ruc_emisor = factura.get("ESI_RUC_EMISOR") or factura.get("FACTURA_SEGURA_EMISOR_RUC")
+    ruc_emisor = (
+        factura.get("ESI_RUC_EMISOR")
+        or factura.get("FACTURA_SEGURA_EMISOR_RUC")
+        or factura.get("FACTURASEGURA_EMISOR_RUC")
+    )
     if ruc_emisor:
         factura["ESI_RUC_EMISOR"] = ruc_emisor
         if "-" in ruc_emisor:
@@ -323,6 +520,36 @@ def parsear_credenciales(ruta_archivo: Path) -> dict:
             factura["FACTURA_SEGURA_EMISOR_DV"] = dv
         else:
             factura["FACTURA_SEGURA_EMISOR_RUC"] = ruc_emisor
+
+    # Aceptar la nomenclatura FACTURASEGURA_* solicitada por los archivos
+    # externos y normalizarla al contrato interno del backend.
+    for sufijo in (
+        "EMISOR_NOMBRE", "EMISOR_DIRECCION", "EMISOR_TELEFONO",
+        "EMISOR_ACTIVIDAD_CODIGO", "EMISOR_ACTIVIDAD",
+        "EMISOR_ESTABLECIMIENTO", "EMISOR_PUNTO_EXPEDICION",
+    ):
+        valor = (
+            factura.get(f"FACTURA_SEGURA_{sufijo}")
+            or factura.get(f"FACTURASEGURA_{sufijo}")
+            or factura.get(f"ESI_{sufijo}")
+        )
+        if valor:
+            factura[f"FACTURA_SEGURA_{sufijo}"] = valor
+    for clave, alias in (
+        ("FACTURA_SEGURA_URL", "FACTURASEGURA_URL"),
+        ("FACTURA_SEGURA_TOKEN", "FACTURASEGURA_API_KEY"),
+        ("FACTURA_SEGURA_TOKEN", "FACTURASEGURA_SECRET"),
+    ):
+        if not factura.get(clave) and factura.get(alias):
+            factura[clave] = factura[alias]
+    if factura.get("FACTURA_SEGURA_EMISOR_ESTABLECIMIENTO"):
+        factura["FACTURA_SEGURA_ESTABLECIMIENTO"] = factura[
+            "FACTURA_SEGURA_EMISOR_ESTABLECIMIENTO"
+        ]
+    if factura.get("FACTURA_SEGURA_EMISOR_PUNTO_EXPEDICION"):
+        factura["FACTURA_SEGURA_PUNTO_EXPEDICION"] = factura[
+            "FACTURA_SEGURA_EMISOR_PUNTO_EXPEDICION"
+        ]
 
     return resultado
 

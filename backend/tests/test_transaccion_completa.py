@@ -199,15 +199,15 @@ class TransaccionWebCompletaTest(BaseTransaccionCompleta):
         self.assertEqual(operacion["estado"], "PAGADA")  # la factura no frena el pago
         factura = self.client.get(reverse("api_facturas")).json()["facturas"][0]
         self.assertEqual(factura["estado"], "ERROR")
-        self.assertTrue(factura["sePuedeEmitir"])
+        self.assertFalse(factura["sePuedeEmitir"])
 
         # El administrador carga el RUC y el cliente reintenta.
         self.entrar(self.admin)
         self.client.patch(reverse("clientes_detalle", args=[self.cliente_id]),
                           data=json.dumps({"ruc": "80002247-5"}), content_type="application/json")
         self.entrar(self.clara)
-        reintento = self.post("api_facturas_reintentar", kwargs={"pk": factura["id"]}).json()
-        self.assertEqual(reintento["estado"], "SIMULADA")
+        reintento = self.post("api_facturas_reintentar", kwargs={"pk": factura["id"]})
+        self.assertEqual(reintento.status_code, 403)
 
 
 @override_settings(**CONFIGURADO, FACTURA_SEGURA_EMITIR=True)

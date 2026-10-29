@@ -11,7 +11,7 @@ lleva al detalle, que es donde se descarga o se consulta el estado.
   <style>
     .filtros { display: flex; gap: 12px; align-items: end; margin-bottom: 24px; }
     .filtros .campo, .filtros .botonera { margin: 0; }
-    .etiqueta.simulada { background: #f1f5f9; color: var(--texto-suave); }
+    .etiqueta.simulada { background: #fef3c7; color: #92400e; }
     .etiqueta.enviada, .etiqueta.sin_confirmar { background: #fef3c7; color: #92400e; }
     .etiqueta.error, .etiqueta.rechazada, .etiqueta.cancelada { background: #fee2e2; color: #991b1b; }
     .etiqueta.aprobada { background: #dcfce7; color: var(--verde); }
@@ -76,7 +76,19 @@ lleva al detalle, que es donde se descarga o se consulta el estado.
                 {% endif %}
               </td>
               <td class="numero">{{ f.total|floatformat:"0g" }}</td>
-              <td><span class="etiqueta {{ f.estado|lower }}">{{ f.get_estado_display }}</span></td>
+              <td>
+                <span class="etiqueta {{ f.estado|lower }}">
+                  {% if es_administrador %}
+                    {{ f.get_estado_display }}
+                  {% elif f.estado == "APROBADA" or f.estado == "ENVIADA" %}
+                    Emitida
+                  {% elif f.estado == "CANCELADA" %}
+                    Cancelada
+                  {% else %}
+                    {% if f.estado == "ERROR" or f.estado == "RECHAZADA" %}Pendiente de emisión{% else %}En Espera{% endif %}
+                  {% endif %}
+                </span>
+              </td>
               <td class="acciones"><a href="{% url 'detalle_factura' f.pk %}">Ver</a></td>
             </tr>
           {% endfor %}

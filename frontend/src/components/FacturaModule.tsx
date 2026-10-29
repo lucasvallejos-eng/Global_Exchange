@@ -8,6 +8,11 @@ import {
   type EstadoFactura,
   type Factura,
 } from "../lib/facturasApi";
+import type { User } from "../types";
+
+interface Props {
+  user: User;
+}
 
 const formatPyg = (value: number) =>
   new Intl.NumberFormat("es-PY", {
@@ -18,13 +23,33 @@ const formatPyg = (value: number) =>
 const formatFecha = (iso: string) => new Date(iso).toLocaleDateString("es-PY");
 
 const estadoColors: Record<EstadoFactura, string> = {
-  SIMULADA: "bg-slate-100 text-slate-600",
+  SIMULADA: "bg-amber-100 text-amber-700",
   ENVIADA: "bg-yellow-100 text-yellow-700",
   SIN_CONFIRMAR: "bg-yellow-100 text-yellow-700",
   APROBADA: "bg-green-100 text-green-700",
   ERROR: "bg-red-100 text-red-700",
   RECHAZADA: "bg-red-100 text-red-700",
   CANCELADA: "bg-red-100 text-red-700",
+};
+
+const estadoCliente: Record<EstadoFactura, string> = {
+  SIMULADA: "En Espera",
+  ENVIADA: "Emitida",
+  SIN_CONFIRMAR: "En Espera",
+  APROBADA: "Emitida",
+  ERROR: "Pendiente de emisión",
+  RECHAZADA: "Pendiente de emisión",
+  CANCELADA: "Cancelada",
+};
+
+const estadoClienteColors: Record<EstadoFactura, string> = {
+  SIMULADA: "bg-amber-100 text-amber-700",
+  ENVIADA: "bg-amber-100 text-amber-700",
+  SIN_CONFIRMAR: "bg-amber-100 text-amber-700",
+  APROBADA: "bg-green-100 text-green-700",
+  ERROR: "bg-amber-100 text-amber-700",
+  RECHAZADA: "bg-amber-100 text-amber-700",
+  CANCELADA: "bg-slate-100 text-slate-600",
 };
 
 const ESTADOS: { valor: EstadoFactura; texto: string }[] = [
@@ -37,7 +62,8 @@ const ESTADOS: { valor: EstadoFactura; texto: string }[] = [
   { valor: "CANCELADA", texto: "Cancelada" },
 ];
 
-export default function FacturaModule() {
+export default function FacturaModule({ user }: Props) {
+  const esAdministrador = user.role === "administrador";
   const [facturas, setFacturas] = useState<Factura[]>([]);
   const [emision, setEmision] = useState<"real" | "simulada">("simulada");
   const [cargando, setCargando] = useState(true);
@@ -191,7 +217,9 @@ export default function FacturaModule() {
                     <th className="px-4 py-3 font-semibold">Estado de Factura</th>
                     <th className="px-4 py-3 font-semibold">Fecha</th>
                     <th className="px-4 py-3 text-right font-semibold">Monto en PYG</th>
-                    <th className="px-4 py-3 text-center font-semibold">Acciones / Descarga</th>
+                    <th className="px-4 py-3 text-center font-semibold">
+                      {esAdministrador ? "Gestión / Descarga" : "Acciones"}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -207,11 +235,13 @@ export default function FacturaModule() {
                       <td className="px-4 py-3">
                         <span
                           title={factura.detalle ?? undefined}
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${estadoColors[factura.estado]}`}
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            esAdministrador ? estadoColors[factura.estado] : estadoClienteColors[factura.estado]
+                          }`}
                         >
-                          {factura.estadoTexto}
+                          {esAdministrador ? factura.estadoTexto : estadoCliente[factura.estado]}
                         </span>
-                        {factura.detalle && factura.estado !== "APROBADA" && (
+                        {esAdministrador && factura.detalle && factura.estado !== "APROBADA" && (
                           <span className="mt-1 block max-w-[260px] text-xs text-[#94a3b8]">{factura.detalle}</span>
                         )}
                       </td>
@@ -243,16 +273,18 @@ export default function FacturaModule() {
                               </button>
                             </>
                           )}
-                          {factura.sePuedeEmitir && (
+                          {esAdministrador && factura.sePuedeEmitir && (
                             <button
                               onClick={() => reemplazar(reintentarFactura(factura.id))}
                               className="rounded-lg bg-[#eaf3ff] px-3 py-1.5 text-xs font-semibold text-[#1a7eff] hover:bg-[#dfeeff]"
                             >
-                              {factura.estado === "SIMULADA" ? "Emitir" : "Reintentar"}
+                              {factura.estado === "SIMULADA" ? "Emitir Directamente" : "Reintentar Emisión"}
                             </button>
                           )}
                           {!factura.descargable && !factura.sePuedeEmitir && (
-                            <span className="text-xs text-[#94a3b8]">Sin archivos</span>
+                            <span className="text-xs italic text-[#94a3b8]">
+                              {esAdministrador ? "Sin acciones disponibles" : "Factura en proceso de emisión"}
+                            </span>
                           )}
                         </div>
                       </td>

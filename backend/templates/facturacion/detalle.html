@@ -13,7 +13,7 @@ archivos (KuDE y XML) existen solo si se emitió de verdad en Factura Segura.
     .detalle dt { color: var(--texto-suave); }
     .detalle dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
     .total { font-size: 28px; font-weight: 700; margin: 20px 0 4px; font-variant-numeric: tabular-nums; }
-    .etiqueta.simulada { background: #f1f5f9; color: var(--texto-suave); }
+    .etiqueta.simulada { background: #fef3c7; color: #92400e; }
     .etiqueta.enviada, .etiqueta.sin_confirmar { background: #fef3c7; color: #92400e; }
     .etiqueta.error, .etiqueta.rechazada, .etiqueta.cancelada { background: #fee2e2; color: #991b1b; }
     .etiqueta.aprobada { background: #dcfce7; color: var(--verde); }
@@ -21,13 +21,23 @@ archivos (KuDE y XML) existen solo si se emitió de verdad en Factura Segura.
 
   <div class="cabecera">
     <h1>Factura {{ f.numero_completo }}</h1>
-    <span class="etiqueta {{ f.estado|lower }}">{{ f.get_estado_display }}</span>
+    <span class="etiqueta {{ f.estado|lower }}">
+      {% if es_administrador %}
+        {{ f.get_estado_display }}
+      {% elif f.estado == "APROBADA" or f.estado == "ENVIADA" %}
+        Emitida
+      {% elif f.estado == "CANCELADA" %}
+        Cancelada
+      {% else %}
+        {% if f.estado == "ERROR" or f.estado == "RECHAZADA" %}Pendiente de emisión{% else %}En Espera{% endif %}
+      {% endif %}
+    </span>
   </div>
 
   {% if error %}
     <div class="errores">{{ error }}</div>
   {% endif %}
-  {% if f.detalle %}
+  {% if es_administrador and f.detalle %}
     <p class="ayuda" style="margin:0 0 20px">{{ f.detalle }}</p>
   {% endif %}
 

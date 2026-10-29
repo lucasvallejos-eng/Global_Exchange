@@ -39,6 +39,7 @@ try:
         buscar_archivo_credenciales,
         obtener_y_validar_credenciales,
         inyectar_credenciales,
+        preflight_credenciales_estricto,
     )
 except ImportError:
     sys.path.insert(0, str(RAIZ))
@@ -47,6 +48,7 @@ except ImportError:
         buscar_archivo_credenciales,
         obtener_y_validar_credenciales,
         inyectar_credenciales,
+        preflight_credenciales_estricto,
     )
 
 ESPERA_KEYCLOAK_SEG = 180
@@ -438,10 +440,18 @@ def preflight_credenciales(raiz: Path) -> dict:
     5. Si faltan o son inválidas, solicita ingreso interactivo con validación en bucle.
     Retorna el diccionario de credenciales validadas.
     """
-    log("Fase Pre-flight: Verificando archivo de credenciales (.rar/.zip) y claves...")
+    log("Fase Pre-flight: verificando archivo y claves...")
     descomprimir_credenciales_zip(raiz, log_fn=log)
-    credenciales_validadas = obtener_y_validar_credenciales(raiz, log_fn=log, interactivo=True)
-    return credenciales_validadas
+    return obtener_y_validar_credenciales(raiz, log_fn=log, interactivo=True)
+
+
+def preflight_credenciales_obligatorio(raiz: Path) -> dict:
+    """Pre-flight fatal usado por la ejecución automatizada."""
+    log("Fase Pre-flight: descargando, extrayendo y validando credenciales...")
+    try:
+        return preflight_credenciales_estricto(raiz, log_fn=log)
+    except RuntimeError as error:
+        sys.exit(str(error))
 
 
 def fase1_preparar_envs(credenciales_validadas: dict | None = None):
@@ -574,11 +584,6 @@ def detener(procesos):
 
 
 def main():
-    # 0. Las credenciales pueden venir en un archivo comprimido o de texto.
-    # El preflight también permite ingresarlas interactivamente si no hay archivo.
-    if not any((RAIZ / nombre).exists() for nombre in ("credenciales.rar", "credenciales.zip")) and not buscar_archivo_credenciales(RAIZ):
-        log("Aviso: no se encontró archivo de credenciales; se solicitarán por consola si hacen falta.")
-
     global _trabajo
     ocupados = [f"{p} ({nombre})" for p, nombre in PUERTOS.items() if puerto_ocupado(p)]
     if ocupados:
@@ -593,7 +598,7 @@ def main():
             log(f"Aviso: no se pudo crear el Job Object de Windows ({error}).")
 
     # 1. Fase Pre-flight: Descompresión de credenciales.zip y validación de claves
-    credenciales_validadas = preflight_credenciales(RAIZ)
+    credenciales_validadas = preflight_credenciales_obligatorio(RAIZ)
 
     # 2. Bajar y limpiar contenedores/volúmenes antiguos de Keycloak
     limpiar_docker_keycloak()

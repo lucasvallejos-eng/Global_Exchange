@@ -33,6 +33,7 @@ def listar_facturas(request):
         "estado": estado,
         "emite": servicio.emite(),
         "numeros_libres": len(servicio.numeros_libres()),
+        "es_administrador": request.user.groups.filter(name="administrador").exists(),
     })
 
 
@@ -45,6 +46,7 @@ def detalle_factura(request, pk):
         "operacion": descripcion_de(factura),
         "items": factura.de.get("gCamItem", []),
         "se_puede_emitir": puede_emitir(request.user) and servicio.se_puede_emitir(factura),
+        "es_administrador": request.user.groups.filter(name="administrador").exists(),
         "error": request.session.pop("error_factura", None),
     })
 

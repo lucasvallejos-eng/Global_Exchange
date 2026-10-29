@@ -96,7 +96,15 @@ def main():
     )
     token = (cuerpo or {}).get("access_token") if estado == 200 else None
     if not token:
-        sys.exit(f"No se pudo entrar como administrador de Keycloak en {base}.")
+        detalle = (cuerpo or {}).get("error_description") if isinstance(cuerpo, dict) else None
+        detalle = detalle or (cuerpo or {}).get("error") if isinstance(cuerpo, dict) else None
+        detalle = detalle or "respuesta vacía o no JSON"
+        if estado in (400, 401) and detalle == "Invalid user credentials":
+            detalle += (
+                ". La cuenta admin ya existe en el volumen de Keycloak; "
+                "KC_BOOTSTRAP_ADMIN_PASSWORD solo se aplica al crearla por primera vez."
+            )
+        sys.exit(f"No se pudo entrar como administrador de Keycloak en {base} (HTTP {estado}: {detalle}).")
     cabeceras = {"Authorization": f"Bearer {token}"}
 
     _, clientes, _ = pedir_json(
