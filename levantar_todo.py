@@ -431,14 +431,14 @@ def actualizar_o_crear_env(path_env: Path, path_example: Path, cambios: dict):
 
 def preflight_credenciales(raiz: Path) -> dict:
     """Fase Pre-flight:
-    1. Busca y descomprime credenciales.zip en la raíz del proyecto.
+    1. Busca y descomprime credenciales.rar o credenciales.zip en la raíz del proyecto.
     2. Emite alerta en consola si no se encuentra y continúa con modo interactivo.
     3. Lee y parsea de forma unificada credenciales.txt (o text en su defecto).
     4. Valida prefijos y rangos de longitud de Stripe y Facturación Segura ESI.
     5. Si faltan o son inválidas, solicita ingreso interactivo con validación en bucle.
     Retorna el diccionario de credenciales validadas.
     """
-    log("Fase Pre-flight: Verificando archivo 'credenciales.zip' y credenciales...")
+    log("Fase Pre-flight: Verificando archivo de credenciales (.rar/.zip) y claves...")
     descomprimir_credenciales_zip(raiz, log_fn=log)
     credenciales_validadas = obtener_y_validar_credenciales(raiz, log_fn=log, interactivo=True)
     return credenciales_validadas
@@ -574,12 +574,10 @@ def detener(procesos):
 
 
 def main():
-    # 0. Verificación mandatoria de credenciales.rar
-    if not (RAIZ / "credenciales.rar").exists():
-        sys.exit(
-            "[levantar] ERROR: No se encontró el archivo 'credenciales.rar' en la raíz del proyecto. "
-            "El programa presentará problemas si no se tiene el archivo de credenciales.rar."
-        )
+    # 0. Las credenciales pueden venir en un archivo comprimido o de texto.
+    # El preflight también permite ingresarlas interactivamente si no hay archivo.
+    if not any((RAIZ / nombre).exists() for nombre in ("credenciales.rar", "credenciales.zip")) and not buscar_archivo_credenciales(RAIZ):
+        log("Aviso: no se encontró archivo de credenciales; se solicitarán por consola si hacen falta.")
 
     global _trabajo
     ocupados = [f"{p} ({nombre})" for p, nombre in PUERTOS.items() if puerto_ocupado(p)]

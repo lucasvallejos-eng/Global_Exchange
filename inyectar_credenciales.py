@@ -33,13 +33,42 @@ def descomprimir_credenciales_zip(raiz: Path, log_fn=print) -> bool:
     ruta_rar = raiz / "credenciales.rar"
     if ruta_rar.exists():
         log_fn(f"[credenciales] Archivo '{ruta_rar.name}' detectado en la raíz. Descomprimiendo en '{raiz}'...")
+        # Algunas copias se distribuyen como ZIP pero conservan la extensión .rar.
+        # Detectar el formato por el contenido permite abrirlas sin 7-Zip/UnRAR.
+        if zipfile.is_zipfile(ruta_rar):
+            try:
+                with zipfile.ZipFile(ruta_rar, "r") as zf:
+                    zf.extractall(raiz)
+                log_fn(f"[credenciales] El archivo '{ruta_rar.name}' contiene un ZIP; extracción completada.")
+                return True
+            except Exception as e:
+                log_fn(f"[credenciales] ERROR al extraer el ZIP '{ruta_rar.name}': {e}.")
+                return False
+        # RAR no está soportado por las herramientas estándar de Python. Priorizar
+        # 7-Zip/UnRAR (comunes en Windows) y dejar tar como alternativa compatible.
+        extractor_7z = shutil.which("7z") or shutil.which("7zz")
+        extractor_unrar = shutil.which("unrar")
+        extractor_tar = shutil.which("tar")
+        if extractor_7z:
+            comando = [extractor_7z, "x", "-y", f"-o{raiz}", str(ruta_rar)]
+        elif extractor_unrar:
+            comando = [extractor_unrar, "x", "-o+", str(ruta_rar), f"{raiz}{os.sep}"]
+        elif extractor_tar:
+            comando = [extractor_tar, "-xf", str(ruta_rar), "-C", str(raiz)]
+        else:
+            log_fn("[credenciales] ERROR: Para abrir credenciales.rar instalá 7-Zip y agregá 7z al PATH (o instalá UnRAR).")
+            return False
         try:
-            res = subprocess.run(["tar", "-xf", str(ruta_rar)], cwd=raiz, capture_output=True, text=True)
+            res = subprocess.run(comando, cwd=raiz, capture_output=True, text=True)
             if res.returncode == 0:
                 log_fn(f"[credenciales] Descompresión completada con éxito desde '{ruta_rar.name}'.")
                 return True
-        except Exception as e:
-            log_fn(f"[credenciales] ALERTA: Error al descomprimir '{ruta_rar.name}': {e}.")
+            detalle = (res.stderr or res.stdout or "sin detalle").strip()
+            log_fn(f"[credenciales] ERROR al descomprimir '{ruta_rar.name}': {detalle}")
+            return False
+        except OSError as e:
+            log_fn(f"[credenciales] ERROR al ejecutar el extractor para '{ruta_rar.name}': {e}.")
+            return False
 
     ruta_zip = raiz / "credenciales.zip"
     if ruta_zip.exists():
