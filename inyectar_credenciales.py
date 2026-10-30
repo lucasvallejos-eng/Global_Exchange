@@ -26,7 +26,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-GOOGLE_DRIVE_FILE_ID = "16zYnoHtzSuXUMJud1I4GQCj_36pHHVO4"
+# Archivo compartido de credenciales usado por los flujos de levantar_todo.py
+# y publicar.py, que descargan a través de preflight_credenciales_estricto.
+GOOGLE_DRIVE_FILE_ID = "1P7lP_-jH0RrqohmN7KdSr87176vTy4NC"
 GOOGLE_DRIVE_DOWNLOAD_URLS = (
     "https://drive.usercontent.google.com/download"
     f"?id={GOOGLE_DRIVE_FILE_ID}&export=download&confirm=t",
