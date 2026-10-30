@@ -401,7 +401,11 @@ def armar_de(operacion, numero):
         "dDesCiuEmi": emisor["ciudad"],
         "dTelEmi": emisor["telefono"],
         "dEmailE": emisor["email"],
-        "gActEco": [{"cActEco": emisor["actividad_codigo"], "dDesActEco": emisor["actividad"]}],
+        "gActEco": (
+            json.loads(emisor["actividades"])
+            if emisor.get("actividades")
+            else [{"cActEco": emisor["actividad_codigo"], "dDesActEco": emisor["actividad"]}]
+        ),
         **_receptor(operacion.cliente),
         "iIndPres": "1" if operacion.presencial else "2",  # presencial / electrónica
         "iCondOpe": "1",  # contado

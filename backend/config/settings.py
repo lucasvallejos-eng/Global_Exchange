@@ -286,6 +286,7 @@ FACTURA_SEGURA_EMISOR = {
         "FACTURA_SEGURA_EMISOR_ACTIVIDAD_CODIGO", "ESI_EMISOR_ACTIVIDAD_CODIGO"
     ),
     "actividad": _env("FACTURA_SEGURA_EMISOR_ACTIVIDAD", "ESI_EMISOR_ACTIVIDAD"),
+    "actividades": os.environ.get("FACTURA_SEGURA_EMISOR_ACTIVIDADES", ""),
 }
 # Rango de facturas que la cátedra le asignó al equipo: 001-003-0000382 a 0000393.
 FACTURA_SEGURA_NUMERACION = {
