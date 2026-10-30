@@ -35,10 +35,18 @@ ENV = RAIZ / ".env.prod"
 EJEMPLO = RAIZ / ".env.prod.example"
 
 try:
-    from inyectar_credenciales import inyectar_credenciales, preflight_credenciales_estricto
+    from inyectar_credenciales import (
+        inyectar_credenciales,
+        preflight_credenciales_estricto,
+        actualizar_token_esi,
+    )
 except ImportError:
     sys.path.insert(0, str(RAIZ))
-    from inyectar_credenciales import inyectar_credenciales, preflight_credenciales_estricto
+    from inyectar_credenciales import (
+        inyectar_credenciales,
+        preflight_credenciales_estricto,
+        actualizar_token_esi,
+    )
 
 COMPOSE = ["docker", "compose", "-f", "docker-compose.prod.yml",
            "-f", "docker-compose.publico.yml", "--env-file", ".env.prod"]
@@ -368,7 +376,8 @@ def main():
         "DJANGO_HTTPS": "1",
     })
     inyectar_credenciales(RAIZ, log_fn=log, archivo_prod=ENV,
-                          datos_validados=credenciales_validadas, interactivo=False)
+                          datos_validados=credenciales_validadas, interactivo=False,
+                          renovar_token_esi=True)
     copiar_claves_stripe()
 
     log("Levantando el sistema (la primera vez tarda unos minutos)...")

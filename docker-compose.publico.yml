@@ -13,11 +13,11 @@
 
 services:
   keycloak:
-    # Solo para que publicar.py lo configure desde esta máquina. Se enlaza a
-    # la dirección de red detectada por publicar.py; desde afuera se entra por
-    # el túnel, no por este puerto local.
+    # Solo para que publicar.py lo configure desde esta máquina. Docker Desktop
+    # puede rechazar un bind a una IP que cambió de interfaz; 0.0.0.0 mantiene
+    # el puerto accesible desde la IP/DNS que publicar.py detectó.
     ports: !override
-      - "${KEYCLOAK_LOCAL_HOST:-127.0.0.1}:${PUERTO_KEYCLOAK_LOCAL:-18080}:8080"
+      - "0.0.0.0:${PUERTO_KEYCLOAK_LOCAL:-18080}:8080"
     environment:
       # Detrás del túnel: Keycloak toma el https y la IP real del cliente de
       # las cabeceras X-Forwarded-* que agrega Cloudflare.

@@ -40,6 +40,7 @@ try:
         obtener_y_validar_credenciales,
         inyectar_credenciales,
         preflight_credenciales_estricto,
+        actualizar_token_esi,
     )
 except ImportError:
     sys.path.insert(0, str(RAIZ))
@@ -49,6 +50,7 @@ except ImportError:
         obtener_y_validar_credenciales,
         inyectar_credenciales,
         preflight_credenciales_estricto,
+        actualizar_token_esi,
     )
 
 ESPERA_KEYCLOAK_SEG = 180
@@ -614,7 +616,10 @@ def main():
 
     # 6. Inyección de credenciales validadas posterior al levantamiento e inicialización base de Docker/Keycloak
     log("Inyectando credenciales validadas (Stripe y Facturación Segura ESI) en backend/.env, frontend/.env y raíz .env...")
-    inyectar_credenciales(RAIZ, log_fn=log, datos_validados=credenciales_validadas)
+    inyectar_credenciales(
+        RAIZ, log_fn=log, datos_validados=credenciales_validadas,
+        renovar_token_esi=True,
+    )
 
     # 7. Fase 3: Arranque de Servicios Restantes
     log("Fase 3: Arrancando servicios restantes (Backend + Frontend)...")

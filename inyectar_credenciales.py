@@ -19,6 +19,11 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import getpass
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 GOOGLE_DRIVE_FILE_ID = "16zYnoHtzSuXUMJud1I4GQCj_36pHHVO4"
@@ -28,11 +33,14 @@ GOOGLE_DRIVE_DOWNLOAD_URLS = (
     "https://drive.google.com/uc"
     f"?export=download&id={GOOGLE_DRIVE_FILE_ID}&confirm=t",
 )
-ARCHIVOS_CREDENCIALES = ("credenciales.rar", "credenciales.zip")
+# El ZIP local actualizado tiene prioridad sobre el RAR distribuido: permite
+# conservar las credenciales renovables sin sobrescribir el archivo original.
+ARCHIVOS_CREDENCIALES = ("credenciales.zip", "credenciales.rar")
 NOMBRES_CREDENCIALES = ("credenciales.txt", "text", "credenciales.text")
 PLACEHOLDERS = (
     "cambiar-por", "change-me", "placeholder", "tu-key", "your-key",
-    "your-secret", "example.com", "reemplazar",
+    "your-secret", "example.com", "reemplazar", "se solicita",
+    "hay un error",
 )
 
 # =============================================================================
@@ -43,6 +51,18 @@ def descomprimir_credenciales_zip(raiz: Path, log_fn=print) -> bool:
     """Verifica la existencia de 'credenciales.rar' (o 'credenciales.zip') en la raíz y lo descomprime.
     Emite una alerta en consola si no encuentra ningún archivo comprimido y continúa.
     """
+    ruta_zip = raiz / "credenciales.zip"
+    if ruta_zip.exists():
+        log_fn(f"[credenciales] Archivo '{ruta_zip.name}' detectado en la raíz. Descomprimiendo en '{raiz}'...")
+        try:
+            with zipfile.ZipFile(ruta_zip, "r") as zf:
+                zf.extractall(raiz)
+            log_fn(f"[credenciales] Descompresión completada con éxito desde '{ruta_zip.name}'.")
+            return True
+        except Exception as e:
+            log_fn(f"[credenciales] ALERTA: Error al descomprimir '{ruta_zip.name}': {e}.")
+            return False
+
     ruta_rar = raiz / "credenciales.rar"
     if ruta_rar.exists():
         log_fn(f"[credenciales] Archivo '{ruta_rar.name}' detectado en la raíz. Descomprimiendo en '{raiz}'...")
@@ -84,18 +104,6 @@ def descomprimir_credenciales_zip(raiz: Path, log_fn=print) -> bool:
             return False
         except OSError as e:
             log_fn(f"[credenciales] ERROR al ejecutar el extractor para '{ruta_rar.name}': {e}.")
-            return False
-
-    ruta_zip = raiz / "credenciales.zip"
-    if ruta_zip.exists():
-        log_fn(f"[credenciales] Archivo '{ruta_zip.name}' detectado en la raíz. Descomprimiendo en '{raiz}'...")
-        try:
-            with zipfile.ZipFile(ruta_zip, "r") as zf:
-                zf.extractall(raiz)
-            log_fn(f"[credenciales] Descompresión completada con éxito desde '{ruta_zip.name}'.")
-            return True
-        except Exception as e:
-            log_fn(f"[credenciales] ALERTA: Error al descomprimir '{ruta_zip.name}': {e}.")
             return False
 
     log_fn("[credenciales] ALERTA: No se encontró 'credenciales.rar' ni 'credenciales.zip' en la raíz del proyecto. Continuando con modo interactivo...")
@@ -247,7 +255,7 @@ def preflight_credenciales_estricto(raiz: Path, log_fn=print) -> dict:
 
         obligatorias_stripe = ("STRIPE_PUBLIC_KEY", "STRIPE_SECRET_KEY")
         obligatorias_factura = (
-            "FACTURA_SEGURA_TOKEN", "FACTURA_SEGURA_URL",
+            "FACTURA_SEGURA_URL",
             "FACTURA_SEGURA_EMISOR_RUC", "FACTURA_SEGURA_EMISOR_NOMBRE",
             "FACTURA_SEGURA_EMISOR_DIRECCION", "FACTURA_SEGURA_EMISOR_TELEFONO",
             "FACTURA_SEGURA_EMISOR_ACTIVIDAD_CODIGO", "FACTURA_SEGURA_EMISOR_ACTIVIDAD",
@@ -351,7 +359,8 @@ def validar_esi_facturacion_key(clave: str) -> tuple[bool, str]:
     """Valida la clave / token de Facturación Segura ESI.
 
     Requisitos:
-      - Prefijo 'esi_' (ej. esi_live_ o esi_test_) O formato UUID (36 caracteres) O token seguro (16 a 150 caracteres).
+      - Prefijo 'esi_' (ej. esi_live_ o esi_test_), formato UUID, JWT, o token
+        alfanumérico seguro de 16 a 150 caracteres.
       - Longitud entre 16 y 150 caracteres.
     """
     clave = (clave or "").strip()
@@ -360,10 +369,11 @@ def validar_esi_facturacion_key(clave: str) -> tuple[bool, str]:
 
     es_uuid = bool(re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", clave))
     es_esi = clave.startswith("esi_")
+    es_jwt = bool(re.match(r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$", clave))
     es_token_valido = bool(re.match(r"^[A-Za-z0-9_\-]+$", clave)) and (16 <= len(clave) <= 150)
 
-    if not (es_uuid or es_esi or es_token_valido):
-        return False, "Debe tener prefijo 'esi_' (ej. esi_test_...), ser un UUID válido o una clave alfanumérica de 16 a 150 caracteres"
+    if not (es_uuid or es_esi or es_jwt or es_token_valido):
+        return False, "Debe tener prefijo 'esi_' (ej. esi_test_...), ser un UUID, JWT o una clave alfanumérica válida"
     if not (16 <= len(clave) <= 150):
         return False, f"Longitud fuera de rango ({len(clave)} caracteres). Debe tener entre 16 y 150 caracteres"
     return True, ""
@@ -587,6 +597,35 @@ def pedir_interactivo(
         log_fn(f"[credenciales] [ERROR] Valor no válido: {motivo}. Por favor, intente de nuevo.")
 
 
+def token_esi_existente(raiz: Path) -> str:
+    """Conserva el token de sesión renovado en el entorno local."""
+    candidatos = (
+        raiz / "backend" / ".env.facturasegura",
+        raiz / "backend" / ".env",
+        raiz / ".env",
+    )
+    claves_token = {
+        "FACTURA_SEGURA_TOKEN",
+        "ESI_FACTURACION_API_KEY",
+        "FACTURASEGURA_API_KEY",
+        "FACTURASEGURA_SECRET",
+    }
+    for ruta in candidatos:
+        if not ruta.exists():
+            continue
+        for linea in ruta.read_text(encoding="utf-8", errors="replace").splitlines():
+            texto = linea.strip()
+            if not texto or texto.startswith("#") or "=" not in texto:
+                continue
+            clave, valor = (parte.strip() for parte in texto.split("=", 1))
+            if clave not in claves_token:
+                continue
+            valido, _ = validar_esi_facturacion_key(valor)
+            if valido and len(valor) > 36:
+                return valor
+    return ""
+
+
 def obtener_y_validar_credenciales(raiz: Path, log_fn=print, interactivo: bool = True) -> dict:
     """Obtiene y valida exhaustivamente las claves de Stripe y Facturación Segura ESI.
 
@@ -639,7 +678,19 @@ def obtener_y_validar_credenciales(raiz: Path, log_fn=print, interactivo: bool =
         log_fn(f"[credenciales] STRIPE_SECRET_KEY validada: {stripe_sec[:12]}...{stripe_sec[-4:]}")
 
     # 3. Validar ESI_FACTURACION_API_KEY / FACTURA_SEGURA_TOKEN
-    factura_token = factura.get("ESI_FACTURACION_API_KEY") or factura.get("FACTURA_SEGURA_TOKEN") or factura.get("FACTURASEGURA_API_KEY") or ""
+    factura_token = (
+        factura.get("ESI_FACTURACION_API_KEY")
+        or factura.get("FACTURA_SEGURA_TOKEN")
+        or factura.get("FACTURASEGURA_API_KEY")
+        or ""
+    )
+    token_existente = token_esi_existente(raiz)
+    if token_existente and len(token_existente) > len(factura_token):
+        factura_token = token_existente
+        log_fn(
+            "[credenciales] Conservando el token ESI renovado del entorno local "
+            f"(longitud: {len(token_existente)})."
+        )
     valido_tok, motivo_tok = validar_esi_facturacion_key(factura_token)
     if not valido_tok:
         log_fn(f"[credenciales] Facturación Segura ESI API Key / Token ausente o inválido ({motivo_tok}).")
@@ -648,11 +699,11 @@ def obtener_y_validar_credenciales(raiz: Path, log_fn=print, interactivo: bool =
                 "ESI_FACTURACION_API_KEY",
                 validar_esi_facturacion_key,
                 "Token de Facturación Segura ESI, ej. esi_test_... o UUID",
-                valor_defecto="714d2f92-2d18-4012-a5c7-b7e69ca35a7c",
+                valor_defecto="",
                 log_fn=log_fn
             )
         else:
-            raise ValueError(f"ESI_FACTURACION_API_KEY inválida: {motivo_tok}")
+            factura_token = ""
     else:
         log_fn(f"[credenciales] Facturación Segura ESI API Key validada: {factura_token[:8]}...{factura_token[-4:]}")
 
@@ -686,6 +737,86 @@ def obtener_y_validar_credenciales(raiz: Path, log_fn=print, interactivo: bool =
     datos["todas"].update(stripe)
     datos["todas"].update(factura)
     return datos
+
+
+def actualizar_token_esi(raiz: Path, log_fn=print) -> str:
+    """Obtiene un token TEST nuevo y lo sincroniza en los entornos locales.
+
+    El correo puede venir de FACTURA_SEGURA_LOGIN_EMAIL o del emisor. La
+    contraseña se lee de FACTURA_SEGURA_LOGIN_PASSWORD o se solicita sin
+    mostrarla en pantalla; nunca se escribe en el repositorio.
+    """
+    env_path = raiz / "backend" / ".env.facturasegura"
+    valores = {}
+    if env_path.exists():
+        for linea in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if "=" in linea and not linea.lstrip().startswith("#"):
+                clave, valor = linea.split("=", 1)
+                valores[clave.strip()] = valor.strip()
+
+    correo = (
+        os.environ.get("FACTURA_SEGURA_LOGIN_EMAIL")
+        or valores.get("FACTURA_SEGURA_LOGIN_EMAIL")
+        or valores.get("FACTURA_SEGURA_EMISOR_EMAIL")
+        or "gamarrag446@fpuna.edu.py"
+    )
+    contrasena = (
+        os.environ.get("FACTURA_SEGURA_LOGIN_PASSWORD")
+        or valores.get("FACTURA_SEGURA_LOGIN_PASSWORD")
+    )
+    if not contrasena:
+        if not sys.stdin.isatty():
+            raise RuntimeError(
+                "No se definió FACTURA_SEGURA_LOGIN_PASSWORD. "
+                "Configúrala como variable de entorno para obtener el token TEST."
+            )
+        contrasena = getpass.getpass(
+            f"[credenciales] Contraseña TEST de Factura Segura para {correo}: "
+        )
+
+    url = (valores.get("FACTURA_SEGURA_URL") or "https://apitest.facturasegura.com.py").rstrip("/")
+    if url.endswith("/misife00/v1/esi"):
+        url = url[:-len("/misife00/v1/esi")].rstrip("/")
+    login_url = f"{url}/login?include_auth_token"
+    solicitud = urllib.request.Request(
+        login_url,
+        data=urllib.parse.urlencode({"email": correo, "password": contrasena}).encode("utf-8"),
+        headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(solicitud, timeout=30) as respuesta:
+            cuerpo = json.load(respuesta)
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(f"Login de Factura Segura rechazado (HTTP {error.code}).") from error
+    except (OSError, ValueError) as error:
+        raise RuntimeError("No se pudo obtener el token TEST de Factura Segura.") from error
+
+    try:
+        token = cuerpo["response"]["user"]["authentication_token"]
+    except (KeyError, TypeError) as error:
+        raise RuntimeError("La respuesta de Factura Segura no contiene authentication_token.") from error
+    valido, motivo = validar_esi_facturacion_key(token)
+    if not valido or len(token) <= 36:
+        raise RuntimeError(f"Factura Segura devolvió un token inválido: {motivo}")
+
+    cambios = {
+        "FACTURA_SEGURA_TOKEN": token,
+        "FACTURASEGURA_API_KEY": token,
+        "FACTURASEGURA_SECRET": token,
+        "ESI_FACTURACION_API_KEY": token,
+    }
+    for destino in (
+        raiz / "backend" / ".env.facturasegura",
+        raiz / "backend" / ".env",
+        raiz / ".env",
+    ):
+        actualizar_o_crear_archivo_env(destino, None, cambios)
+    prod = raiz / ".env.prod"
+    if prod.exists():
+        actualizar_o_crear_archivo_env(prod, None, cambios)
+    log_fn(f"[credenciales] Token TEST de Factura Segura actualizado (longitud: {len(token)}).")
+    return token
 
 
 # =============================================================================
@@ -726,7 +857,8 @@ def inyectar_credenciales(
     log_fn=print,
     archivo_prod: Path | None = None,
     datos_validados: dict | None = None,
-    interactivo: bool = True
+    interactivo: bool = True,
+    renovar_token_esi: bool = False,
 ) -> bool:
     """Inyecta las credenciales validadas de Stripe y Facturación Segura ESI en:
       - backend/.env.stripe
@@ -735,6 +867,10 @@ def inyectar_credenciales(
       - frontend/.env
       - .env (raíz)
       - archivo_prod (si aplica)
+
+    Con ``renovar_token_esi=True``, al finalizar inicia sesión en Factura
+    Segura TEST y reemplaza cualquier marcador o token vencido. La contraseña
+    se toma de FACTURA_SEGURA_LOGIN_PASSWORD o se solicita sin mostrarla.
     """
     if raiz is None:
         raiz = Path(__file__).resolve().parent
@@ -824,6 +960,8 @@ def inyectar_credenciales(
 
     origen = datos_validados.get("archivo") or "ingreso interactivo"
     log_fn(f"[credenciales] Credenciales inyectadas exitosamente en backend/.env, frontend/.env y .env (origen: {origen}).")
+    if renovar_token_esi:
+        actualizar_token_esi(raiz, log_fn=log_fn)
     return True
 
 
