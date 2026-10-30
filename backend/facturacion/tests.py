@@ -322,6 +322,24 @@ class EmisionTest(BaseFacturacionTest):
         self.assertIsNone(factura.numero)
         self.pedir.assert_not_called()
 
+    def test_la_actividad_puede_venir_sola_o_como_lista(self):
+        lista = [{"cActEco": "66190", "dDesActEco": "Casa de cambios"},
+                 {"cActEco": "62010", "dDesActEco": "Programación"}]
+        con_lista = {**EMISOR, "actividad_codigo": "", "actividad": "", "actividades": json.dumps(lista)}
+        sin_lista = {**EMISOR, "actividades": ""}
+        with override_settings(FACTURA_SEGURA_EMISOR=con_lista):
+            self.assertEqual(self.emitida().estado, Factura.Estado.ENVIADA)
+            self.assertEqual(servicio.armar_de(self.pagada(), 382)["gActEco"], lista)
+        with override_settings(FACTURA_SEGURA_EMISOR=sin_lista):
+            self.assertEqual(self.emitida().estado, Factura.Estado.ENVIADA)
+
+    def test_sin_actividad_economica_no_se_emite(self):
+        sin_nada = {**EMISOR, "actividad_codigo": "", "actividad": "", "actividades": "[]"}
+        with override_settings(FACTURA_SEGURA_EMISOR=sin_nada):
+            factura = self.emitida()
+        self.assertEqual((factura.estado, factura.numero), (Factura.Estado.ERROR, None))
+        self.assertIn("actividad económica", factura.detalle)
+
     def test_una_simulada_se_puede_emitir_a_pedido(self):
         with override_settings(FACTURA_SEGURA_EMITIR=False):
             factura = servicio.facturar(self.pagada())

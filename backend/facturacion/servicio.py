@@ -401,11 +401,7 @@ def armar_de(operacion, numero):
         "dDesCiuEmi": emisor["ciudad"],
         "dTelEmi": emisor["telefono"],
         "dEmailE": emisor["email"],
-        "gActEco": (
-            json.loads(emisor["actividades"])
-            if emisor.get("actividades")
-            else [{"cActEco": emisor["actividad_codigo"], "dDesActEco": emisor["actividad"]}]
-        ),
+        "gActEco": _actividades(emisor),
         **_receptor(operacion.cliente),
         "iIndPres": "1" if operacion.presencial else "2",  # presencial / electrónica
         "iCondOpe": "1",  # contado
@@ -421,14 +417,39 @@ def armar_de(operacion, numero):
     }
 
 
+ACTIVIDAD = ("actividades", "actividad_codigo", "actividad")
+
+
+def _actividades(emisor):
+    """Las actividades económicas del emisor (``gActEco``).
+
+    Vienen como lista JSON (``actividades``) o como una sola actividad
+    (``actividad_codigo`` y ``actividad``); alcanza con una de las dos formas.
+    """
+    if emisor.get("actividades"):
+        try:
+            lista = json.loads(emisor["actividades"])
+        except ValueError as error:
+            raise FacturaInvalida(
+                "FACTURA_SEGURA_EMISOR_ACTIVIDADES no es una lista JSON válida."
+            ) from error
+        if lista:
+            return lista
+    if emisor.get("actividad_codigo") and emisor.get("actividad"):
+        return [{"cActEco": emisor["actividad_codigo"], "dDesActEco": emisor["actividad"]}]
+    return []
+
+
 def _validar_configuracion():
     """Antes de llamar a Factura Segura: que estén los datos del emisor y el timbrado."""
     faltan = [
         clave
         for grupo in (settings.FACTURA_SEGURA_EMISOR, settings.FACTURA_SEGURA_NUMERACION)
         for clave, valor in grupo.items()
-        if valor in ("", None)
+        if valor in ("", None) and clave not in ACTIVIDAD
     ]
+    if not _actividades(settings.FACTURA_SEGURA_EMISOR):
+        faltan.append("actividad económica")
     if faltan:
         raise FacturaInvalida(
             "Faltan datos del emisor en backend/.env.facturasegura: " + ", ".join(faltan) + "."

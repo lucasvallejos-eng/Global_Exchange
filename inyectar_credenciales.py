@@ -260,7 +260,6 @@ def preflight_credenciales_estricto(raiz: Path, log_fn=print) -> dict:
             "FACTURA_SEGURA_URL",
             "FACTURA_SEGURA_EMISOR_RUC", "FACTURA_SEGURA_EMISOR_NOMBRE",
             "FACTURA_SEGURA_EMISOR_DIRECCION", "FACTURA_SEGURA_EMISOR_TELEFONO",
-            "FACTURA_SEGURA_EMISOR_ACTIVIDAD_CODIGO", "FACTURA_SEGURA_EMISOR_ACTIVIDAD",
             "FACTURA_SEGURA_ESTABLECIMIENTO", "FACTURA_SEGURA_PUNTO_EXPEDICION",
         )
         faltantes = [
@@ -271,6 +270,18 @@ def preflight_credenciales_estricto(raiz: Path, log_fn=print) -> dict:
             clave for clave in obligatorias_factura
             if not _valor_real(factura.get(clave))
         ]
+        # La actividad económica viene como lista JSON (FACTURA_SEGURA_EMISOR_ACTIVIDADES)
+        # o como una sola actividad (código y descripción): alcanza con una.
+        try:
+            actividades = json.loads(factura.get("FACTURA_SEGURA_EMISOR_ACTIVIDADES") or "[]")
+        except ValueError:
+            actividades = []
+        una_sola = all(
+            _valor_real(factura.get(clave))
+            for clave in ("FACTURA_SEGURA_EMISOR_ACTIVIDAD_CODIGO", "FACTURA_SEGURA_EMISOR_ACTIVIDAD")
+        )
+        if not actividades and not una_sola:
+            faltantes.append("FACTURA_SEGURA_EMISOR_ACTIVIDADES")
         if faltantes:
             raise ValueError("Variables obligatorias ausentes o con placeholders: " + ", ".join(faltantes))
         valido_url, motivo_url = validar_esi_facturacion_url(factura["FACTURA_SEGURA_URL"])
