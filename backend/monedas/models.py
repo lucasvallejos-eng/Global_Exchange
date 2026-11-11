@@ -1,6 +1,19 @@
 """Modelos de la aplicación de Monedas."""
 from django.db import models
 
+
+class MonedaManager(models.Manager):
+    def get_by_natural_key(self, codigo):
+        """Busca por código: así los datos de ejemplo pueden nombrar a una
+        moneda sin depender del id que tenga en cada base."""
+        return self.get(codigo=codigo)
+
+
+class DenominacionManager(models.Manager):
+    def get_by_natural_key(self, codigo, valor):
+        return self.get(moneda__codigo=codigo, valor=valor)
+
+
 class Moneda(models.Model):
     """Representa una moneda extranjera o local aceptada para la operativa de cambio.
 
@@ -29,6 +42,8 @@ class Moneda(models.Model):
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
+    objects = MonedaManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -36,6 +51,9 @@ class Moneda(models.Model):
                 name="una_sola_moneda_local",
             ),
         ]
+
+    def natural_key(self):
+        return (self.codigo,)
 
     @classmethod
     def local(cls):
@@ -74,6 +92,8 @@ class Denominacion(models.Model):
     creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Creado en")
     actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Actualizado en")
 
+    objects = DenominacionManager()
+
     class Meta:
         db_table = "denominaciones"
         verbose_name = "Denominación"
@@ -89,6 +109,11 @@ class Denominacion(models.Model):
                 name="check_denominacion_valor_positivo",
             ),
         ]
+
+    def natural_key(self):
+        return (self.moneda.codigo, str(self.valor))
+
+    natural_key.dependencies = ["monedas.moneda"]
 
     def __str__(self):
         """Devuelve la representación legible de la denominación."""

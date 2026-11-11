@@ -51,6 +51,8 @@ services:
       # --import-realm lee de /opt/keycloak/data/import al arrancar.
       # Poné acá el realm-export/realm.json exportado.
       - ./realm-export:/opt/keycloak/data/import
+      # Tema propio del inicio de sesión (ver themes/global-exchange).
+      - ./themes:/opt/keycloak/themes:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ClientType, getAppliedRate } from "../lib/clientRates";
 import { useTasas } from "../lib/useTasas";
+import { cotizarOperacion, type Presupuesto } from "../lib/operacionesApi";
 
 type SimulacionType = "compra" | "venta";
 
@@ -10,7 +11,22 @@ const formatPyg = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-export default function SimulacionModule({ userType, descuentoCompra }: { userType: ClientType; descuentoCompra: number }) {
+const formatDivisa = (value: number) =>
+  new Intl.NumberFormat("es-PY", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+
+// La tasa aplicada puede traer decimales (el descuento del segmento).
+const formatTasa = (value: number) =>
+  new Intl.NumberFormat("es-PY", { maximumFractionDigits: 4 }).format(value);
+
+// Con un cliente activo, la simulación es completa: la calcula el backend con
+// la misma cuenta que una operación real (tasa, descuento del segmento,
+// comisión y total), sin guardar nada. Sin cliente no hay segmento del que
+// sacar la comisión, y se muestra solo la conversión con la cotización vigente.
+export default function SimulacionModule({ userType, descuentoCompra, clienteId = null }: {
+  userType: ClientType;
+  descuentoCompra: number;
+  clienteId?: string | null;
+}) {
   const [tab, setTab] = useState<SimulacionType>("compra");
   const [amount, setAmount] = useState("1000");
   const [currency, setCurrency] = useState<string>("");
@@ -38,6 +54,31 @@ export default function SimulacionModule({ userType, descuentoCompra }: { userTy
   }, [tasa, tab, descuentoCompra]);
 
   const numericAmount = Number.parseFloat(amount) || 0;
+
+  const [presupuesto, setPresupuesto] = useState<Presupuesto | null>(null);
+  const [errorSimulacion, setErrorSimulacion] = useState("");
+
+  useEffect(() => {
+    setPresupuesto(null);
+    setErrorSimulacion("");
+    if (!showSimulation || !clienteId || !currency || numericAmount <= 0) return;
+    let vigente = true;
+    // Espera a que se termine de escribir el monto antes de consultar.
+    const espera = setTimeout(() => {
+      cotizarOperacion({
+        clienteId,
+        tipo: tab === "compra" ? "COMPRA" : "VENTA",
+        moneda: currency,
+        monto: numericAmount,
+      })
+        .then((respuesta) => vigente && setPresupuesto(respuesta))
+        .catch((e: Error) => vigente && setErrorSimulacion(e.message));
+    }, 300);
+    return () => {
+      vigente = false;
+      clearTimeout(espera);
+    };
+  }, [showSimulation, clienteId, currency, numericAmount, tab]);
   const total = numericAmount * rate;
 
   const typeLabel = tab === "compra" ? "Compra" : "Venta";
@@ -144,39 +185,81 @@ export default function SimulacionModule({ userType, descuentoCompra }: { userTy
               </span>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-4">
-              <div className="rounded-xl bg-white p-4 border border-[#e2e8f0]">
-                <p className="text-xs uppercase tracking-[0.12em] text-[#64748b]">Monto simulado</p>
-                <p className="mt-2 text-lg font-bold text-[#0f172a]">
-                  {formatPyg(numericAmount)} {currency}
-                </p>
+            {errorSimulacion && (
+              <div className="mt-5 rounded-xl border border-[#f5c6c2] bg-[#fdeceb] px-4 py-3 text-sm text-[#c0392b]">
+                {errorSimulacion}
               </div>
+            )}
 
-              <div className="rounded-xl bg-white p-4 border border-[#e2e8f0]">
-                <p className="text-xs uppercase tracking-[0.12em] text-[#64748b]">Tasa base</p>
-                <p className="mt-2 text-lg font-bold text-[#0f172a]">
-                  1 {currency} = {formatPyg(baseRate)} PYG
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-white p-4 border border-[#e2e8f0]">
-                <p className="text-xs uppercase tracking-[0.12em] text-[#64748b]">Tasa final</p>
-                <p className="mt-2 text-lg font-bold text-[#0f172a]">
-                  1 {currency} = {formatPyg(rate)} PYG
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-white p-4 border border-[#e2e8f0]">
-                <p className="text-xs uppercase tracking-[0.12em] text-[#64748b]">{resultLabel}</p>
-                <p className="mt-2 text-lg font-bold text-[#0a7cff]">{formatPyg(total)} PYG</p>
-              </div>
-            </div>
+            {presupuesto ? (
+              <>
+                <dl className="mt-5 divide-y divide-[#e2e8f0] rounded-xl border border-[#e2e8f0] bg-white text-sm">
+                  {[
+                    ["A nombre de", presupuesto.cliente.nombre],
+                    ["Monto simulado", `${formatDivisa(presupuesto.montoDivisa)} ${presupuesto.moneda}`],
+                    [
+                      `Tasa base (${tab === "compra" ? "precio de venta" : "precio de compra"})`,
+                      `${formatPyg(presupuesto.tasaBase)} PYG`,
+                    ],
+                    ...(presupuesto.descuentoCompra > 0
+                      ? [["Descuento del segmento", `${(presupuesto.descuentoCompra * 100).toFixed(2)} %`]]
+                      : []),
+                    ["Tasa aplicada", `1 ${presupuesto.moneda} = ${formatTasa(presupuesto.tasaAplicada)} PYG`],
+                    ["Subtotal", `${formatPyg(presupuesto.montoGuaranies)} PYG`],
+                    [
+                      `Comisión (${presupuesto.porcentajeComision} %)`,
+                      `${tab === "compra" ? "+" : "−"} ${formatPyg(presupuesto.comision)} PYG`,
+                    ],
+                  ].map(([etiqueta, valor]) => (
+                    <div key={etiqueta} className="flex items-center justify-between gap-4 px-4 py-3">
+                      <dt className="text-[#64748b]">{etiqueta}</dt>
+                      <dd className="font-semibold tabular-nums text-[#0f172a]">{valor}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-[#cfe2ff] bg-[#edf4ff] px-4 py-4">
+                  <p className="text-sm font-semibold text-[#0f172a]">{resultLabel}</p>
+                  <p className="text-2xl font-bold tabular-nums text-[#0f172a]">
+                    {formatPyg(presupuesto.totalGuaranies)} PYG
+                  </p>
+                </div>
+              </>
+            ) : (
+              !errorSimulacion && (
+                <div className="mt-5 grid gap-4 md:grid-cols-4">
+                  <div className="rounded-xl bg-white p-4 border border-[#e2e8f0]">
+                    <p className="text-xs uppercase tracking-[0.12em] text-[#64748b]">Monto simulado</p>
+                    <p className="mt-2 text-lg font-bold text-[#0f172a]">
+                      {formatPyg(numericAmount)} {currency}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 border border-[#e2e8f0]">
+                    <p className="text-xs uppercase tracking-[0.12em] text-[#64748b]">Tasa base</p>
+                    <p className="mt-2 text-lg font-bold text-[#0f172a]">
+                      1 {currency} = {formatPyg(baseRate)} PYG
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 border border-[#e2e8f0]">
+                    <p className="text-xs uppercase tracking-[0.12em] text-[#64748b]">Tasa final</p>
+                    <p className="mt-2 text-lg font-bold text-[#0f172a]">
+                      1 {currency} = {formatPyg(rate)} PYG
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 border border-[#e2e8f0]">
+                    <p className="text-xs uppercase tracking-[0.12em] text-[#64748b]">{resultLabel}</p>
+                    <p className="mt-2 text-lg font-bold text-[#0a7cff]">{formatPyg(total)} PYG</p>
+                  </div>
+                </div>
+              )
+            )}
 
             <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-[#7c5b00]">
-              Esta simulación es puramente orientativa. Las tasas de cambio pueden variar al momento de realizar la operación real.
+              {presupuesto
+                ? "Es el mismo cálculo de una operación real, sin registrar nada. La tasa puede cambiar hasta el momento de operar."
+                : clienteId
+                  ? "Esta simulación es puramente orientativa. Las tasas de cambio pueden variar al momento de realizar la operación real."
+                  : "Sin un cliente asociado no se puede calcular la comisión: se muestra solo la conversión con la cotización vigente."}
             </div>
-
-            
           </div>
         </div>
       )}

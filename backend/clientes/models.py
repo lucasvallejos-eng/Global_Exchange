@@ -17,6 +17,12 @@ class Cliente(models.Model):
     direccion = models.CharField(max_length=255)
     cuenta_acreditar = models.CharField(max_length=100)
     correo = models.EmailField()
+    # A nombre de quién sale la factura electrónica (ver ``facturacion``).
+    ruc = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="RUC con dígito verificador (1234567-8) o cédula si no es contribuyente.",
+    )
     segmento = models.ForeignKey(
         "comisiones.SegmentoCliente",
         on_delete=models.PROTECT,

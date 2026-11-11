@@ -1,6 +1,8 @@
 {
   "id": "892b302b-dd77-40b2-98fc-c40c2a3105a0",
   "realm": "GlobalExchange",
+  "displayName": "Global Exchange",
+  "loginTheme": "global-exchange",
   "notBefore": 0,
   "defaultSignatureAlgorithm": "RS256",
   "revokeRefreshToken": false,

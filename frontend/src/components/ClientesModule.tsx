@@ -4,7 +4,7 @@ import { createClient, deleteClient, listClients, listUsuariosAsociables, update
 import { listarSegmentos, type Segmento } from "../lib/comisionesApi";
 import MultiSelect from "./MultiSelect";
 
-const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", segmento: null, direccion: "", cuentaAcreditar: "", correo: "", usuarios: [] };
+const EMPTY: Omit<Client, "id"> = { nombre: "", tipo: "Física", segmento: null, direccion: "", cuentaAcreditar: "", correo: "", ruc: "", usuarios: [] };
 
 const ROLES_EXCLUIDOS = ["admin", "administrador", "cajero", "analista", "analista_cambiario", "analista cambiario"];
 const ROLES_PERMITIDOS = ["cliente", "usuario_final", "usuario final"];
@@ -80,6 +80,8 @@ export default function ClientesModule() {
     if (!form.cuentaAcreditar.trim()) e.cuentaAcreditar = "Campo obligatorio";
     if (!form.correo.trim()) e.correo = "Campo obligatorio";
     else if (!/\S+@\S+\.\S+/.test(form.correo)) e.correo = "Correo inválido";
+    // Opcional. El dígito verificador lo valida el backend al facturar.
+    if (form.ruc?.trim() && !/^[\d.]{5,12}(-\d)?$/.test(form.ruc.trim())) e.ruc = "Formato: 1234567-8, o la cédula sin guion";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -105,7 +107,7 @@ export default function ClientesModule() {
   };
 
   const handleEdit = (c: Client) => {
-    setForm({ nombre: c.nombre, tipo: c.tipo, segmento: c.segmento, direccion: c.direccion, cuentaAcreditar: c.cuentaAcreditar, correo: c.correo, usuarios: c.usuarios });
+    setForm({ nombre: c.nombre, tipo: c.tipo, segmento: c.segmento, direccion: c.direccion, cuentaAcreditar: c.cuentaAcreditar, correo: c.correo, ruc: c.ruc ?? "", usuarios: c.usuarios });
     setEditId(c.id);
     setErrors({});
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -202,6 +204,7 @@ export default function ClientesModule() {
           {field("direccion", "Dirección", "Ej. Av. Principal 1234, Ciudad")}
           {field("cuentaAcreditar", "Cuenta a Acreditar", "PY38-XXXX-XXXX-XXXX-XXXX-XXXX-X")}
           {field("correo", "Correo Electrónico", "contacto@empresa.com", true, "email")}
+          {field("ruc", "RUC o Cédula (para la factura)", "1234567-8", false)}
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1">Usuarios a Asociar</label>
             <MultiSelect
@@ -273,6 +276,7 @@ export default function ClientesModule() {
                   <td className="px-6 py-4">
                     <p className="text-sm font-medium text-[#1a202c]">{c.nombre}</p>
                     <p className="text-xs text-[#9ca3af]">{c.correo}</p>
+                    {c.ruc && <p className="text-xs text-[#9ca3af]">RUC {c.ruc}</p>}
                   </td>
                   <td className="px-4 py-4">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${c.tipo === "Jurídica" ? "bg-purple-100 text-purple-700" : "bg-sky-100 text-sky-700"}`}>

@@ -1,0 +1,173 @@
+# Integración con Factura Segura (facturación electrónica)
+
+Global Exchange emite la factura electrónica de cada operación pagada a través
+de **Factura Segura**, que arma el XML, lo firma y lo manda al SIFEN de la
+DNIT. Esta guía explica cómo configurarlo, cómo funciona y cómo probarlo sin
+gastar números de factura. La referencia del código está en la documentación
+de Sphinx (sección "Facturación electrónica").
+
+Especificación de la API: *API de Factura Segura para ESI v01*.
+
+## Lo más importante: los números son pocos
+
+La cátedra le asignó al equipo:
+
+| Documento | Rango | Cantidad |
+|---|---|---|
+| Facturas electrónicas | `001-003-0000382` a `001-003-0000393` | 12 |
+| Notas de crédito | `001-003-0000157` a `001-003-0000168` | 12 |
+
+Cada factura emitida gasta un número. Por eso **por defecto no se emite nada**:
+
+| Configuración | Qué pasa al pagar una operación |
+|---|---|
+| Sin token | La factura queda **simulada**. No se llama a Factura Segura. |
+| Con token, `FACTURA_SEGURA_EMITIR=0` | Se **valida** con `calcular_de` (no genera nada ni gasta números) y queda simulada. |
+| Con token, `FACTURA_SEGURA_EMITIR=1` | Al pagar, igual queda simulada (validada). Recién cuando el **administrador** toca "Emitir" se reserva un número del rango y se **emite de verdad** con `generar_de`. |
+
+Los tests nunca emiten ni salen a la red: `config/settings.py` apaga el token
+y la emisión cuando se corre `manage.py test`.
+
+## Configuración
+
+Va en `backend/.env.facturasegura`, un archivo aparte del `.env`. Se crea
+copiando `backend/.env.facturasegura.example`, que explica cómo conseguir el
+token y qué es cada variable.
+
+- Está ignorado por git (regla `.env*`). **Nunca** se commitea.
+- `levantar_todo.py` no lo borra: solo borra los archivos llamados `.env`.
+- Producción usa el mismo archivo (`env_file` del servicio `backend` en
+  `docker-compose.prod.yml`), así que `publicar.py` no necesita nada más.
+
+Hacen falta tres cosas: el **token** del usuario ESI, los **datos del emisor**
+(RUC, razón social, dirección, actividad económica) y el **timbrado** (número
+y fecha de inicio). Sin los datos del emisor no se llama a Factura Segura: la
+factura queda en error con la lista de lo que falta.
+
+## A nombre de quién sale
+
+El receptor es siempre el **cliente** de la operación, nunca el usuario que la
+cargó (RN02). Sale de `Cliente.nombre`, `Cliente.correo` y `Cliente.ruc`:
+
+- `ruc` con guion (`2595733-3`): contribuyente. Se valida el dígito verificador.
+- `ruc` sin guion (`4567890`): no contribuyente, identificado con su cédula.
+- Sin `ruc`: la factura queda en **error** y se puede reintentar después de
+  cargarlo.
+
+El RUC lo carga el administrador en el formulario de **Clientes** de la
+maqueta (campo "RUC o Cédula").
+
+## Qué se factura
+
+Son supuestos a confirmar con la cátedra:
+
+- **El cliente compra divisa** (la casa vende, `iTipTra` 5): un ítem exento de
+  IVA por el monto en guaraníes y, si hay comisión, un ítem gravado al 10 %.
+  El total es lo que pagó el cliente.
+- **El cliente vende divisa** (la casa compra, `iTipTra` 6): un ítem exento
+  por el monto en guaraníes, con la comisión como descuento. El total es lo
+  que recibió el cliente.
+
+Las operaciones de la **caja** (ventanilla) se facturan igual. Ahí la tasa ya
+trae incluido el porcentaje del segmento y no hay comisión aparte: la factura
+lleva un solo ítem exento por el total, y se informa como operación
+presencial.
+
+Los ítems van en guaraníes y con cantidad 1, para que el total coincida con lo
+cobrado sin decimales. Factura Segura solo admite PYG o USD como moneda de la
+operación.
+
+## Flujo
+
+1. Una operación queda **pagada**: una de la web (por cualquiera de sus
+   caminos) o una compra o venta de la caja. La señal `facturacion.senales`
+   llama a `servicio.facturar` después del `commit`.
+2. Se arma el documento resumido (`armar_de`) y se completa con `calcular_de`.
+   La factura queda **simulada**, aunque la emisión esté prendida: un pago
+   nunca gasta un número por su cuenta.
+3. Con la emisión prendida, el **administrador** toca "Emitir" en la factura:
+   se reserva el número y se manda `generar_de`. Factura Segura devuelve el
+   **CDC** (44 dígitos) y la factura queda **enviada**.
+4. Un minuto después se consulta `get_estado_sifen` (botón "Consultar
+   estado"): **aprobada**, **rechazada** o todavía en proceso.
+5. Con CDC se descargan el **KuDE** (PDF) y el **XML** firmado. El backend los
+   baja de Factura Segura y los reenvía: el token no llega al navegador.
+
+Un problema con la factura nunca deshace el pago: queda registrado en el
+estado y el detalle de la factura.
+
+## Estados
+
+| Estado | Significa | Número |
+|---|---|---|
+| Simulada | No se emitió (emisión apagada o sin token) | No gasta |
+| No se pudo emitir | Faltan datos o Factura Segura dijo que no | Se libera |
+| Sin confirmar | Se cortó la conexión al emitir: pudo haberse procesado | Se conserva siempre |
+| Enviada | Factura Segura la tiene; falta la respuesta del SIFEN | Usado |
+| Aprobada | El SIFEN la aprobó | Usado |
+| Rechazada | El SIFEN la rechazó (el motivo queda en el detalle) | Se conserva para reintentar |
+| Cancelada | Se canceló o inutilizó en el SIFEN | Usado |
+
+**Reintentar** vuelve a mandar las que fallaron, con el mismo número si ya
+tenían uno. Las simuladas nunca se emiten solas, ni al pagar ni al prender
+la emisión: hay que pedirlo con el botón "Emitir", una por una.
+
+Una factura **sin confirmar** no suelta su número aunque el reintento reciba
+un "no" (por ejemplo, "el documento ya existe": la primera vez sí se había
+emitido), ni se vuelve simulada si se apaga la emisión. Su número puede estar
+gastado y otra factura no lo puede tomar.
+
+**Qué hacer con una factura sin confirmar.** La especificación pide verificar
+el resultado antes de reenviar, y el CDC recién lo devuelve Factura Segura al
+emitir, así que desde el sistema no se puede consultar. Los pasos son:
+
+1. Entrar al portal de Factura Segura (https://test.facturasegura.com.py) y
+   buscar el documento por su número.
+2. Si **existe**: copiar su CDC y cargarlo en la factura desde el `/admin/` de
+   Django, con un superusuario (campo `cdc`, estado "Enviada"). Después,
+   "Consultar estado en el SIFEN" la actualiza.
+3. Si **no existe**: "Reintentar" la vuelve a mandar con el mismo número.
+
+Con la emisión prendida, **solo el administrador** puede pedir que se emita o
+se reintente una factura, porque gasta un número del rango. Con la emisión
+apagada puede cualquiera que vea la factura: no se gasta nada.
+
+## Pantallas y API
+
+- Django: `/facturas/` (lista con filtro por estado y cuántos números quedan)
+  y `/facturas/<id>/` (detalle, descargas, consultar estado, reintentar).
+- Maqueta: menú **Facturas**.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| GET | `/api/facturas/` | Facturas visibles y si la emisión es real o simulada |
+| POST | `/api/facturas/<id>/actualizar/` | Consulta el estado en el SIFEN |
+| POST | `/api/facturas/<id>/reintentar/` | Vuelve a emitir una que falló (con la emisión prendida, solo el administrador) |
+| GET | `/api/facturas/<id>/kude/` | Descarga el KuDE (PDF) |
+| GET | `/api/facturas/<id>/xml/` | Descarga el XML firmado |
+
+Quién ve qué: el administrador, el analista y el cajero ven todas las
+facturas, de la web y de la caja; el resto, las de los clientes a los que está
+asociado.
+
+## Cómo probar sin gastar números
+
+```
+cd backend
+.venv\Scripts\python manage.py test facturacion
+```
+
+Para verlo en pantalla: pagar una operación con un cliente que tenga RUC y
+entrar a **Facturas**. Con la emisión apagada queda simulada.
+
+El recorrido completo de una transacción (alta del cliente, operación, pago,
+notificación, factura, descarga y reporte), por la web y por la caja, está
+probado de punta a punta en `backend/tests/test_transaccion_completa.py`:
+
+```
+.venv\Scripts\python manage.py test tests.test_transaccion_completa
+```
+
+## Pendiente
+
+- Notas de crédito y cancelación (`sol_cancelacion`) al anular una operación.

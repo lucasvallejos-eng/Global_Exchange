@@ -32,6 +32,7 @@ def _cliente_a_dict(cliente):
         "direccion": cliente.direccion,
         "cuentaAcreditar": cliente.cuenta_acreditar,
         "correo": cliente.correo,
+        "ruc": cliente.ruc,
         "usuarios": list(cliente.usuarios.values_list("id", flat=True)),
         "segmento": cliente.segmento_id,
         "porcentajeComision": (
@@ -97,6 +98,7 @@ def _crear_cliente(request):
         direccion=datos.get("direccion", ""),
         cuenta_acreditar=datos.get("cuentaAcreditar", ""),
         correo=datos.get("correo", ""),
+        ruc=datos.get("ruc", ""),
         segmento_id=datos.get("segmento") or None,
     )
     cliente.usuarios.set(datos.get("usuarios", []))
@@ -166,6 +168,7 @@ def _actualizar_cliente(request, cliente):
         ("direccion", "direccion"),
         ("cuentaAcreditar", "cuenta_acreditar"),
         ("correo", "correo"),
+        ("ruc", "ruc"),
         ("segmento", "segmento_id"),
     ):
         if campo not in datos:

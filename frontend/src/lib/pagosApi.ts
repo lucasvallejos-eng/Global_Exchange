@@ -12,12 +12,27 @@ type ConfiguracionPagos = { habilitado: boolean; publishableKey: string };
 // La clave publicable la da el backend (vive en backend/.env.stripe), así el
 // frontend no necesita su propio .env para Stripe. Se carga una sola vez.
 let stripePromesa: Promise<Stripe | null> | null = null;
+let errorStripe: string | null = null;
+
+export function obtenerErrorStripe(): string | null {
+  return errorStripe;
+}
 
 export function obtenerStripe(): Promise<Stripe | null> {
   if (!stripePromesa) {
     stripePromesa = get<ConfiguracionPagos>("/api/pagos/configuracion/")
-      .then((config) => (config.habilitado ? loadStripe(config.publishableKey) : null))
-      .catch(() => null);
+      .then((config) => {
+        if (!config.habilitado) throw new Error("El backend informa que Stripe no está habilitado.");
+        return loadStripe(config.publishableKey);
+      })
+      .then((stripe) => {
+        if (!stripe) throw new Error("No se pudo cargar Stripe.js.");
+        return stripe;
+      })
+      .catch((error: unknown) => {
+        errorStripe = error instanceof Error ? error.message : "Error desconocido al conectar con Stripe.";
+        return null;
+      });
   }
   return stripePromesa;
 }
