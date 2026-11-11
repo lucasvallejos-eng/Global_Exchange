@@ -3,12 +3,14 @@
 Solo para el **administrador** y el **analista_cambiario**: son los roles que
 la ERS habilita a ver las ganancias. Todos los pedidos aceptan los mismos
 filtros por la URL: ``desde`` y ``hasta`` (``AAAA-MM-DD``, por fecha de pago),
-``moneda`` (código), ``tipo`` (``COMPRA`` o ``VENTA``) y ``cliente`` (id). Lo
-que no se entiende se ignora, igual que en el historial.
+``moneda`` (código), ``tipo`` (``COMPRA`` o ``VENTA``, desde el cliente),
+``cliente`` (id) y ``origen`` (``WEB`` o ``CAJA``; sin él, las dos). Lo que no
+se entiende se ignora, igual que en el historial.
 """
 import csv
 
 from django.http import HttpResponse, JsonResponse
+from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from cuentas.decorators import rol_requerido
@@ -24,6 +26,8 @@ def _filtros(request):
     acá siempre son las pagadas."""
     filtros = filtros_de(request.GET)
     filtros.pop("estado")
+    origen = (request.GET.get("origen") or "").upper()
+    filtros["origen"] = origen if origen in servicio.ORIGENES else None
     return filtros
 
 
@@ -39,11 +43,13 @@ def _numeros(datos):
 
 
 def _fila(transaccion):
-    """Una operación con su ganancia, para la tabla del reporte."""
+    """Una operación (``servicio.Movimiento``) con su ganancia, para la tabla del reporte."""
     ganancia = servicio.ganancia_de(transaccion)
     return {
         "id": transaccion.pk,
-        "fecha": (transaccion.fecha_pago or transaccion.fecha_creacion).isoformat(),
+        "origen": transaccion.origen,
+        "referencia": transaccion.referencia,
+        "fecha": transaccion.fecha_pago.isoformat(),
         "cliente": transaccion.cliente.nombre,
         "tipo": transaccion.tipo,
         "tipoTexto": transaccion.get_tipo_display(),
@@ -62,7 +68,7 @@ def _fila(transaccion):
 @rol_requerido(*VEN_GANANCIAS)
 def transacciones(request):
     """Reporte de transacciones pagadas, cada una con su ganancia, y los totales."""
-    operaciones = list(servicio.pagadas(**_filtros(request)))
+    operaciones = servicio.movimientos(**_filtros(request))
     return JsonResponse({
         "operaciones": [_fila(t) for t in operaciones],
         "totales": _numeros(servicio.resumen(operaciones)["totales"]),
@@ -75,7 +81,7 @@ def ganancias(request):
     """Los números del tablero de ganancias: totales y desgloses por tipo,
     moneda y día (ver ``servicio.resumen``)."""
     filtros = _filtros(request)
-    datos = servicio.resumen(servicio.pagadas(**filtros), filtros["desde"], filtros["hasta"])
+    datos = servicio.resumen(servicio.movimientos(**filtros), filtros["desde"], filtros["hasta"])
     return JsonResponse({
         "totales": _numeros(datos["totales"]),
         "porTipo": {tipo: _numeros(fila) for tipo, fila in datos["por_tipo"].items()},
@@ -106,10 +112,10 @@ def exportar(request):
         "Tasa aplicada", "Monto PYG", "Comisión PYG", "Margen de cambio PYG",
         "Ganancia PYG", "Medio de pago",
     ])
-    for t in servicio.pagadas(**_filtros(request)):
+    for t in servicio.movimientos(**_filtros(request)):
         ganancia = servicio.ganancia_de(t)
         planilla.writerow([
-            t.pk, (t.fecha_pago or t.fecha_creacion).strftime("%Y-%m-%d %H:%M"), t.cliente.nombre,
+            t.referencia, timezone.localtime(t.fecha_pago).strftime("%Y-%m-%d %H:%M"), t.cliente.nombre,
             t.get_tipo_display(), t.moneda.codigo, t.monto_divisa, t.tasa_aplicada,
             t.monto_guaranies, ganancia["comision"], ganancia["margen"], ganancia["total"],
             t.medio_pago_descripcion,

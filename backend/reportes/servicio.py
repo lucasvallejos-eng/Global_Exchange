@@ -1,9 +1,15 @@
 """Reportes de transacciones y ganancias de la casa de cambios.
 
-No hay modelos propios: todo se calcula sobre las operaciones **pagadas**
-(``operaciones.Transaccion``). Una pendiente, cancelada o anulada no movió
-plata, así que no cuenta ni como volumen ni como ganancia. Por ahora no entran
-las operaciones de la caja (ventanilla).
+No hay modelos propios: todo se calcula sobre las operaciones **pagadas** de
+la web (``operaciones.Transaccion``) y sobre las de la **caja** (``CompraCaja``
+y ``VentaCaja``, que se registran ya cobradas). Una pendiente, cancelada o
+anulada no movió plata, así que no cuenta ni como volumen ni como ganancia.
+
+Las dos se juntan en ``movimientos``, con el mismo formato (``Movimiento``) y
+el tipo siempre desde el lado del **cliente**: una ``VentaCaja`` (la casa
+vende) es una compra del cliente, igual que en la web. En la caja no hay
+comisión aparte: el porcentaje del segmento ya va dentro de la tasa, así que
+la ganancia es solo el margen de cambio.
 
 **Qué es la ganancia de una operación** (supuesto del equipo; está en un solo
 lugar, ``ganancia_de``, para poder cambiarlo):
@@ -20,14 +26,20 @@ reporte lo muestra tal cual, porque es justamente lo que el analista necesita
 ver.
 
 El margen es una estimación: se calcula con la cotización que quedó enlazada
-a la operación, y si esa cotización ya no existe, cuenta como cero.
+a la operación (en la caja, la última registrada de esa moneda hasta el
+momento de la operación), y si esa cotización ya no existe, cuenta como cero.
 """
 from collections import defaultdict
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.utils import timezone
 
+from caja.models import CompraCaja, VentaCaja
+from clientes.models import Cliente
+from cotizaciones.models import Cotizacion
+from monedas.models import Moneda
 from operaciones.models import Transaccion
 
 GUARANI = Decimal("1")
@@ -60,6 +72,113 @@ def pagadas(desde=None, hasta=None, moneda=None, tipo=None, cliente=None):
     if cliente:
         operaciones = operaciones.filter(cliente_id=cliente)
     return operaciones
+
+
+ORIGENES = ("WEB", "CAJA")
+# Cómo se informa la forma de pago de la caja cuando no hay un medio de pago guardado.
+FORMAS_DE_PAGO_CAJA = {"EFECTIVO": "Efectivo", "TARJETA_STRIPE": "Tarjeta (Stripe)"}
+
+
+@dataclass
+class Movimiento:
+    """Una operación pagada, de la web o de la caja, lista para los reportes.
+
+    Tiene los mismos nombres que ``Transaccion`` en lo que usan ``ganancia_de``
+    y ``resumen``, así que las dos se cuentan de la misma manera.
+    """
+
+    origen: str  # WEB o CAJA
+    pk: int
+    referencia: str
+    tipo: str  # desde el cliente: COMPRA o VENTA
+    cliente: Cliente
+    moneda: Moneda
+    monto_divisa: Decimal
+    tasa_aplicada: Decimal
+    monto_guaranies: Decimal
+    comision: Decimal
+    cotizacion: Cotizacion | None
+    fecha_pago: datetime
+    medio_pago_descripcion: str
+
+    def get_tipo_display(self):
+        return Transaccion.Tipo(self.tipo).label
+
+
+def _de_la_web(transaccion):
+    return Movimiento(
+        origen="WEB", pk=transaccion.pk, referencia=f"Web #{transaccion.pk}",
+        tipo=transaccion.tipo, cliente=transaccion.cliente, moneda=transaccion.moneda,
+        monto_divisa=transaccion.monto_divisa, tasa_aplicada=transaccion.tasa_aplicada,
+        monto_guaranies=transaccion.monto_guaranies, comision=transaccion.comision,
+        cotizacion=transaccion.cotizacion,
+        fecha_pago=transaccion.fecha_pago or transaccion.fecha_creacion,
+        medio_pago_descripcion=transaccion.medio_pago_descripcion,
+    )
+
+
+def _cotizacion_del_momento(moneda, momento, cache):
+    """La última cotización de la moneda registrada hasta ese momento (o la primera)."""
+    if moneda.pk not in cache:
+        cache[moneda.pk] = list(Cotizacion.objects.filter(moneda=moneda).order_by("fecha"))
+    anteriores = [c for c in cache[moneda.pk] if c.fecha <= momento]
+    if anteriores:
+        return anteriores[-1]
+    return cache[moneda.pk][0] if cache[moneda.pk] else None
+
+
+def _de_la_caja(operacion, cache):
+    casa_vende = isinstance(operacion, VentaCaja)
+    if operacion.medio_pago_id:
+        medio = operacion.medio_pago.alias
+    else:
+        medio = FORMAS_DE_PAGO_CAJA.get(operacion.forma_pago, operacion.forma_pago.replace("_", " ").capitalize())
+    return Movimiento(
+        origen="CAJA", pk=operacion.pk,
+        referencia=f"Caja, {'venta' if casa_vende else 'compra'} #{operacion.pk}",
+        tipo=Transaccion.Tipo.COMPRA if casa_vende else Transaccion.Tipo.VENTA,
+        cliente=operacion.cliente, moneda=operacion.moneda,
+        monto_divisa=operacion.monto_divisa,
+        tasa_aplicada=operacion.cotizacion_final or operacion.cotizacion_aplicada,
+        monto_guaranies=operacion.monto_local_total, comision=CERO,
+        cotizacion=_cotizacion_del_momento(operacion.moneda, operacion.fecha_hora, cache),
+        fecha_pago=operacion.fecha_hora, medio_pago_descripcion=medio,
+    )
+
+
+def _de_caja_filtradas(modelo, desde, hasta, moneda, cliente):
+    operaciones = modelo.objects.select_related("cliente", "moneda", "medio_pago")
+    if desde:
+        operaciones = operaciones.filter(fecha_hora__date__gte=desde)
+    if hasta:
+        operaciones = operaciones.filter(fecha_hora__date__lte=hasta)
+    if moneda:
+        operaciones = operaciones.filter(moneda__codigo=moneda)
+    if cliente:
+        operaciones = operaciones.filter(cliente_id=cliente)
+    return operaciones
+
+
+def movimientos(desde=None, hasta=None, moneda=None, tipo=None, cliente=None, origen=None):
+    """Las operaciones pagadas de la web **y** de la caja, de la más nueva a la más vieja.
+
+    Mismos filtros que ``pagadas``, más ``origen`` (``WEB`` o ``CAJA``; otro
+    valor trae las dos). El ``tipo`` es desde el cliente.
+
+    Returns:
+        list[Movimiento]
+    """
+    lista = []
+    if origen != "CAJA":
+        lista += [_de_la_web(t) for t in pagadas(desde, hasta, moneda, tipo, cliente)]
+    if origen != "WEB":
+        cache = {}
+        # El cliente compra = la casa vende (VentaCaja), y al revés.
+        modelos = {Transaccion.Tipo.COMPRA: [VentaCaja], Transaccion.Tipo.VENTA: [CompraCaja]}
+        for modelo in modelos.get(tipo, [VentaCaja, CompraCaja]):
+            lista += [_de_la_caja(o, cache)
+                      for o in _de_caja_filtradas(modelo, desde, hasta, moneda, cliente)]
+    return sorted(lista, key=lambda m: m.fecha_pago, reverse=True)
 
 
 def margen_de_cambio(transaccion):
