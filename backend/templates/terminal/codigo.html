@@ -1,0 +1,18 @@
+{% extends "terminal/base_terminal.html" %}
+
+{% block contenido %}
+  <h1>Ingresá tu código</h1>
+  <p class="sub">
+    Es el código de 8 letras y números que te dio el sistema al reservar la operación
+    ("Pagar en la terminal").
+  </p>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="post" action="{% url 'terminal_codigo' terminal.pk %}">
+    {% csrf_token %}
+    <input class="codigo" type="text" name="codigo" maxlength="12" autocomplete="off" autofocus
+           placeholder="ABCD2345" aria-label="Código de la operación" required>
+    <div class="botonera">
+      <button type="submit" class="boton">Continuar</button>
+    </div>
+  </form>
+{% endblock %}

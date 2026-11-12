@@ -1,0 +1,85 @@
+{% comment %}
+Base de las pantallas de la terminal de autoservicio. Es una pantalla de
+quiosco: letra y botones grandes, sin el menú del sistema (el cliente no
+inició sesión) y con el nombre de la terminal arriba.
+{% endcomment %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block titulo %}Terminal de autoservicio{% endblock %} — Global Exchange</title>
+  <style>
+    :root {
+      --azul: #1a7eff; --azul-oscuro: #0f3d7a; --fondo: #0f172a; --tarjeta: #ffffff;
+      --texto: #0f172a; --suave: #64748b; --borde: #e2e8f0; --rojo: #dc2626; --verde: #16a34a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; font-family: system-ui, sans-serif; color: var(--texto);
+      background: radial-gradient(circle at top, #1e3a8a 0%, var(--fondo) 60%);
+      display: flex; flex-direction: column; align-items: center; padding: 24px 16px 48px;
+    }
+    .marca { color: #fff; text-align: center; margin-bottom: 20px; }
+    .marca strong { display: block; font-size: 26px; letter-spacing: .02em; }
+    .marca span { color: #bfdbfe; font-size: 15px; }
+    .pantalla {
+      width: 100%; max-width: 720px; background: var(--tarjeta); border-radius: 24px;
+      padding: 32px; box-shadow: 0 30px 60px rgba(0, 0, 0, .35);
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    .sub { color: var(--suave); margin: 0 0 24px; font-size: 16px; }
+    .boton {
+      display: inline-block; border: none; border-radius: 14px; padding: 16px 28px; font-size: 18px;
+      font-weight: 700; font-family: inherit; cursor: pointer; text-decoration: none; text-align: center;
+      background: var(--azul); color: #fff;
+    }
+    .boton.secundario { background: #f1f5f9; color: var(--texto); }
+    .boton.peligro { background: #fee2e2; color: var(--rojo); }
+    .botonera { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+    .botonera .boton { flex: 1 1 200px; }
+    input[type=text], input[type=number] {
+      width: 100%; padding: 16px; font-size: 22px; border: 2px solid var(--borde); border-radius: 14px;
+      font-family: inherit; text-align: center;
+    }
+    input:focus { outline: none; border-color: var(--azul); }
+    .codigo { letter-spacing: .3em; text-transform: uppercase; font-weight: 700; }
+    .error {
+      background: #fef2f2; color: #991b1b; border-left: 5px solid var(--rojo); padding: 14px 18px;
+      border-radius: 0 12px 12px 0; margin-bottom: 20px; font-size: 16px;
+    }
+    .ok {
+      background: #f0fdf4; color: #14532d; border-left: 5px solid var(--verde); padding: 14px 18px;
+      border-radius: 0 12px 12px 0; margin-bottom: 20px; font-size: 16px;
+    }
+    .resumen { display: grid; grid-template-columns: max-content 1fr; gap: 8px 20px; font-size: 17px; margin: 0 0 20px; }
+    .resumen dt { color: var(--suave); }
+    .resumen dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .cifra { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .billetes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .billete { border: 2px solid var(--borde); border-radius: 14px; padding: 12px; text-align: center; }
+    .billete label { display: block; font-weight: 700; margin-bottom: 8px; font-size: 17px; }
+    .billete input { font-size: 20px; padding: 10px; }
+    .opciones { display: grid; gap: 10px; margin: 8px 0 0; }
+    .opciones label { display: flex; gap: 10px; align-items: center; font-size: 17px; border: 2px solid var(--borde); border-radius: 14px; padding: 14px; cursor: pointer; }
+    .opciones input { width: 22px; height: 22px; }
+    table { width: 100%; border-collapse: collapse; font-size: 16px; }
+    td, th { padding: 8px 4px; border-bottom: 1px solid var(--borde); text-align: left; }
+    .numero { text-align: right; font-variant-numeric: tabular-nums; }
+    .pie { color: #94a3b8; margin-top: 20px; font-size: 13px; text-align: center; }
+    .pie a { color: #bfdbfe; }
+  </style>
+</head>
+<body>
+  <div class="marca">
+    <strong>Global Exchange</strong>
+    <span>Terminal de autoservicio{% if terminal %} · {{ terminal.nombre }}{% endif %}</span>
+  </div>
+  <main class="pantalla">
+    {% block contenido %}{% endblock %}
+  </main>
+  <p class="pie">
+    {% if terminal %}<a href="{% url 'terminal_codigo' terminal.pk %}">Volver al inicio de la terminal</a>{% else %}Elegí la terminal en la que estás{% endif %}
+  </p>
+</body>
+</html>

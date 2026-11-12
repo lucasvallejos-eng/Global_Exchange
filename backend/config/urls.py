@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/", include("notificaciones.api_urls")),
     path("api/", include("facturacion.api_urls")),
     path("api/", include("reportes.api_urls")),
+    path("api/", include("terminal.api_urls")),
     # Cerrar sesión (acepta GET) y página tras cerrar sesión.
     path("logout/", views.cerrar_sesion, name="cerrar_sesion"),
     path("sesion-cerrada/", views.sesion_cerrada, name="sesion_cerrada"),
@@ -41,6 +42,7 @@ urlpatterns = [
     path('tasas/', include('tasas.urls')),
     path('operaciones/', include('operaciones.urls')),
     path('facturas/', include('facturacion.urls')),
+    path('terminal/', include('terminal.urls')),
 ]
 
 # 403 en JSON para la API (la maqueta muestra el modal "Acceso denegado").
