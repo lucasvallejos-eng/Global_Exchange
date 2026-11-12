@@ -1,0 +1,22 @@
+{% extends "terminal/base_terminal.html" %}
+
+{% comment %}
+En una máquina real esto no se ve: cada terminal sabe cuál es. Acá simula
+"pararse frente a" una de las terminales cargadas.
+{% endcomment %}
+
+{% block contenido %}
+  <h1>¿En qué terminal estás?</h1>
+  <p class="sub">Elegí la terminal de autoservicio. Ahí vas a ingresar el código de tu operación.</p>
+  {% if terminales %}
+    <div class="botonera">
+      {% for t in terminales %}
+        <a class="boton" href="{% url 'terminal_codigo' t.pk %}">
+          {{ t.nombre }}{% if t.ubicacion %}<br><small style="font-weight:500">{{ t.ubicacion }}</small>{% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="error">No hay terminales habilitadas. El administrador las carga desde el admin.</div>
+  {% endif %}
+{% endblock %}

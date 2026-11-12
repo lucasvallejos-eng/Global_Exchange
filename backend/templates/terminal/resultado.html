@@ -1,0 +1,50 @@
+{% extends "terminal/base_terminal.html" %}
+
+{% comment %}
+Cómo terminó la operación en la terminal: el comprobante con lo que entró y
+lo que salió, o el motivo de la cancelación.
+{% endcomment %}
+
+{% block contenido %}
+  {% if reserva.estado == 'COMPLETADA' %}
+    <h1>¡Listo! Operación completada</h1>
+    <div class="ok">{{ reserva.detalle }}</div>
+  {% else %}
+    <h1>Operación cancelada</h1>
+    <div class="error">
+      {{ reserva.detalle }}
+      {% if t.cancelada_por_cotizacion %}<br>No se te cobró nada: retirá los billetes que depositaste.{% endif %}
+    </div>
+  {% endif %}
+
+  <dl class="resumen">
+    <dt>Operación</dt><dd>#{{ t.pk }} · {{ t.get_tipo_display }} {{ t.monto_divisa|floatformat:"2g" }} {{ t.moneda.codigo }}</dd>
+    <dt>A nombre de</dt><dd>{{ t.cliente.nombre }}</dd>
+    <dt>Código</dt><dd>{{ reserva.codigo }}</dd>
+    {% if reserva.terminal %}<dt>Terminal</dt><dd>{{ reserva.terminal.nombre }}</dd>{% endif %}
+    {% if reserva.fecha_fin %}<dt>Fecha</dt><dd>{{ reserva.fecha_fin|date:"d/m/Y H:i" }}</dd>{% endif %}
+  </dl>
+
+  {% if reserva.estado == 'COMPLETADA' %}
+    <table>
+      <thead><tr><th>Movimiento</th><th>Billete</th><th class="numero">Cantidad</th></tr></thead>
+      <tbody>
+        {% for moneda, billetes in reserva.depositado.items %}
+          {% for valor, cantidad in billetes.items %}
+            <tr><td>Depositaste</td><td>{{ valor|floatformat:"-2g" }} {{ moneda }}</td><td class="numero">{{ cantidad }}</td></tr>
+          {% endfor %}
+        {% endfor %}
+        {% for moneda, billetes in reserva.entregado.items %}
+          {% for valor, cantidad in billetes.items %}
+            <tr><td>Retirás</td><td>{{ valor|floatformat:"-2g" }} {{ moneda }}</td><td class="numero">{{ cantidad }}</td></tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:16px">La factura de la operación se genera sola y la ves en "Facturas".</p>
+  {% endif %}
+
+  <div class="botonera">
+    <a class="boton" href="{% url 'terminal_codigo' terminal.pk %}">Terminar</a>
+  </div>
+{% endblock %}
