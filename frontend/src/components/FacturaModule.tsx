@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   actualizarFactura,
+  consultarTalonario,
   listarFacturas,
   reintentarFactura,
   urlDescarga,
   type EstadoFactura,
   type Factura,
+  type TalonarioInfo,
 } from "../lib/facturasApi";
 import type { User } from "../types";
 
@@ -65,6 +67,7 @@ const ESTADOS: { valor: EstadoFactura; texto: string }[] = [
 export default function FacturaModule({ user }: Props) {
   const esAdministrador = user.role === "administrador";
   const [facturas, setFacturas] = useState<Factura[]>([]);
+  const [talonario, setTalonario] = useState<TalonarioInfo | null>(null);
   const [emision, setEmision] = useState<"real" | "simulada">("simulada");
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -75,15 +78,32 @@ export default function FacturaModule({ user }: Props) {
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
+  const cargarTalonario = () => {
+    consultarTalonario()
+      .then((info) => setTalonario(info))
+      .catch(() => {});
+  };
+
   useEffect(() => {
     listarFacturas()
       .then((datos) => {
         setFacturas(datos.facturas);
         setEmision(datos.emision);
+        if (datos.talonario) {
+          setTalonario(datos.talonario);
+        } else if (datos.facturasDisponibles !== undefined && datos.siguienteFactura) {
+          setTalonario({
+            disponibles: datos.facturasDisponibles,
+            siguiente: datos.siguienteFactura,
+            agotado: datos.facturasDisponibles === 0,
+          });
+        } else if (esAdministrador) {
+          cargarTalonario();
+        }
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setCargando(false));
-  }, []);
+  }, [esAdministrador]);
 
   const filteredFacturas = useMemo(() => {
     const texto = search.toLowerCase();
@@ -114,22 +134,116 @@ export default function FacturaModule({ user }: Props) {
   const reemplazar = (pedido: Promise<Factura>) => {
     setError("");
     pedido
-      .then((nueva) => setFacturas((lista) => lista.map((f) => (f.id === nueva.id ? nueva : f))))
+      .then((nueva) => {
+        setFacturas((lista) => lista.map((f) => (f.id === nueva.id ? nueva : f)));
+        if (esAdministrador) {
+          cargarTalonario();
+        }
+      })
       .catch((e: Error) => setError(e.message));
   };
 
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-[#dbe3ee] bg-white p-6 shadow-sm">
-        <div className="mb-5">
-          <p className="text-sm font-medium text-[#64748b]">Facturación</p>
-          <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">Facturas</h2>
-          <p className="mt-1 text-sm text-[#64748b]">
-            {emision === "simulada"
-              ? "La emisión está apagada: las facturas quedan simuladas y no gastan números."
-              : "La emisión está prendida: cada factura se emite cuando el administrador toca Emitir."}
-          </p>
-          {error && <p className="mt-2 text-sm font-medium text-red-600">{error}</p>}
+        <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <p className="text-sm font-medium text-[#64748b]">Facturación</p>
+            <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">Facturas</h2>
+            <p className="mt-1 text-sm text-[#64748b]">
+              {emision === "simulada"
+                ? "La emisión está apagada: las facturas quedan simuladas y no gastan números."
+                : "La emisión está prendida: cada factura se emite cuando el administrador toca Emitir."}
+            </p>
+            {error && <p className="mt-2 text-sm font-medium text-red-600">{error}</p>}
+          </div>
+
+          {/* Indicador de Talonario y Secuencia en tiempo real en la esquina superior derecha */}
+          {esAdministrador && talonario && (
+            <div
+              className={`flex items-center gap-3.5 rounded-2xl border px-4 py-3 shadow-xs transition-colors sm:min-w-[310px] ${
+                talonario.agotado || talonario.disponibles === 0
+                  ? "border-red-200 bg-red-50/90 text-red-950"
+                  : talonario.disponibles <= 3
+                  ? "border-amber-200 bg-amber-50/90 text-amber-950"
+                  : "border-[#dbe3ee] bg-[#f8fafc] text-[#0f172a]"
+              }`}
+            >
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                  talonario.agotado || talonario.disponibles === 0
+                    ? "bg-red-100 text-red-600"
+                    : talonario.disponibles <= 3
+                    ? "bg-amber-100 text-amber-600"
+                    : "bg-blue-50 text-[#1a7eff]"
+                }`}
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              </div>
+
+              <div className="flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">
+                    Talonario SIFEN
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      talonario.agotado || talonario.disponibles === 0
+                        ? "bg-red-200 text-red-800"
+                        : talonario.disponibles <= 3
+                        ? "bg-amber-200 text-amber-800"
+                        : "bg-emerald-100 text-emerald-800"
+                    }`}
+                  >
+                    {talonario.agotado || talonario.disponibles === 0
+                      ? "Agotado"
+                      : talonario.disponibles <= 3
+                      ? "Stock Bajo"
+                      : "Disponible"}
+                  </span>
+                </div>
+
+                <div className="mt-1 flex items-baseline justify-between gap-3">
+                  <div>
+                    <span className="block text-[11px] text-[#64748b]">Próxima factura</span>
+                    <span className="font-mono text-sm font-bold tracking-tight text-[#0f172a]">
+                      {talonario.siguiente}
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="block text-[11px] text-[#64748b]">Disponibles</span>
+                    <span
+                      className={`text-sm font-extrabold ${
+                        talonario.agotado || talonario.disponibles === 0
+                          ? "text-red-600"
+                          : talonario.disponibles <= 3
+                          ? "text-amber-600"
+                          : "text-[#1a7eff]"
+                      }`}
+                    >
+                      {talonario.disponibles}{" "}
+                      <span className="text-[11px] font-normal text-[#64748b]">
+                        {talonario.disponibles === 1 ? "folio" : "folios"}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mb-5 grid gap-3 lg:grid-cols-[1.4fr_0.8fr_1fr_1fr]">

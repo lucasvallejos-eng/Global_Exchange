@@ -33,14 +33,30 @@ export interface Factura {
   sePuedeEmitir: boolean;
 }
 
+export interface TalonarioInfo {
+  disponibles: number;
+  siguiente: string;
+  establecimiento?: string;
+  puntoExpedicion?: string;
+  numero?: number;
+  limite?: number;
+  agotado?: boolean;
+}
+
 export interface ListaFacturas {
   facturas: Factura[];
   total: number;
   // "simulada": las facturas no se emiten de verdad (no gastan números).
   emision: "real" | "simulada";
+  facturasDisponibles?: number;
+  siguienteFactura?: string;
+  talonario?: TalonarioInfo;
 }
 
 export const listarFacturas = () => get<ListaFacturas>("/api/facturas/");
+
+/** Consulta en tiempo real el estado del talonario y la numeración correlativa. */
+export const consultarTalonario = () => get<TalonarioInfo>("/api/facturas/talonario/");
 
 /** Consulta en Factura Segura cómo quedó la factura en el SIFEN. */
 export const actualizarFactura = (id: number) =>

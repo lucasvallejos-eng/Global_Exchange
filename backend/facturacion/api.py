@@ -84,14 +84,45 @@ def facturas(request):
     """Las facturas que el usuario puede ver, de la más nueva a la más vieja.
 
     ``emision`` le dice a la maqueta si las facturas se emiten de verdad o se
-    simulan, para que lo aclare en pantalla.
+    simulan, para que lo aclare en pantalla. Incluye además la información
+    en tiempo real de numeración y talonario.
     """
     emite_el_usuario = puede_emitir(request.user)
     lista = [factura_a_dict(f, emite_el_usuario) for f in facturas_visibles(request.user)]
+    datos_secuencia = servicio.generar_payload_siguiente_factura(reservar=False)
+    cantidad_disp = servicio.cantidad_disponible()
     return JsonResponse({
         "facturas": lista,
         "total": len(lista),
         "emision": "real" if servicio.emite() else "simulada",
+        "facturasDisponibles": cantidad_disp,
+        "siguienteFactura": datos_secuencia["numero_completo"],
+        "talonario": {
+            "disponibles": cantidad_disp,
+            "siguiente": datos_secuencia["numero_completo"],
+            "establecimiento": datos_secuencia["dEst"],
+            "puntoExpedicion": datos_secuencia["dPunExp"],
+            "numero": datos_secuencia["numero"],
+            "limite": 393,
+            "agotado": cantidad_disp == 0,
+        },
+    })
+
+
+@require_GET
+@rol_requerido(*TODOS_LOS_ROLES)
+def talonario(request):
+    """Consulta en tiempo real el estado del talonario y la numeración secuencial."""
+    datos_secuencia = servicio.generar_payload_siguiente_factura(reservar=False)
+    cantidad_disp = servicio.cantidad_disponible()
+    return JsonResponse({
+        "disponibles": cantidad_disp,
+        "siguiente": datos_secuencia["numero_completo"],
+        "establecimiento": datos_secuencia["dEst"],
+        "puntoExpedicion": datos_secuencia["dPunExp"],
+        "numero": datos_secuencia["numero"],
+        "limite": 393,
+        "agotado": cantidad_disp == 0,
     })
 
 

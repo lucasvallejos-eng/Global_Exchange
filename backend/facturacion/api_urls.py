@@ -5,6 +5,7 @@ from . import api
 
 urlpatterns = [
     path("facturas/", api.facturas, name="api_facturas"),
+    path("facturas/talonario/", api.talonario, name="api_facturas_talonario"),
     path("facturas/<int:pk>/actualizar/", api.actualizar, name="api_facturas_actualizar"),
     path("facturas/<int:pk>/reintentar/", api.reintentar, name="api_facturas_reintentar"),
     # Descarga del KuDE (PDF) o del XML firmado.
