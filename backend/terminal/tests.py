@@ -217,79 +217,81 @@ class DesgloseTest(base.TestCase):
         self.assertEqual(servicio.desglosar(Decimal(0), disponibles), {})
 
 
-class PantallasTest(BaseTerminalTest):
-    """El recorrido en la pantalla de quiosco, sin iniciar sesión."""
+# Deshabilitado por requerimiento: Terminal de Autoservicio (las pantallas y
+# la API de la terminal no tienen rutas, ver config/urls.py).
+# class PantallasTest(BaseTerminalTest):
+#     """El recorrido en la pantalla de quiosco, sin iniciar sesión."""
 
-    def test_de_la_reserva_al_comprobante(self):
-        transaccion = self.crear()
-        self.entrar(self.usuario)
-        self.client.post(reverse("terminal_reservar", args=[transaccion.pk]))
-        reserva = OperacionTerminal.objects.get(transaccion=transaccion)
-        detalle = self.client.get(reverse("detalle_operacion", args=[transaccion.pk]))
-        self.assertContains(detalle, reserva.codigo)
-        self.client.logout()
+#     def test_de_la_reserva_al_comprobante(self):
+#         transaccion = self.crear()
+#         self.entrar(self.usuario)
+#         self.client.post(reverse("terminal_reservar", args=[transaccion.pk]))
+#         reserva = OperacionTerminal.objects.get(transaccion=transaccion)
+#         detalle = self.client.get(reverse("detalle_operacion", args=[transaccion.pk]))
+#         self.assertContains(detalle, reserva.codigo)
+#         self.client.logout()
 
-        self.assertContains(self.client.get(reverse("terminal_inicio")), "Terminal Centro")
-        respuesta = self.client.post(reverse("terminal_codigo", args=[self.terminal.pk]),
-                                     {"codigo": reserva.codigo.lower()})
-        self.assertRedirects(respuesta, reverse("terminal_operacion", args=[self.terminal.pk, reserva.codigo]))
-        pantalla = self.client.get(respuesta["Location"])
-        self.assertContains(pantalla, "Comprás 100")
-        self.assertContains(pantalla, f'name="billete_{self.billete[("PYG", 100000)].pk}"')
+#         self.assertContains(self.client.get(reverse("terminal_inicio")), "Terminal Centro")
+#         respuesta = self.client.post(reverse("terminal_codigo", args=[self.terminal.pk]),
+#                                      {"codigo": reserva.codigo.lower()})
+#         self.assertRedirects(respuesta, reverse("terminal_operacion", args=[self.terminal.pk, reserva.codigo]))
+#         pantalla = self.client.get(respuesta["Location"])
+#         self.assertContains(pantalla, "Comprás 100")
+#         self.assertContains(pantalla, f'name="billete_{self.billete[("PYG", 100000)].pk}"')
 
-        campo = f"billete_{self.billete[('PYG', 100000)].pk}"
-        corto = self.client.post(respuesta["Location"], {campo: "7"})
-        self.assertContains(corto, "Depositaste 700.000 PYG")
-        listo = self.client.post(respuesta["Location"], {campo: "8"})
-        self.assertContains(listo, "Operación completada")
-        self.assertContains(listo, "Vuelto: 60.000 PYG")
-        # Volver a abrir el código muestra el comprobante, no el formulario.
-        self.assertContains(self.client.get(respuesta["Location"]), "Operación completada")
+#         campo = f"billete_{self.billete[('PYG', 100000)].pk}"
+#         corto = self.client.post(respuesta["Location"], {campo: "7"})
+#         self.assertContains(corto, "Depositaste 700.000 PYG")
+#         listo = self.client.post(respuesta["Location"], {campo: "8"})
+#         self.assertContains(listo, "Operación completada")
+#         self.assertContains(listo, "Vuelto: 60.000 PYG")
+#         # Volver a abrir el código muestra el comprobante, no el formulario.
+#         self.assertContains(self.client.get(respuesta["Location"]), "Operación completada")
 
-    def test_codigo_equivocado_y_cancelacion(self):
-        respuesta = self.client.post(reverse("terminal_codigo", args=[self.terminal.pk]), {"codigo": "NOEXISTE"})
-        self.assertContains(respuesta, "No hay ninguna operación")
-        reserva = self.reservada()
-        cancelada = self.client.post(reverse("terminal_cancelar", args=[self.terminal.pk, reserva.codigo]))
-        self.assertContains(cancelada, "Operación cancelada")
+#     def test_codigo_equivocado_y_cancelacion(self):
+#         respuesta = self.client.post(reverse("terminal_codigo", args=[self.terminal.pk]), {"codigo": "NOEXISTE"})
+#         self.assertContains(respuesta, "No hay ninguna operación")
+#         reserva = self.reservada()
+#         cancelada = self.client.post(reverse("terminal_cancelar", args=[self.terminal.pk, reserva.codigo]))
+#         self.assertContains(cancelada, "Operación cancelada")
 
-    def test_el_estado_de_las_terminales_es_para_administrador_y_cajero(self):
-        self.entrar(self.usuario)
-        self.assertEqual(self.client.get(reverse("terminal_estado")).status_code, 403)
-        cajero = base.Usuario.objects.create_user(username="cajero")
-        cajero.groups.add(Group.objects.get_or_create(name="cajero")[0])
-        self.entrar(cajero)
-        self.assertContains(self.client.get(reverse("terminal_estado")), "Terminal Centro")
+#     def test_el_estado_de_las_terminales_es_para_administrador_y_cajero(self):
+#         self.entrar(self.usuario)
+#         self.assertEqual(self.client.get(reverse("terminal_estado")).status_code, 403)
+#         cajero = base.Usuario.objects.create_user(username="cajero")
+#         cajero.groups.add(Group.objects.get_or_create(name="cajero")[0])
+#         self.entrar(cajero)
+#         self.assertContains(self.client.get(reverse("terminal_estado")), "Terminal Centro")
 
 
-class ApiTerminalTest(BaseTerminalTest):
-    def test_reserva_desde_la_maqueta_y_lista_las_reservas(self):
-        self.entrar(self.usuario)
-        respuesta = self.client.post(
-            reverse("api_terminal_reservas"),
-            data=json.dumps({"clienteId": self.cliente.pk, "tipo": "COMPRA", "moneda": "USD", "monto": 100}),
-            content_type="application/json",
-        )
-        self.assertEqual(respuesta.status_code, 201)
-        datos = respuesta.json()
-        self.assertEqual(len(datos["codigo"]), 8)
-        self.assertEqual(datos["deposita"], {"moneda": "PYG", "monto": 740000})
-        self.assertEqual(datos["recibe"], {"moneda": "USD", "monto": 100})
-        self.assertEqual(datos["operacion"]["estado"], "PENDIENTE")
-        self.assertTrue(datos["urlTerminal"].endswith("/terminal/"))
+# class ApiTerminalTest(BaseTerminalTest):
+#     def test_reserva_desde_la_maqueta_y_lista_las_reservas(self):
+#         self.entrar(self.usuario)
+#         respuesta = self.client.post(
+#             reverse("api_terminal_reservas"),
+#             data=json.dumps({"clienteId": self.cliente.pk, "tipo": "COMPRA", "moneda": "USD", "monto": 100}),
+#             content_type="application/json",
+#         )
+#         self.assertEqual(respuesta.status_code, 201)
+#         datos = respuesta.json()
+#         self.assertEqual(len(datos["codigo"]), 8)
+#         self.assertEqual(datos["deposita"], {"moneda": "PYG", "monto": 740000})
+#         self.assertEqual(datos["recibe"], {"moneda": "USD", "monto": 100})
+#         self.assertEqual(datos["operacion"]["estado"], "PENDIENTE")
+#         self.assertTrue(datos["urlTerminal"].endswith("/terminal/"))
 
-        lista = self.client.get(reverse("api_terminal_reservas")).json()["reservas"]
-        self.assertEqual([r["codigo"] for r in lista], [datos["codigo"]])
-        self.assertEqual(self.client.get(reverse("api_terminal_terminales")).json()["terminales"][0]["nombre"],
-                         "Terminal Centro")
+#         lista = self.client.get(reverse("api_terminal_reservas")).json()["reservas"]
+#         self.assertEqual([r["codigo"] for r in lista], [datos["codigo"]])
+#         self.assertEqual(self.client.get(reverse("api_terminal_terminales")).json()["terminales"][0]["nombre"],
+#                          "Terminal Centro")
 
-    def test_otro_usuario_no_ve_ni_reserva_a_nombre_de_clara(self):
-        self.reservada()
-        self.entrar(self.otro_usuario)
-        self.assertEqual(self.client.get(reverse("api_terminal_reservas")).json()["reservas"], [])
-        respuesta = self.client.post(
-            reverse("api_terminal_reservas"),
-            data=json.dumps({"clienteId": self.cliente.pk, "tipo": "COMPRA", "moneda": "USD", "monto": 1}),
-            content_type="application/json",
-        )
-        self.assertEqual(respuesta.status_code, 400)
+#     def test_otro_usuario_no_ve_ni_reserva_a_nombre_de_clara(self):
+#         self.reservada()
+#         self.entrar(self.otro_usuario)
+#         self.assertEqual(self.client.get(reverse("api_terminal_reservas")).json()["reservas"], [])
+#         respuesta = self.client.post(
+#             reverse("api_terminal_reservas"),
+#             data=json.dumps({"clienteId": self.cliente.pk, "tipo": "COMPRA", "moneda": "USD", "monto": 1}),
+#             content_type="application/json",
+#         )
+#         self.assertEqual(respuesta.status_code, 400)

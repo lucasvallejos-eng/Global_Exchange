@@ -175,8 +175,9 @@ def detalle_operacion(request, pk):
         "t": transaccion,
         "puede_gestionar": puede_gestionar,
         "error": request.session.pop("error_operacion", None),
+        # Deshabilitado por requerimiento: Terminal de Autoservicio
         # Si se reservó para pagarla con efectivo en la terminal de autoservicio.
-        "reserva": getattr(transaccion, "reserva_terminal", None),
+        # "reserva": getattr(transaccion, "reserva_terminal", None),
     }
 
     # Alerta de cancelación: si la cotización cambió, se le muestra al

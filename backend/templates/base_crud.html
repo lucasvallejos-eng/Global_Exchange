@@ -194,9 +194,11 @@ Cuál de los enlaces del menú se ve resaltado se deduce de la URL actual
         analista_cambiario queda afuera: la ERS le da las tasas, no la
         administración.
       {% endcomment %}
+      {% comment "Deshabilitado por requerimiento: Terminal de Autoservicio" %}
       {% if user|tiene_rol:"administrador" or user|tiene_rol:"cajero" %}
         <a href="{% url 'terminal_estado' %}" {% if '/terminal/' in request.path %}class="activo"{% endif %}>Terminales</a>
       {% endif %}
+      {% endcomment %}
       {% if user|tiene_rol:"cliente" or user|tiene_rol:"administrador" or user|tiene_rol:"cajero" %}
         <a href="{% url 'listar_medios_pago' %}" {% if '/medios-pago/' in request.path %}class="activo"{% endif %}>Medios de pago</a>
       {% endif %}
