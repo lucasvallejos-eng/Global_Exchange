@@ -1,14 +1,19 @@
 // Reportes de transacciones y ganancias (administrador y analista cambiario).
 // Todo se calcula en el backend sobre las operaciones pagadas: la ganancia de
 // una operación es su comisión más el margen de cambio (ver reportes/servicio.py).
+// Entran las operaciones de la web y las de la caja.
 import { BACKEND, get } from "./api";
 import type { TipoOperacion } from "./operacionesApi";
+
+// WEB = operación de la web; CAJA = de la ventanilla.
+export type OrigenReporte = "WEB" | "CAJA";
 
 export interface FiltrosReporte {
   desde?: string; // AAAA-MM-DD, por fecha de pago
   hasta?: string;
   moneda?: string;
   tipo?: TipoOperacion | "";
+  origen?: OrigenReporte | "";
 }
 
 export interface Totales {
@@ -23,6 +28,9 @@ export interface Totales {
 
 export interface FilaReporte {
   id: number;
+  origen: OrigenReporte;
+  // "Web #5", "Caja, venta #2": única entre las dos fuentes.
+  referencia: string;
   fecha: string;
   cliente: string;
   tipo: TipoOperacion;

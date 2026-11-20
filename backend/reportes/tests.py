@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth.models import Group
 from django.urls import reverse
 
+from caja.models import AperturaCaja, CompraCaja, VentaCaja
 from clientes.models import Cliente
 from cotizaciones.models import Cotizacion
 from monedas.models import Moneda
@@ -147,6 +148,62 @@ class ResumenTest(BaseReportesTest):
         self.assertEqual(vacio["totales"]["operaciones"], 0)
         self.assertEqual(vacio["por_dia"], [])
         self.assertEqual(vacio["por_moneda"], [])
+
+
+class CajaEnReportesTest(BaseReportesTest):
+    """Las operaciones de la ventanilla también cuentan, con el tipo desde el cliente."""
+
+    def setUp(self):
+        super().setUp()
+        self.apertura = AperturaCaja.objects.create(cajero_id="sub-cajero")
+
+    def de_caja(self, modelo, tasa, monto="100", forma_pago="EFECTIVO"):
+        return modelo.objects.create(
+            apertura=self.apertura, cajero_id="sub-cajero", cliente=self.cliente, moneda=self.usd,
+            monto_divisa=Decimal(monto), cotizacion_aplicada=Decimal(tasa),
+            cotizacion_final=Decimal(tasa), monto_local_total=Decimal(monto) * Decimal(tasa),
+            forma_pago=forma_pago,
+        )
+
+    def test_la_venta_de_caja_es_una_compra_del_cliente_y_gana_el_margen(self):
+        self.de_caja(VentaCaja, "7400")  # la casa vende a 7400, el medio es 7350
+        (movimiento,) = servicio.movimientos()
+        self.assertEqual((movimiento.origen, movimiento.tipo), ("CAJA", "COMPRA"))
+        self.assertEqual(movimiento.referencia, f"Caja, venta #{movimiento.pk}")
+        self.assertEqual(servicio.ganancia_de(movimiento),
+                         {"comision": Decimal("0"), "margen": Decimal("5000"), "total": Decimal("5000")})
+
+    def test_la_compra_de_caja_es_una_venta_del_cliente(self):
+        self.de_caja(CompraCaja, "7300")  # la casa compra a 7300
+        (movimiento,) = servicio.movimientos()
+        self.assertEqual((movimiento.tipo, servicio.margen_de_cambio(movimiento)), ("VENTA", Decimal("5000")))
+        self.assertEqual(movimiento.medio_pago_descripcion, "Efectivo")
+
+    def test_se_juntan_con_las_de_la_web_y_se_filtran_por_origen_y_tipo(self):
+        web = self.pagada(Transaccion.Tipo.COMPRA)
+        self.de_caja(VentaCaja, "7400")
+        self.de_caja(CompraCaja, "7300")
+        self.assertEqual(len(servicio.movimientos()), 3)
+        self.assertEqual([m.pk for m in servicio.movimientos(origen="WEB")], [web.pk])
+        self.assertEqual(len(servicio.movimientos(origen="CAJA")), 2)
+        self.assertEqual({m.origen for m in servicio.movimientos(tipo="COMPRA")}, {"WEB", "CAJA"})
+        self.assertEqual([m.origen for m in servicio.movimientos(tipo="VENTA")], ["CAJA"])
+        self.assertEqual(servicio.movimientos(moneda="EUR"), [])
+        totales = servicio.resumen(servicio.movimientos())["totales"]
+        self.assertEqual((totales["operaciones"], totales["margen"]), (3, Decimal("-32000") + 10000))
+
+    def test_la_api_y_el_csv_las_muestran(self):
+        self.pagada(Transaccion.Tipo.COMPRA)
+        venta = self.de_caja(VentaCaja, "7400")
+        self.entrar(self.con_rol("analista_cambiario"))
+        datos = self.client.get(reverse("api_reportes_transacciones")).json()
+        self.assertEqual(datos["totales"]["operaciones"], 2)
+        self.assertIn(f"Caja, venta #{venta.pk}", {fila["referencia"] for fila in datos["operaciones"]})
+        solo_caja = self.client.get(reverse("api_reportes_transacciones"), {"origen": "caja"}).json()
+        self.assertEqual([fila["origen"] for fila in solo_caja["operaciones"]], ["CAJA"])
+        self.assertEqual(self.client.get(reverse("api_reportes_ganancias")).json()["totales"]["operaciones"], 2)
+        csv = self.client.get(reverse("api_reportes_exportar")).content.decode("utf-8-sig")
+        self.assertIn(f"Caja, venta #{venta.pk};", csv)
 
 
 class ApiTest(BaseReportesTest):

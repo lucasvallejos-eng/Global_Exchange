@@ -199,6 +199,15 @@ vez (Django crea su usuario en el primer login).
 Abrí **http://localhost:8000** y seguí el flujo. También podés abrir la maqueta
 directo en http://localhost:8443 (si no hay sesión, te manda al login).
 
+### Terminal de autoservicio
+
+La terminal (pago con efectivo) está en **http://localhost:8000/terminal/** y
+no pide iniciar sesión. El cliente reserva la operación en la maqueta
+(**Terminal de Autoservicio**) o en el detalle de una operación pendiente
+(**Pagar en la terminal**), y en la terminal ingresa el código y deposita los
+billetes. Los datos de ejemplo traen la *Terminal Centro* con billetes cargados.
+Detalle en `docs/terminal-autoservicio.md`.
+
 ---
 
 ## Notas para el equipo

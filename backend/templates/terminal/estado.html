@@ -1,0 +1,77 @@
+{% extends "base_crud.html" %}
+
+{% comment %}
+Para el administrador y el cajero: cuántos billetes tiene cada terminal y sus
+últimas operaciones. Los billetes se cargan desde el admin de Django.
+{% endcomment %}
+
+{% block titulo_pagina %}Terminales de autoservicio — Global Exchange{% endblock %}
+
+{% block contenido %}
+  <style>
+    .terminal { border: 1px solid var(--borde); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .terminal h2 { margin: 0 0 4px; font-size: 18px; }
+    .monedas { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin: 16px 0; }
+    .etiqueta.esperando { background: #fef3c7; color: #92400e; }
+    .etiqueta.completada { background: #dcfce7; color: var(--verde); }
+    .etiqueta.cancelada { background: #fee2e2; color: #991b1b; }
+  </style>
+
+  <div class="cabecera">
+    <h1>Terminales de autoservicio</h1>
+    <a class="boton" href="{% url 'terminal_inicio' %}" target="_blank">Abrir la terminal</a>
+  </div>
+  <p class="ayuda" style="margin:0 0 20px">
+    Operaciones reservadas esperando en la terminal: <strong>{{ esperando }}</strong>.
+    Los billetes se cargan desde el <a href="/admin/terminal/terminal/">admin</a>.
+  </p>
+
+  {% for item in terminales %}
+    <div class="terminal">
+      <h2>{{ item.terminal.nombre }}
+        <span class="etiqueta {% if item.terminal.activa %}activo{% else %}inactivo{% endif %}">
+          {% if item.terminal.activa %}Activa{% else %}Fuera de servicio{% endif %}</span></h2>
+      <p class="ayuda">{{ item.terminal.ubicacion }}</p>
+
+      <div class="monedas">
+        {% for grupo in item.billetes %}
+          <div>
+            <strong>{{ grupo.moneda }}</strong> — total {{ grupo.total|floatformat:"-2g" }}
+            <table>
+              {% for fila in grupo.filas %}
+                <tr><td>{{ fila.valor|floatformat:"-2g" }}</td><td class="numero">{{ fila.cantidad }}</td></tr>
+              {% endfor %}
+            </table>
+          </div>
+        {% empty %}
+          <p class="vacio">Sin billetes cargados.</p>
+        {% endfor %}
+      </div>
+
+      <h3 style="font-size:15px;margin:0 0 8px">Últimas operaciones</h3>
+      {% if item.operaciones %}
+        <div class="tabla-scroll">
+          <table>
+            <thead><tr><th>Código</th><th>Operación</th><th>Cliente</th><th>Estado</th><th>Detalle</th></tr></thead>
+            <tbody>
+              {% for op in item.operaciones %}
+                <tr>
+                  <td>{{ op.codigo }}</td>
+                  <td><a href="{% url 'detalle_operacion' op.transaccion_id %}">#{{ op.transaccion_id }}</a>
+                    {{ op.transaccion.get_tipo_display }} {{ op.transaccion.monto_divisa|floatformat:"2g" }} {{ op.transaccion.moneda.codigo }}</td>
+                  <td>{{ op.transaccion.cliente.nombre }}</td>
+                  <td><span class="etiqueta {{ op.estado|lower }}">{{ op.get_estado_display }}</span></td>
+                  <td>{{ op.detalle }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="vacio">Todavía no se usó.</p>
+      {% endif %}
+    </div>
+  {% empty %}
+    <p class="vacio">No hay terminales cargadas.</p>
+  {% endfor %}
+{% endblock %}

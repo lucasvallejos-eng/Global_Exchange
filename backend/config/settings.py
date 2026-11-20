@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     "facturacion",
     # Reportes de transacciones y ganancias (solo lectura, sin modelos).
     "reportes",
+    "terminal",
 ]
 
 MIDDLEWARE = [

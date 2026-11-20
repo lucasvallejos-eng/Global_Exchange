@@ -1,0 +1,79 @@
+{% extends "terminal/base_terminal.html" %}
+
+{% comment %}
+El cliente ve su operación y "deposita" los billetes: en una máquina real los
+cuenta el validador de billetes; acá se carga cuántos de cada uno.
+{% endcomment %}
+
+{% block contenido %}
+  <h1>{% if es_venta %}Vendés{% else %}Comprás{% endif %} {{ t.monto_divisa|floatformat:"2g" }} {{ t.moneda.codigo }}</h1>
+  <p class="sub">Operación #{{ t.pk }} a nombre de {{ t.cliente.nombre }} · código {{ reserva.codigo }}</p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <dl class="resumen">
+    <dt>Tasa aplicada</dt><dd>{{ t.tasa_aplicada|floatformat:"2g" }} PYG por {{ t.moneda.codigo }}</dd>
+    {% if t.comision %}<dt>Comisión</dt><dd>{{ t.comision|floatformat:"0g" }} PYG</dd>{% endif %}
+    <dt>Depositás</dt>
+    <dd>{{ monto_deposito|floatformat:"-2g" }} {{ moneda_deposito }}</dd>
+    <dt>Recibís</dt>
+    <dd>{{ monto_entrega|floatformat:"-2g" }} {{ moneda_entrega }}</dd>
+  </dl>
+  <p class="sub">
+    Si la cotización cambió desde que reservaste, la operación se cancela y se te devuelven los billetes.
+  </p>
+
+  <form method="post" action="{% url 'terminal_operacion' terminal.pk reserva.codigo %}" id="deposito">
+    {% csrf_token %}
+    <h2 style="margin:0 0 12px">Billetes de {{ moneda_deposito }} que depositás</h2>
+    <div class="billetes">
+      {% for b in billetes %}
+        <div class="billete">
+          <label for="b{{ b.denominacion.pk }}">{{ b.denominacion.valor|floatformat:"-2g" }} {{ moneda_deposito }}</label>
+          <input id="b{{ b.denominacion.pk }}" type="number" min="0" step="1" inputmode="numeric"
+                 name="billete_{{ b.denominacion.pk }}" value="{{ b.cantidad }}" placeholder="0"
+                 data-valor="{{ b.denominacion.valor|stringformat:'s' }}">
+        </div>
+      {% empty %}
+        <div class="error">No hay billetes de {{ moneda_deposito }} cargados en el sistema.</div>
+      {% endfor %}
+    </div>
+    <p class="sub" style="margin-top:16px">
+      Depositado: <span class="cifra" id="total">0</span> {{ moneda_deposito }}
+      (la operación es de {{ monto_deposito|floatformat:"-2g" }})
+    </p>
+
+    {% if es_venta %}
+      <h2 style="margin:16px 0 4px">¿Cómo querés recibir los guaraníes?</h2>
+      <div class="opciones">
+        <label><input type="radio" name="entrega" value="EFECTIVO" {% if entrega != 'CUENTA' %}checked{% endif %}> Retirar en efectivo de esta terminal</label>
+        <label><input type="radio" name="entrega" value="CUENTA" {% if entrega == 'CUENTA' %}checked{% endif %} {% if not t.cliente.cuenta_acreditar %}disabled{% endif %}>
+          Acreditar en la cuenta {{ t.cliente.cuenta_acreditar|default:"(el cliente no tiene cuenta cargada)" }}</label>
+      </div>
+    {% endif %}
+
+    <div class="botonera">
+      <button type="submit" class="boton">Depositar y confirmar</button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'terminal_cancelar' terminal.pk reserva.codigo %}">
+    {% csrf_token %}
+    <div class="botonera" style="margin-top:12px">
+      <button type="submit" class="boton peligro">Cancelar la operación</button>
+    </div>
+  </form>
+
+  <script>
+    // Suma en pantalla lo que se va cargando (el control de verdad lo hace el servidor).
+    const campos = document.querySelectorAll("#deposito input[data-valor]");
+    const total = document.getElementById("total");
+    const sumar = () => {
+      let suma = 0;
+      campos.forEach((c) => { suma += (parseInt(c.value, 10) || 0) * parseFloat(c.dataset.valor); });
+      total.textContent = suma.toLocaleString("es-PY", { maximumFractionDigits: 2 });
+    };
+    campos.forEach((c) => c.addEventListener("input", sumar));
+    sumar();
+  </script>
+{% endblock %}

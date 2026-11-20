@@ -17,6 +17,7 @@ from django.urls import reverse
 from clientes.models import Cliente
 from cuentas.auth import BackendOIDCKeycloak
 from monedas.models import Denominacion, Moneda
+from terminal.models import BilleteTerminal, Terminal
 
 User = get_user_model()
 FIXTURE = str(settings.BASE_DIR / "fixtures" / "demo.json")
@@ -65,16 +66,23 @@ class DatosDemoTests(TestCase):
         self.assertEqual(local.codigo, "PYG")
         self.assertEqual(local.denominaciones.count(), 10)
 
+    def test_trae_una_terminal_de_autoservicio_con_billetes(self):
+        terminal = Terminal.objects.get(nombre="Terminal Centro")
+        monedas = set(terminal.billetes.values_list("denominacion__moneda__codigo", flat=True))
+        self.assertEqual(monedas, {"PYG", "USD", "EUR"})
+
     def test_cargarlo_dos_veces_no_duplica(self):
         antes = (User.objects.count(), Cliente.objects.count(), Moneda.objects.count(),
-                 Denominacion.objects.count())
+                 Denominacion.objects.count(), Terminal.objects.count(), BilleteTerminal.objects.count())
         call_command("loaddata", FIXTURE, verbosity=0)
         self.assertEqual((User.objects.count(), Cliente.objects.count(), Moneda.objects.count(),
-                          Denominacion.objects.count()), antes)
+                          Denominacion.objects.count(), Terminal.objects.count(),
+                          BilleteTerminal.objects.count()), antes)
 
     def test_no_choca_con_una_moneda_local_cargada_a_mano(self):
         # Alguien ya había creado el guaraní desde la pantalla de Monedas:
-        # tiene otro id y solo algunos billetes.
+        # tiene otro id y solo algunos billetes (y la terminal todavía no los usa).
+        BilleteTerminal.objects.all().delete()
         Moneda.objects.filter(codigo="PYG").delete()
         Moneda.objects.create(codigo="ARS", nombre="Peso argentino", simbolo="$")
         a_mano = Moneda.objects.create(codigo="PYG", nombre="Guaraní", simbolo="Gs", es_local=True)

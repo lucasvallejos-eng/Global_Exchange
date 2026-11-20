@@ -52,7 +52,22 @@ from caja.models import CompraCaja, VentaCaja
 from clientes.models import Cliente
 from operaciones.models import Transaccion
 
-from .models import Factura
+from .models import Factura, SecuenciaFactura
+from .secuencia import (
+    DEFAULT_ESTABLECIMIENTO,
+    DEFAULT_LIMITE_MAXIMO,
+    DEFAULT_NUMERO_INICIO,
+    DEFAULT_PUNTO_EXPEDICION,
+    DEFAULT_ULTIMO_NUMERO,
+    FacturaInvalida,
+    GestorSecuenciaFactura,
+    PayloadFacturaSegura,
+    TalonarioAgotadoError,
+    cantidad_disponible,
+    generar_payload_siguiente_factura,
+    inyectar_payload_generar_de,
+    validar_limite_disponible,
+)
 
 RECURSO = "/misife00/v1/esi"
 ESPERA_SEGUNDOS = 20
@@ -75,12 +90,6 @@ TARJETAS = ("3", "4")
 # iDenTarj: denominación de la tarjeta. 99 es "otra".
 MARCAS_DE_TARJETA = {"visa": "1", "mastercard": "2", "american": "3", "amex": "3",
                      "maestro": "4", "panal": "5", "cabal": "6"}
-
-
-class FacturaInvalida(Exception):
-    """La factura no se puede armar con los datos que hay (falta el RUC del
-    cliente, el emisor no está configurado, se acabaron los números...). No se
-    llegó a llamar a Factura Segura. El mensaje se le muestra al usuario."""
 
 
 class ErrorFacturaSegura(Exception):
@@ -459,12 +468,26 @@ def _validar_configuracion():
 # --- Numeración ---------------------------------------------------------------
 
 def numeros_libres():
-    """Los números del rango asignado que todavía no usó ninguna factura."""
+    """Los números del rango asignado que todavía no usó ninguna factura.
+
+    Si existe un registro de SecuenciaFactura activo para el establecimiento y
+    punto de expedición configurados, los números disponibles inician estrictamente
+    después del último número utilizado según las reglas de negocio.
+    """
     numeracion = settings.FACTURA_SEGURA_NUMERACION
+    est = numeracion.get("establecimiento", DEFAULT_ESTABLECIMIENTO)
+    punto = numeracion.get("punto_expedicion", DEFAULT_PUNTO_EXPEDICION)
+    secuencia = SecuenciaFactura.objects.filter(
+        establecimiento=est, punto_expedicion=punto, activo=True
+    ).first()
+
+    inicio = (secuencia.ultimo_numero + 1) if secuencia else numeracion["factura_desde"]
+    fin = secuencia.numero_fin if secuencia else numeracion["factura_hasta"]
+
     usados = set(Factura.objects.exclude(numero=None).values_list("numero", flat=True))
     return [
         numero
-        for numero in range(numeracion["factura_desde"], numeracion["factura_hasta"] + 1)
+        for numero in range(inicio, fin + 1)
         if numero not in usados
     ]
 
@@ -473,7 +496,7 @@ def _siguiente_numero():
     libres = numeros_libres()
     if not libres:
         numeracion = settings.FACTURA_SEGURA_NUMERACION
-        raise FacturaInvalida(
+        raise TalonarioAgotadoError(
             "Se acabaron los números de factura asignados "
             f"({numeracion['factura_desde']} a {numeracion['factura_hasta']})."
         )
@@ -593,6 +616,17 @@ def _emitir_de_verdad(factura, operacion):
     with transaccion_bd.atomic():
         if factura.numero is None:
             factura.numero = _siguiente_numero()
+        # Si existe control de secuencia en base de datos, actualizamos el último número
+        numeracion = settings.FACTURA_SEGURA_NUMERACION
+        est = numeracion.get("establecimiento", DEFAULT_ESTABLECIMIENTO)
+        punto = numeracion.get("punto_expedicion", DEFAULT_PUNTO_EXPEDICION)
+        secuencia = SecuenciaFactura.objects.select_for_update().filter(
+            establecimiento=est, punto_expedicion=punto, activo=True
+        ).first()
+        if secuencia and factura.numero > secuencia.ultimo_numero:
+            secuencia.ultimo_numero = factura.numero
+            secuencia.save(update_fields=["ultimo_numero", "fecha_actualizacion"])
+
         factura.estado = Factura.Estado.SIN_CONFIRMAR
         factura.detalle = ""
         factura.save()  # reserva el número antes de salir a la red

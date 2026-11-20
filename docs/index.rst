@@ -223,15 +223,39 @@ nada**: las facturas quedan simuladas hasta que se prende
 Reportes y tablero de ganancias
 -------------------------------
 
-Reportes de las operaciones pagadas y de lo que gana la casa con cada una (la
-comisión más el margen de cambio sobre el precio medio de la cotización). Solo
-los ven el administrador y el analista cambiario. El reporte de transacciones
-se puede exportar a CSV.
+Reportes de las operaciones pagadas, de la web y de la caja, y de lo que gana
+la casa con cada una (la comisión más el margen de cambio sobre el precio
+medio de la cotización). Solo los ven el administrador y el analista
+cambiario. El reporte de transacciones se puede exportar a CSV y filtrar por
+origen (web o caja).
 
 .. automodule:: reportes.servicio
    :members:
 
 .. automodule:: reportes.api
+   :members:
+
+
+Terminal de autoservicio (TAUser)
+---------------------------------
+
+El cliente reserva en la web una compra o venta y recibe un código. En la
+terminal lo ingresa y deposita los billetes (guaraníes si compra, la divisa si
+vende); la terminal verifica la cotización, devuelve el vuelto y entrega la
+divisa o los guaraníes con los billetes que tiene adentro, o los acredita en la
+cuenta del cliente. Si la cotización cambió, la operación se cancela y se
+devuelven los billetes. Guía: ``docs/terminal-autoservicio.md``.
+
+.. automodule:: terminal.models
+   :members:
+
+.. automodule:: terminal.servicio
+   :members:
+
+.. automodule:: terminal.views
+   :members:
+
+.. automodule:: terminal.api
    :members:
 
 

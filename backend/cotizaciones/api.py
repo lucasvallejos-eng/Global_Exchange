@@ -9,7 +9,7 @@ Las pantallas basadas en plantillas de Django (``cotizaciones/views.py``) mantie
 tradicional; este módulo expone la misma funcionalidad formateada en JSON.
 """
 import json
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
@@ -131,7 +131,11 @@ def cotizaciones_lista(request):
         if codigo:
             consulta = consulta.filter(moneda__codigo=codigo.upper())
 
-        consulta = consulta.order_by("-fecha")
+        orden = (request.GET.get("orden") or "desc").lower()
+        if orden in ("asc", "cronologico"):
+            consulta = consulta.order_by("fecha", "id")
+        else:
+            consulta = consulta.order_by("-fecha", "-id")
 
         # ?activas=1   -> solo las vigentes: la activa más reciente de cada
         # moneda, la misma definición con la que se opera
@@ -147,6 +151,132 @@ def cotizaciones_lista(request):
         return JsonResponse([_a_dict(c) for c in consulta], safe=False)
 
     return _crear(request)
+
+
+@require_http_methods(["GET"])
+@rol_requerido(*CONSULTAN)
+def cotizaciones_evolucion(request):
+    """Endpoint para obtener la evolución histórica de tasas y su proyección semanal.
+
+    Retorna los puntos ordenados cronológicamente desde la fecha inicial
+    (ej. 1 mes atrás: 13/10/2026) hasta hoy (13/11/2026), más una proyección
+    de 7 días hacia adelante (hasta 20/11/2026) según las reglas de negocio.
+    """
+    codigo = (request.GET.get("moneda") or "USD").upper()
+    rango = (request.GET.get("rango") or "1M").upper()
+
+    moneda = Moneda.objects.filter(codigo=codigo, activo=True).first()
+    if not moneda:
+        moneda = Moneda.objects.filter(activo=True, es_local=False).first()
+    if not moneda:
+        return JsonResponse({"error": "No hay monedas activas disponibles."}, status=404)
+
+    cotizaciones_db = list(
+        Cotizacion.objects.filter(moneda=moneda).order_by("fecha", "id")
+    )
+    if not cotizaciones_db:
+        return JsonResponse({"error": f"No hay cotizaciones para {moneda.codigo}."}, status=404)
+
+    ultima_vigente = (
+        Cotizacion.objects.filter(moneda=moneda, activa=True).order_by("-fecha").first()
+        or cotizaciones_db[-1]
+    )
+
+    hoy = timezone.localdate()
+
+    if rango == "1M":
+        fecha_inicio = hoy - timedelta(days=31)
+        paso_dias = 1
+    elif rango == "6M":
+        fecha_inicio = hoy - timedelta(days=180)
+        paso_dias = 3
+    elif rango == "YTD":
+        fecha_inicio = date(hoy.year, 1, 1)
+        paso_dias = max(1, (hoy - fecha_inicio).days // 30)
+    elif rango == "1A":
+        fecha_inicio = hoy - timedelta(days=365)
+        paso_dias = 7
+    else:  # MAX
+        fecha_inicio = cotizaciones_db[0].fecha.date() if cotizaciones_db else (hoy - timedelta(days=365))
+        paso_dias = max(1, (hoy - fecha_inicio).days // 40)
+
+    if fecha_inicio >= hoy:
+        fecha_inicio = hoy - timedelta(days=31)
+
+    puntos_historicos = []
+    d = fecha_inicio
+    while d <= hoy:
+        cotiz = None
+        for c in reversed(cotizaciones_db):
+            if c.fecha.date() <= d:
+                cotiz = c
+                break
+        if cotiz is None:
+            cotiz = cotizaciones_db[0]
+
+        puntos_historicos.append({
+            "date": d.isoformat(),
+            "label": d.strftime("%d/%m/%Y"),
+            "dia": d.strftime("%d %b"),
+            "value": float(cotiz.precio_venta),
+            "compra": float(cotiz.precio_compra),
+            "esProyeccion": False,
+        })
+        d += timedelta(days=paso_dias)
+
+    # Aseguramos que el punto final histórico sea exactamente 'hoy'
+    if not puntos_historicos or puntos_historicos[-1]["date"] != hoy.isoformat():
+        puntos_historicos.append({
+            "date": hoy.isoformat(),
+            "label": hoy.strftime("%d/%m/%Y"),
+            "dia": hoy.strftime("%d %b"),
+            "value": float(ultima_vigente.precio_venta),
+            "compra": float(ultima_vigente.precio_compra),
+            "esProyeccion": False,
+        })
+
+    # Proyección de 1 semana (7 días hacia adelante)
+    puntos_proyeccion = []
+    tasa_base_venta = float(ultima_vigente.precio_venta)
+    tasa_base_compra = float(ultima_vigente.precio_compra)
+    for i in range(1, 8):
+        dia_futuro = hoy + timedelta(days=i)
+        incremento = round(tasa_base_venta * (0.0005 * i), 0)
+        puntos_proyeccion.append({
+            "date": dia_futuro.isoformat(),
+            "label": dia_futuro.strftime("%d/%m/%Y"),
+            "dia": dia_futuro.strftime("%d %b"),
+            "value": tasa_base_venta + incremento,
+            "compra": tasa_base_compra + incremento,
+            "esProyeccion": True,
+        })
+
+    valores_hist = [p["value"] for p in puntos_historicos]
+    min_val = min(valores_hist) if valores_hist else tasa_base_venta
+    max_val = max(valores_hist) if valores_hist else tasa_base_venta
+
+    return JsonResponse({
+        "moneda": moneda.codigo,
+        "nombre": moneda.nombre,
+        "simbolo": moneda.simbolo,
+        "rango": rango,
+        "fechaActual": hoy.isoformat(),
+        "fechaActualFormateada": hoy.strftime("%d/%m/%Y"),
+        "valorActual": tasa_base_venta,
+        "valorCompraActual": tasa_base_compra,
+        "historico": puntos_historicos,
+        "proyeccion": puntos_proyeccion,
+        "rangoFechas": {
+            "inicio": fecha_inicio.strftime("%d/%m/%Y"),
+            "fin": hoy.strftime("%d/%m/%Y"),
+            "proyeccionHasta": (hoy + timedelta(days=7)).strftime("%d/%m/%Y"),
+        },
+        "resumen": {
+            "minimo": min_val,
+            "maximo": max_val,
+            "proyeccionFin": puntos_proyeccion[-1]["value"] if puntos_proyeccion else tasa_base_venta,
+        },
+    })
 
 
 @rol_requerido(*GESTIONAN_TASAS)

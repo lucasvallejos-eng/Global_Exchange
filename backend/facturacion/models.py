@@ -117,3 +117,78 @@ class Factura(models.Model):
         return self.estado in (
             self.Estado.ERROR, self.Estado.RECHAZADA, self.Estado.SIN_CONFIRMAR
         )
+
+
+class SecuenciaFactura(models.Model):
+    """Control persistente y seguro de la numeración secuencial de facturas electrónicas.
+
+    Permite registrar y consultar el último número utilizado para un
+    establecimiento y punto de expedición, controlando el límite máximo
+    autorizado por el timbrado de la DNIT / SIFEN (Factura Segura).
+    """
+
+    establecimiento = models.CharField(
+        max_length=3,
+        default="001",
+        help_text="Código de establecimiento de 3 dígitos (dEst), ej: 001.",
+    )
+    punto_expedicion = models.CharField(
+        max_length=3,
+        default="003",
+        help_text="Punto de expedición de 3 dígitos (dPunExp), ej: 003.",
+    )
+    ultimo_numero = models.PositiveIntegerField(
+        default=387,
+        help_text="Último número de factura utilizado (ej. 387 para 001-003-0000387).",
+    )
+    numero_inicio = models.PositiveIntegerField(
+        default=382,
+        help_text="Número inicial del rango autorizado (ej. 382).",
+    )
+    numero_fin = models.PositiveIntegerField(
+        default=393,
+        help_text="Límite máximo autorizado del talonario (ej. 393).",
+    )
+    timbrado = models.CharField(
+        max_length=8,
+        blank=True,
+        default="",
+        help_text="Número de timbrado asociado al talonario.",
+    )
+    activo = models.BooleanField(
+        default=True,
+        help_text="Indica si este talonario es el que está en uso actualmente.",
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Secuencia de Factura"
+        verbose_name_plural = "Secuencias de Facturas"
+        unique_together = ("establecimiento", "punto_expedicion")
+
+    def __str__(self):
+        return (
+            f"Talonario {self.establecimiento}-{self.punto_expedicion} "
+            f"[{self.numero_inicio} - {self.numero_fin}] - Último: {self.ultimo_numero}"
+        )
+
+    @property
+    def siguiente_numero(self) -> int:
+        """Siguiente número correlativo que se debe emitir."""
+        return self.ultimo_numero + 1
+
+    @property
+    def cantidad_disponible(self) -> int:
+        """Cantidad de facturas disponibles antes de llegar al límite máximo."""
+        return max(0, self.numero_fin - self.ultimo_numero)
+
+    @property
+    def esta_agotado(self) -> bool:
+        """Indica si el talonario ya no tiene números disponibles para emitir."""
+        return self.ultimo_numero >= self.numero_fin
+
+    def formato_factura(self, numero: int | None = None) -> str:
+        """Retorna el número formateado con el estándar EEE-PPP-NNNNNNN."""
+        num = self.ultimo_numero if numero is None else numero
+        return f"{self.establecimiento:0>3}-{self.punto_expedicion:0>3}-{num:07d}"
+

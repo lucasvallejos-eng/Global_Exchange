@@ -269,3 +269,59 @@ class CotizacionSoftDeleteTest(TestCase):
         
         cotizacion_db = Cotizacion.objects.get(id=self.cotizacion.id)
         self.assertFalse(cotizacion_db.activa)
+
+
+class CotizacionEvolucionApiTest(TestCase):
+    """Pruebas del endpoint de evolución histórica y orden cronológico."""
+
+    def setUp(self):
+        self.moneda = Moneda.objects.create(
+            codigo="USD",
+            nombre="Dólar Estadounidense",
+            simbolo="$",
+            activo=True,
+        )
+        self.c1 = Cotizacion.objects.create(
+            moneda=self.moneda,
+            precio_compra=7300.00,
+            precio_venta=7400.00,
+            activa=False,
+        )
+        self.c2 = Cotizacion.objects.create(
+            moneda=self.moneda,
+            precio_compra=7400.00,
+            precio_venta=7500.00,
+            activa=True,
+        )
+        self.usuario = User.objects.create_user(username="admin_test", password="password")
+        grupo, _ = Group.objects.get_or_create(name="administrador")
+        self.usuario.groups.add(grupo)
+        self.client.force_login(self.usuario)
+        session = self.client.session
+        session["oidc_id_token_expiration"] = time.time() + 3600
+        session.save()
+
+    def test_orden_cronologico_ascendente(self):
+        """Verifica que el parámetro orden=asc retorne las cotizaciones ordenadas cronológicamente."""
+        url = reverse("api_cotizaciones_lista") + "?moneda=USD&orden=asc"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        datos = res.json()
+        self.assertEqual(len(datos), 2)
+        self.assertEqual(datos[0]["id"], self.c1.id)
+        self.assertEqual(datos[1]["id"], self.c2.id)
+
+    def test_evolucion_serie_y_proyeccion_semanal(self):
+        """Valida que el endpoint de evolución entregue datos históricos y proyección a 7 días."""
+        url = reverse("api_cotizaciones_evolucion") + "?moneda=USD&rango=1M"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        datos = res.json()
+
+        self.assertEqual(datos["moneda"], "USD")
+        self.assertIn("historico", datos)
+        self.assertIn("proyeccion", datos)
+        self.assertEqual(len(datos["proyeccion"]), 7)
+        self.assertTrue(datos["proyeccion"][-1]["esProyeccion"])
+        self.assertIn("resumen", datos)
+        self.assertIn("rangoFechas", datos)

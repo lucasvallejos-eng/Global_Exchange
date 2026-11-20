@@ -448,5 +448,286 @@
       "creado_en": "2026-09-01T09:00:00Z",
       "actualizado_en": "2026-09-01T09:00:00Z"
     }
+  },
+  {
+    "model": "terminal.terminal",
+    "fields": {
+      "nombre": "Terminal Centro",
+      "ubicacion": "Casa central, Asunción",
+      "activa": true
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "USD",
+        "100.00"
+      ],
+      "cantidad": 20
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "USD",
+        "50.00"
+      ],
+      "cantidad": 20
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "USD",
+        "20.00"
+      ],
+      "cantidad": 30
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "USD",
+        "10.00"
+      ],
+      "cantidad": 30
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "USD",
+        "5.00"
+      ],
+      "cantidad": 40
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "USD",
+        "1.00"
+      ],
+      "cantidad": 50
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "EUR",
+        "100.00"
+      ],
+      "cantidad": 10
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "EUR",
+        "50.00"
+      ],
+      "cantidad": 20
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "EUR",
+        "20.00"
+      ],
+      "cantidad": 20
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "EUR",
+        "10.00"
+      ],
+      "cantidad": 20
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "EUR",
+        "5.00"
+      ],
+      "cantidad": 30
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "100000.00"
+      ],
+      "cantidad": 30
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "50000.00"
+      ],
+      "cantidad": 40
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "20000.00"
+      ],
+      "cantidad": 50
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "10000.00"
+      ],
+      "cantidad": 60
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "5000.00"
+      ],
+      "cantidad": 80
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "2000.00"
+      ],
+      "cantidad": 100
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "1000.00"
+      ],
+      "cantidad": 100
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "500.00"
+      ],
+      "cantidad": 200
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "100.00"
+      ],
+      "cantidad": 300
+    }
+  },
+  {
+    "model": "terminal.billeteterminal",
+    "fields": {
+      "terminal": [
+        "Terminal Centro"
+      ],
+      "denominacion": [
+        "PYG",
+        "50.00"
+      ],
+      "cantidad": 300
+    }
   }
 ]

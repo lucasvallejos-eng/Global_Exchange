@@ -68,7 +68,7 @@ export default function ReportesModule() {
             <p className="text-sm font-medium text-[#64748b]">Reportes</p>
             <h2 className="text-2xl font-bold tracking-tight text-[#0f172a]">Transacciones y ganancias</h2>
             <p className="mt-1 text-sm text-[#64748b]">
-              Operaciones pagadas. La ganancia es la comisión más el margen de cambio sobre el precio medio.
+              Operaciones pagadas de la web y de la caja. La ganancia es la comisión más el margen de cambio sobre el precio medio.
             </p>
           </div>
           <a
@@ -79,7 +79,7 @@ export default function ReportesModule() {
           </a>
         </div>
 
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
           <label className="block">
             <span className={claseEtiqueta}>Desde</span>
             <input type="date" value={filtros.desde ?? ""} onChange={(e) => cambiar("desde", e.target.value)} className={claseCampo} />
@@ -103,6 +103,14 @@ export default function ReportesModule() {
               {codigos.map((codigo) => (
                 <option key={codigo} value={codigo}>{codigo}</option>
               ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={claseEtiqueta}>Origen</span>
+            <select value={filtros.origen ?? ""} onChange={(e) => cambiar("origen", e.target.value)} className={claseCampo}>
+              <option value="">Web y caja</option>
+              <option value="WEB">Web</option>
+              <option value="CAJA">Caja</option>
             </select>
           </label>
           <div className="flex items-end">
@@ -147,7 +155,7 @@ export default function ReportesModule() {
               <table className="min-w-full border-collapse bg-white text-left text-sm text-[#1f2937]">
                 <thead className="bg-[#f8fafc] text-[#475569]">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">#</th>
+                    <th className="px-4 py-3 font-semibold">Origen</th>
                     <th className="px-4 py-3 font-semibold">Fecha de pago</th>
                     <th className="px-4 py-3 font-semibold">Cliente</th>
                     <th className="px-4 py-3 font-semibold">Operación</th>
@@ -160,8 +168,8 @@ export default function ReportesModule() {
                 </thead>
                 <tbody>
                   {visibles.map((fila) => (
-                    <tr key={fila.id} className="border-t border-[#edf2f7] hover:bg-[#f8fafc]">
-                      <td className="px-4 py-3 text-[#64748b]">{fila.id}</td>
+                    <tr key={fila.referencia} className="border-t border-[#edf2f7] hover:bg-[#f8fafc]">
+                      <td className="whitespace-nowrap px-4 py-3 text-[#64748b]">{fila.referencia}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-[#475569]">{formatFecha(fila.fecha)}</td>
                       <td className="px-4 py-3">{fila.cliente}</td>
                       <td className="px-4 py-3 text-[#475569]">{fila.tipoTexto}</td>
